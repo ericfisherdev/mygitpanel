@@ -125,61 +125,61 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DISC-01 | TBD | Pending |
-| DISC-02 | TBD | Pending |
-| DISC-03 | TBD | Pending |
-| DISC-04 | TBD | Pending |
-| DISC-05 | TBD | Pending |
-| STAT-01 | TBD | Pending |
-| STAT-02 | TBD | Pending |
-| STAT-03 | TBD | Pending |
-| STAT-04 | TBD | Pending |
-| STAT-05 | TBD | Pending |
-| STAT-06 | TBD | Pending |
-| STAT-07 | TBD | Pending |
-| REVW-01 | TBD | Pending |
-| REVW-02 | TBD | Pending |
-| REVW-03 | TBD | Pending |
-| REVW-04 | TBD | Pending |
-| REVW-05 | TBD | Pending |
-| CFMT-01 | TBD | Pending |
-| CFMT-02 | TBD | Pending |
-| CFMT-03 | TBD | Pending |
-| CFMT-04 | TBD | Pending |
-| CFMT-05 | TBD | Pending |
-| CFMT-06 | TBD | Pending |
-| CFMT-07 | TBD | Pending |
-| CICD-01 | TBD | Pending |
-| CICD-02 | TBD | Pending |
-| CICD-03 | TBD | Pending |
-| REPO-01 | TBD | Pending |
-| REPO-02 | TBD | Pending |
-| REPO-03 | TBD | Pending |
-| REPO-04 | TBD | Pending |
-| POLL-01 | TBD | Pending |
-| POLL-02 | TBD | Pending |
-| POLL-03 | TBD | Pending |
-| POLL-04 | TBD | Pending |
-| POLL-05 | TBD | Pending |
-| POLL-06 | TBD | Pending |
-| POLL-07 | TBD | Pending |
-| INFR-01 | TBD | Pending |
-| INFR-02 | TBD | Pending |
-| INFR-03 | TBD | Pending |
-| INFR-04 | TBD | Pending |
-| INFR-05 | TBD | Pending |
-| INFR-06 | TBD | Pending |
-| INFR-07 | TBD | Pending |
-| API-01 | TBD | Pending |
-| API-02 | TBD | Pending |
-| API-03 | TBD | Pending |
-| API-04 | TBD | Pending |
+| DISC-01 | Phase 2 | Pending |
+| DISC-02 | Phase 2 | Pending |
+| DISC-03 | Phase 2 | Pending |
+| DISC-04 | Phase 2 | Pending |
+| DISC-05 | Phase 2 | Pending |
+| STAT-01 | Phase 3 | Pending |
+| STAT-02 | Phase 4 | Pending |
+| STAT-03 | Phase 5 | Pending |
+| STAT-04 | Phase 5 | Pending |
+| STAT-05 | Phase 5 | Pending |
+| STAT-06 | Phase 4 | Pending |
+| STAT-07 | Phase 3 | Pending |
+| REVW-01 | Phase 4 | Pending |
+| REVW-02 | Phase 4 | Pending |
+| REVW-03 | Phase 4 | Pending |
+| REVW-04 | Phase 4 | Pending |
+| REVW-05 | Phase 4 | Pending |
+| CFMT-01 | Phase 4 | Pending |
+| CFMT-02 | Phase 4 | Pending |
+| CFMT-03 | Phase 4 | Pending |
+| CFMT-04 | Phase 4 | Pending |
+| CFMT-05 | Phase 4 | Pending |
+| CFMT-06 | Phase 4 | Pending |
+| CFMT-07 | Phase 4 | Pending |
+| CICD-01 | Phase 5 | Pending |
+| CICD-02 | Phase 5 | Pending |
+| CICD-03 | Phase 5 | Pending |
+| REPO-01 | Phase 3 | Pending |
+| REPO-02 | Phase 3 | Pending |
+| REPO-03 | Phase 3 | Pending |
+| REPO-04 | Phase 4 | Pending |
+| POLL-01 | Phase 2 | Pending |
+| POLL-02 | Phase 2 | Pending |
+| POLL-03 | Phase 6 | Pending |
+| POLL-04 | Phase 2 | Pending |
+| POLL-05 | Phase 2 | Pending |
+| POLL-06 | Phase 2 | Pending |
+| POLL-07 | Phase 2 | Pending |
+| INFR-01 | Phase 1 | Pending |
+| INFR-02 | Phase 1 | Pending |
+| INFR-03 | Phase 6 | Pending |
+| INFR-04 | Phase 6 | Pending |
+| INFR-05 | Phase 1 | Pending |
+| INFR-06 | Phase 1 | Pending |
+| INFR-07 | Phase 1 | Pending |
+| API-01 | Phase 3 | Pending |
+| API-02 | Phase 3 | Pending |
+| API-03 | Phase 3 | Pending |
+| API-04 | Phase 3 | Pending |
 
 **Coverage:**
-- v1 requirements: 46 total
-- Mapped to phases: 0
-- Unmapped: 46 ⚠️
+- v1 requirements: 49 total
+- Mapped to phases: 49
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-10*
-*Last updated: 2026-02-10 after initial definition*
+*Last updated: 2026-02-10 after roadmap creation*
