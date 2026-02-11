@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 
 	githubadapter "github.com/efisher/reviewhub/internal/adapter/driven/github"
 	sqliteadapter "github.com/efisher/reviewhub/internal/adapter/driven/sqlite"
+	httphandler "github.com/efisher/reviewhub/internal/adapter/driving/http"
 	"github.com/efisher/reviewhub/internal/application"
 	"github.com/efisher/reviewhub/internal/config"
 )
@@ -74,6 +76,26 @@ func run() error {
 	)
 	go pollSvc.Start(ctx)
 
+	// 7.5. Create HTTP handler and server.
+	h := httphandler.NewHandler(prStore, repoStore, pollSvc, cfg.GitHubUsername, slog.Default())
+	mux := httphandler.NewServeMux(h, slog.Default())
+
+	srv := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	go func() {
+		slog.Info("http server starting", "addr", cfg.ListenAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("http server error", "error", err)
+		}
+	}()
+
 	// 8. Log startup complete.
 	slog.Info("reviewhub started",
 		"listen_addr", cfg.ListenAddr,
@@ -89,8 +111,9 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Future phases will use shutdownCtx to drain the HTTP server.
-	_ = shutdownCtx
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("http server shutdown error", "error", err)
+	}
 
 	// 11. Log shutdown complete.
 	slog.Info("shutdown complete")
