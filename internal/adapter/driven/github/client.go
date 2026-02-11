@@ -150,20 +150,32 @@ func mapPullRequest(pr *gh.PullRequest, repoFullName string) model.PullRequest {
 		labels = append(labels, l.GetName())
 	}
 
+	reviewers := make([]string, 0, len(pr.RequestedReviewers))
+	for _, r := range pr.RequestedReviewers {
+		reviewers = append(reviewers, r.GetLogin())
+	}
+
+	teamSlugs := make([]string, 0, len(pr.RequestedTeams))
+	for _, t := range pr.RequestedTeams {
+		teamSlugs = append(teamSlugs, t.GetSlug())
+	}
+
 	return model.PullRequest{
-		Number:         pr.GetNumber(),
-		RepoFullName:   repoFullName,
-		Title:          pr.GetTitle(),
-		Author:         pr.GetUser().GetLogin(),
-		Status:         status,
-		IsDraft:        pr.GetDraft(),
-		URL:            pr.GetHTMLURL(),
-		Branch:         pr.GetHead().GetRef(),
-		BaseBranch:     pr.GetBase().GetRef(),
-		Labels:         labels,
-		OpenedAt:       pr.GetCreatedAt().Time,
-		UpdatedAt:      pr.GetUpdatedAt().Time,
-		LastActivityAt: pr.GetUpdatedAt().Time,
+		Number:             pr.GetNumber(),
+		RepoFullName:       repoFullName,
+		Title:              pr.GetTitle(),
+		Author:             pr.GetUser().GetLogin(),
+		Status:             status,
+		IsDraft:            pr.GetDraft(),
+		URL:                pr.GetHTMLURL(),
+		Branch:             pr.GetHead().GetRef(),
+		BaseBranch:         pr.GetBase().GetRef(),
+		Labels:             labels,
+		OpenedAt:           pr.GetCreatedAt().Time,
+		UpdatedAt:          pr.GetUpdatedAt().Time,
+		LastActivityAt:     pr.GetUpdatedAt().Time,
+		RequestedReviewers: reviewers,
+		RequestedTeamSlugs: teamSlugs,
 	}
 }
 

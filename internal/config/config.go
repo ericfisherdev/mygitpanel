@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -10,6 +11,7 @@ import (
 type Config struct {
 	GitHubToken    string
 	GitHubUsername string
+	GitHubTeams    []string
 	PollInterval   time.Duration
 	ListenAddr     string
 	DBPath         string
@@ -49,9 +51,23 @@ func Load() (*Config, error) {
 		dbPath = v
 	}
 
+	var githubTeams []string
+	if v, ok := os.LookupEnv("REVIEWHUB_GITHUB_TEAMS"); ok && v != "" {
+		for _, slug := range strings.Split(v, ",") {
+			slug = strings.TrimSpace(slug)
+			if slug != "" {
+				githubTeams = append(githubTeams, slug)
+			}
+		}
+	}
+	if githubTeams == nil {
+		githubTeams = []string{}
+	}
+
 	return &Config{
 		GitHubToken:    token,
 		GitHubUsername: username,
+		GitHubTeams:    githubTeams,
 		PollInterval:   pollInterval,
 		ListenAddr:     listenAddr,
 		DBPath:         dbPath,

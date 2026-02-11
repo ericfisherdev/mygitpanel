@@ -79,3 +79,24 @@ func TestLoad_InvalidPollInterval(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "REVIEWHUB_POLL_INTERVAL")
 }
+
+func TestLoad_GitHubTeams(t *testing.T) {
+	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
+	t.Setenv("REVIEWHUB_GITHUB_TEAMS", "team-a, team-b")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"team-a", "team-b"}, cfg.GitHubTeams)
+}
+
+func TestLoad_GitHubTeams_Empty(t *testing.T) {
+	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, cfg.GitHubTeams)
+}

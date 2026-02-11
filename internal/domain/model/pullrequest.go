@@ -18,6 +18,10 @@ type PullRequest struct {
 	OpenedAt       time.Time
 	UpdatedAt      time.Time
 	LastActivityAt time.Time
+
+	// Transient fields populated during GitHub fetch, not persisted.
+	RequestedReviewers []string
+	RequestedTeamSlugs []string
 }
 
 // DaysSinceOpened returns the number of days since the PR was opened.
