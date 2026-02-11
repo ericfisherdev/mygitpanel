@@ -14,6 +14,7 @@ type PullRequest struct {
 	URL            string
 	Branch         string
 	BaseBranch     string
+	NeedsReview    bool
 	Labels         []string
 	OpenedAt       time.Time
 	UpdatedAt      time.Time

@@ -13,5 +13,6 @@ type PRStore interface {
 	GetByStatus(ctx context.Context, status model.PRStatus) ([]model.PullRequest, error)
 	GetByNumber(ctx context.Context, repoFullName string, number int) (*model.PullRequest, error)
 	ListAll(ctx context.Context) ([]model.PullRequest, error)
+	ListNeedingReview(ctx context.Context) ([]model.PullRequest, error)
 	Delete(ctx context.Context, repoFullName string, number int) error
 }
