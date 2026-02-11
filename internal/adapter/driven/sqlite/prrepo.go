@@ -28,14 +28,15 @@ func NewPRRepo(db *DB) *PRRepo {
 func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 	const query = `
 		INSERT INTO pull_requests (
-			number, repo_full_name, title, author, status, is_draft,
+			number, repo_full_name, title, author, status, is_draft, needs_review,
 			url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(repo_full_name, number) DO UPDATE SET
 			title = excluded.title,
 			author = excluded.author,
 			status = excluded.status,
 			is_draft = excluded.is_draft,
+			needs_review = excluded.needs_review,
 			url = excluded.url,
 			branch = excluded.branch,
 			base_branch = excluded.base_branch,
@@ -59,8 +60,13 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 		isDraft = 1
 	}
 
+	needsReview := 0
+	if pr.NeedsReview {
+		needsReview = 1
+	}
+
 	_, err = r.db.Writer.ExecContext(ctx, query,
-		pr.Number, pr.RepoFullName, pr.Title, pr.Author, string(pr.Status), isDraft,
+		pr.Number, pr.RepoFullName, pr.Title, pr.Author, string(pr.Status), isDraft, needsReview,
 		pr.URL, pr.Branch, pr.BaseBranch, string(labelsJSON),
 		pr.OpenedAt.UTC(), pr.UpdatedAt.UTC(), pr.LastActivityAt.UTC(),
 	)
@@ -74,7 +80,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 // GetByRepository returns all pull requests for the given repository, ordered by number.
 func (r *PRRepo) GetByRepository(ctx context.Context, repoFullName string) ([]model.PullRequest, error) {
 	const query = `
-		SELECT id, number, repo_full_name, title, author, status, is_draft,
+		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
 		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		WHERE repo_full_name = ?
@@ -87,7 +93,7 @@ func (r *PRRepo) GetByRepository(ctx context.Context, repoFullName string) ([]mo
 // GetByStatus returns all pull requests with the given status, ordered by updated_at descending.
 func (r *PRRepo) GetByStatus(ctx context.Context, status model.PRStatus) ([]model.PullRequest, error) {
 	const query = `
-		SELECT id, number, repo_full_name, title, author, status, is_draft,
+		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
 		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		WHERE status = ?
@@ -101,7 +107,7 @@ func (r *PRRepo) GetByStatus(ctx context.Context, status model.PRStatus) ([]mode
 // Returns nil, nil if the pull request does not exist.
 func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number int) (*model.PullRequest, error) {
 	const query = `
-		SELECT id, number, repo_full_name, title, author, status, is_draft,
+		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
 		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		WHERE repo_full_name = ? AND number = ?
@@ -121,9 +127,23 @@ func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number in
 // ListAll returns all pull requests ordered by updated_at descending.
 func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 	const query = `
-		SELECT id, number, repo_full_name, title, author, status, is_draft,
+		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
 		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
 		FROM pull_requests
+		ORDER BY updated_at DESC
+	`
+
+	return r.queryPRs(ctx, query)
+}
+
+// ListNeedingReview returns all pull requests where needs_review is true,
+// ordered by updated_at descending.
+func (r *PRRepo) ListNeedingReview(ctx context.Context) ([]model.PullRequest, error) {
+	const query = `
+		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
+		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
+		FROM pull_requests
+		WHERE needs_review = 1
 		ORDER BY updated_at DESC
 	`
 
@@ -179,12 +199,13 @@ func scanPR(s scanner) (*model.PullRequest, error) {
 	var pr model.PullRequest
 	var status string
 	var isDraft int
+	var needsReview int
 	var labelsJSON string
 	var openedAt, updatedAt, lastActivityAt string
 
 	err := s.Scan(
 		&pr.ID, &pr.Number, &pr.RepoFullName, &pr.Title, &pr.Author,
-		&status, &isDraft, &pr.URL, &pr.Branch, &pr.BaseBranch,
+		&status, &isDraft, &needsReview, &pr.URL, &pr.Branch, &pr.BaseBranch,
 		&labelsJSON, &openedAt, &updatedAt, &lastActivityAt,
 	)
 	if err != nil {
@@ -193,6 +214,7 @@ func scanPR(s scanner) (*model.PullRequest, error) {
 
 	pr.Status = model.PRStatus(status)
 	pr.IsDraft = isDraft != 0
+	pr.NeedsReview = needsReview != 0
 
 	if err := json.Unmarshal([]byte(labelsJSON), &pr.Labels); err != nil {
 		return nil, fmt.Errorf("unmarshal labels: %w", err)

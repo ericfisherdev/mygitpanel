@@ -66,6 +66,10 @@ func (m *mockPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) {
 	return nil, nil
 }
 
+func (m *mockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
+
 func (m *mockPRStore) Delete(_ context.Context, repoFullName string, number int) error {
 	m.deletes = append(m.deletes, deleteCall{RepoFullName: repoFullName, Number: number})
 	return nil
@@ -149,6 +153,7 @@ func TestPollRepo_AuthoredPRs(t *testing.T) {
 
 	assert.Len(t, prStore.upserts, 1)
 	assert.Equal(t, 1, prStore.upserts[0].PR.Number)
+	assert.False(t, prStore.upserts[0].PR.NeedsReview, "authored PR should not need review")
 }
 
 func TestPollRepo_ReviewRequestedPRs(t *testing.T) {
@@ -181,6 +186,7 @@ func TestPollRepo_ReviewRequestedPRs(t *testing.T) {
 
 	assert.Len(t, prStore.upserts, 1)
 	assert.Equal(t, 10, prStore.upserts[0].PR.Number)
+	assert.True(t, prStore.upserts[0].PR.NeedsReview, "review-requested PR should need review")
 }
 
 func TestPollRepo_TeamReviewRequest(t *testing.T) {

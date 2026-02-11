@@ -187,9 +187,10 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 		}
 
 		relevant++
+		pr.NeedsReview = isReviewRequested
 
 		if stored, ok := storedByNumber[pr.Number]; ok {
-			if stored.UpdatedAt.Equal(pr.UpdatedAt) {
+			if stored.UpdatedAt.Equal(pr.UpdatedAt) && stored.NeedsReview == pr.NeedsReview {
 				skippedUnchanged++
 				continue
 			}

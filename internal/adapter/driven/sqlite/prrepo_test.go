@@ -256,6 +256,31 @@ func TestPRRepo_CascadeDelete(t *testing.T) {
 	assert.Empty(t, prs, "PRs should be cascade-deleted with repository")
 }
 
+func TestPRRepo_ListNeedingReview(t *testing.T) {
+	db := setupTestDB(t)
+	addTestRepo(t, db, "octocat/hello-world")
+	prRepo := NewPRRepo(db)
+	ctx := context.Background()
+
+	// PR that needs review
+	prNeedsReview := makePR("octocat/hello-world", 1, "Review Me", model.PRStatusOpen)
+	prNeedsReview.NeedsReview = true
+	require.NoError(t, prRepo.Upsert(ctx, prNeedsReview))
+
+	// PR that does not need review
+	prNoReview := makePR("octocat/hello-world", 2, "My Own PR", model.PRStatusOpen)
+	prNoReview.NeedsReview = false
+	require.NoError(t, prRepo.Upsert(ctx, prNoReview))
+
+	prs, err := prRepo.ListNeedingReview(ctx)
+	require.NoError(t, err)
+	require.Len(t, prs, 1)
+
+	assert.Equal(t, 1, prs[0].Number)
+	assert.Equal(t, "Review Me", prs[0].Title)
+	assert.True(t, prs[0].NeedsReview)
+}
+
 func TestPRRepo_IsDraft(t *testing.T) {
 	db := setupTestDB(t)
 	addTestRepo(t, db, "octocat/hello-world")
