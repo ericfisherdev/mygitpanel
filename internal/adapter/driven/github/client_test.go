@@ -484,3 +484,203 @@ func TestFetchPullRequests_StatusMapping(t *testing.T) {
 	assert.Equal(t, model.PRStatusClosed, result[1].Status, "closed PR should have Closed status")
 	assert.Equal(t, model.PRStatusMerged, result[2].Status, "merged PR should have Merged status")
 }
+
+// --- FetchCheckRuns tests ---
+
+func TestFetchCheckRuns(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"total_count": 2,
+			"check_runs": []map[string]any{
+				{
+					"id":           int64(5001),
+					"name":         "build",
+					"status":       "completed",
+					"conclusion":   "success",
+					"details_url":  "https://github.com/owner/repo/actions/runs/123",
+					"started_at":   "2026-01-10T10:00:00Z",
+					"completed_at": "2026-01-10T10:05:00Z",
+				},
+				{
+					"id":          int64(5002),
+					"name":        "lint",
+					"status":      "in_progress",
+					"conclusion":  nil,
+					"details_url": "https://github.com/owner/repo/actions/runs/124",
+					"started_at":  "2026-01-10T10:01:00Z",
+				},
+			},
+		})
+	})
+
+	client, _ := newTestClient(t, handler)
+	result, err := client.FetchCheckRuns(context.Background(), "owner/repo", "abc123")
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+
+	// First check run: completed success
+	assert.Equal(t, int64(5001), result[0].ID)
+	assert.Equal(t, int64(0), result[0].PRID, "PRID should be 0 (caller assigns)")
+	assert.Equal(t, "build", result[0].Name)
+	assert.Equal(t, "completed", result[0].Status)
+	assert.Equal(t, "success", result[0].Conclusion)
+	assert.False(t, result[0].IsRequired, "IsRequired defaults to false")
+	assert.Equal(t, "https://github.com/owner/repo/actions/runs/123", result[0].DetailsURL)
+	assert.False(t, result[0].StartedAt.IsZero())
+	assert.False(t, result[0].CompletedAt.IsZero())
+
+	// Second check run: in progress
+	assert.Equal(t, int64(5002), result[1].ID)
+	assert.Equal(t, "lint", result[1].Name)
+	assert.Equal(t, "in_progress", result[1].Status)
+	assert.Equal(t, "", result[1].Conclusion)
+	assert.False(t, result[1].StartedAt.IsZero())
+	assert.True(t, result[1].CompletedAt.IsZero(), "in-progress check should have zero CompletedAt")
+}
+
+// --- FetchCombinedStatus tests ---
+
+func TestFetchCombinedStatus(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"state":       "success",
+			"total_count": 1,
+			"statuses": []map[string]any{
+				{
+					"context":     "ci/circleci",
+					"state":       "success",
+					"description": "Build passed",
+					"target_url":  "https://circleci.com/build/123",
+				},
+			},
+		})
+	})
+
+	client, _ := newTestClient(t, handler)
+	result, err := client.FetchCombinedStatus(context.Background(), "owner/repo", "abc123")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "success", result.State)
+	require.Len(t, result.Statuses, 1)
+	assert.Equal(t, "ci/circleci", result.Statuses[0].Context)
+	assert.Equal(t, "success", result.Statuses[0].State)
+	assert.Equal(t, "Build passed", result.Statuses[0].Description)
+	assert.Equal(t, "https://circleci.com/build/123", result.Statuses[0].TargetURL)
+}
+
+// --- FetchPRDetail tests ---
+
+func TestFetchPRDetail(t *testing.T) {
+	mergeable := true
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"number":        42,
+			"additions":     150,
+			"deletions":     30,
+			"changed_files": 8,
+			"mergeable":     mergeable,
+			"state":         "open",
+			"user":          map[string]any{"login": "alice"},
+			"head":          map[string]any{"ref": "feature", "sha": "abc123"},
+			"base":          map[string]any{"ref": "main"},
+			"created_at":    "2026-01-01T00:00:00Z",
+			"updated_at":    "2026-01-02T00:00:00Z",
+		})
+	})
+
+	client, _ := newTestClient(t, handler)
+	result, err := client.FetchPRDetail(context.Background(), "owner/repo", 42)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 150, result.Additions)
+	assert.Equal(t, 30, result.Deletions)
+	assert.Equal(t, 8, result.ChangedFiles)
+	assert.Equal(t, model.MergeableMergeable, result.Mergeable)
+}
+
+func TestFetchPRDetail_MergeableNull(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Omit "mergeable" field entirely to simulate null.
+		json.NewEncoder(w).Encode(map[string]any{
+			"number":        42,
+			"additions":     10,
+			"deletions":     5,
+			"changed_files": 2,
+			"state":         "open",
+			"user":          map[string]any{"login": "alice"},
+			"head":          map[string]any{"ref": "feature", "sha": "abc123"},
+			"base":          map[string]any{"ref": "main"},
+			"created_at":    "2026-01-01T00:00:00Z",
+			"updated_at":    "2026-01-02T00:00:00Z",
+		})
+	})
+
+	client, _ := newTestClient(t, handler)
+	result, err := client.FetchPRDetail(context.Background(), "owner/repo", 42)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, model.MergeableUnknown, result.Mergeable, "null mergeable should map to MergeableUnknown")
+}
+
+// --- FetchRequiredStatusChecks tests ---
+
+func TestFetchRequiredStatusChecks_Success(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"strict": true,
+			"checks": []map[string]any{
+				{"context": "build"},
+				{"context": "lint"},
+			},
+		})
+	})
+
+	client, _ := newTestClient(t, handler)
+	result, err := client.FetchRequiredStatusChecks(context.Background(), "owner/repo", "main")
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "build", result[0])
+	assert.Equal(t, "lint", result[1])
+}
+
+func TestFetchRequiredStatusChecks_404(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]any{
+			"message": "Branch not protected",
+		})
+	})
+
+	client, _ := newTestClient(t, handler)
+	result, err := client.FetchRequiredStatusChecks(context.Background(), "owner/repo", "main")
+
+	require.NoError(t, err, "404 should not return an error")
+	assert.Nil(t, result, "404 should return nil slice")
+}
+
+func TestFetchRequiredStatusChecks_403(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]any{
+			"message": "Insufficient permissions",
+		})
+	})
+
+	client, _ := newTestClient(t, handler)
+	result, err := client.FetchRequiredStatusChecks(context.Background(), "owner/repo", "main")
+
+	require.NoError(t, err, "403 should not return an error")
+	assert.Nil(t, result, "403 should return nil slice")
+}
