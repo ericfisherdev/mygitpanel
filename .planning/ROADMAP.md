@@ -97,12 +97,12 @@ Plans:
   2. Each PR lists individual check runs with name, status, and conclusion, and identifies required vs optional checks when token permissions allow
   3. Each PR shows staleness metrics: days since opened and days since last activity
   4. Each PR shows diff stats (files changed, lines added, lines removed) and merge conflict status (mergeable/conflicted/unknown)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
-- [ ] 05-03: TBD
+- [ ] 05-01-PLAN.md -- Domain model expansion (CheckRun, CombinedStatus, CommitStatus, MergeableStatus, PRDetail), port interfaces (CheckStore, expanded GitHubClient), SQLite migrations and adapters with tests
+- [ ] 05-02-PLAN.md -- GitHub adapter (FetchCheckRuns, FetchCombinedStatus, FetchPRDetail, FetchRequiredStatusChecks), health service with CI status aggregation, and poll service integration
+- [ ] 05-03-PLAN.md -- HTTP API: health signal DTOs on PR responses, GetPR enrichment with check runs, composition root wiring
 
 ### Phase 6: Docker Deployment
 **Goal**: The application runs in a Docker container with persistent storage, adaptive polling optimizes rate limit usage, and the system is production-ready for daily use
