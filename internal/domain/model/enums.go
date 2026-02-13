@@ -33,6 +33,16 @@ const (
 	CIStatusUnknown CIStatus = "unknown"
 )
 
+// MergeableStatus represents whether a PR can be cleanly merged.
+type MergeableStatus string
+
+// MergeableStatus values.
+const (
+	MergeableMergeable  MergeableStatus = "mergeable"
+	MergeableConflicted MergeableStatus = "conflicted"
+	MergeableUnknown    MergeableStatus = "unknown"
+)
+
 // CommentType distinguishes between different origins of PR comments.
 type CommentType string
 
