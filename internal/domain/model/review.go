@@ -9,6 +9,7 @@ type Review struct {
 	ReviewerLogin string
 	State         ReviewState
 	Body          string
+	CommitID      string // SHA of the commit this review targets; used for outdated detection.
 	SubmittedAt   time.Time
 	IsBot         bool
 }

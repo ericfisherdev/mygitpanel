@@ -30,6 +30,14 @@ func (m *mockGitHubClient) FetchReviewComments(_ context.Context, _ string, _ in
 	return nil, nil
 }
 
+func (m *mockGitHubClient) FetchIssueComments(_ context.Context, _ string, _ int) ([]model.IssueComment, error) {
+	return nil, nil
+}
+
+func (m *mockGitHubClient) FetchThreadResolution(_ context.Context, _ string, _ int) (map[int64]bool, error) {
+	return nil, nil
+}
+
 type upsertCall struct {
 	PR model.PullRequest
 }

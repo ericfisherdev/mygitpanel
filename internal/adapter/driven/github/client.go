@@ -113,6 +113,16 @@ func (c *Client) FetchReviewComments(_ context.Context, _ string, _ int) ([]mode
 	return nil, nil
 }
 
+// FetchIssueComments is a stub implementation for Phase 4.
+func (c *Client) FetchIssueComments(_ context.Context, _ string, _ int) ([]model.IssueComment, error) {
+	return nil, nil
+}
+
+// FetchThreadResolution is a stub implementation for Phase 4.
+func (c *Client) FetchThreadResolution(_ context.Context, _ string, _ int) (map[int64]bool, error) {
+	return nil, nil
+}
+
 // logRateLimit logs the GitHub API rate limit status after each call.
 func logRateLimit(resp *gh.Response, endpoint string, page, count int) {
 	if resp == nil {
