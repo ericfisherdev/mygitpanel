@@ -23,8 +23,10 @@ var _ driven.GitHubClient = (*Client)(nil)
 
 // Client implements the driven.GitHubClient port using the go-github library.
 type Client struct {
-	gh       *gh.Client
-	username string
+	gh         *gh.Client
+	username   string
+	token      string // Stored for GraphQL Authorization header.
+	graphqlURL string // "https://api.github.com/graphql" in production; derived from baseURL in tests.
 }
 
 // NewClient creates a new GitHub API client with the following transport stack:
@@ -37,14 +39,16 @@ func NewClient(token, username string) *Client {
 	client := gh.NewClient(rateLimitClient).WithAuthToken(token)
 
 	return &Client{
-		gh:       client,
-		username: username,
+		gh:         client,
+		username:   username,
+		token:      token,
+		graphqlURL: "https://api.github.com/graphql",
 	}
 }
 
 // NewClientWithHTTPClient creates a Client with a custom http.Client and base URL.
 // This constructor is intended for testing, allowing injection of an httptest server.
-func NewClientWithHTTPClient(httpClient *http.Client, baseURL, username string) (*Client, error) {
+func NewClientWithHTTPClient(httpClient *http.Client, baseURL, username, token string) (*Client, error) {
 	client := gh.NewClient(httpClient)
 
 	u, err := url.Parse(baseURL)
@@ -53,9 +57,15 @@ func NewClientWithHTTPClient(httpClient *http.Client, baseURL, username string) 
 	}
 	client.BaseURL = u
 
+	// Derive graphqlURL from baseURL so httptest servers can intercept GraphQL requests.
+	graphqlU := *u
+	graphqlU.Path = "/graphql"
+
 	return &Client{
-		gh:       client,
-		username: username,
+		gh:         client,
+		username:   username,
+		token:      token,
+		graphqlURL: graphqlU.String(),
 	}, nil
 }
 
@@ -195,11 +205,6 @@ func (c *Client) FetchIssueComments(ctx context.Context, repoFullName string, pr
 	}
 
 	return allComments, nil
-}
-
-// FetchThreadResolution is a stub implementation for Phase 4 (implemented in graphql.go).
-func (c *Client) FetchThreadResolution(_ context.Context, _ string, _ int) (map[int64]bool, error) {
-	return nil, nil
 }
 
 // mapReview converts a go-github PullRequestReview to a domain model Review.

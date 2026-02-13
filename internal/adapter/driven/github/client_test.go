@@ -25,6 +25,7 @@ func newTestClient(t *testing.T, handler http.Handler) (*ghAdapter.Client, *http
 		server.Client(),
 		server.URL+"/",
 		"testuser",
+		"test-token",
 	)
 	require.NoError(t, err)
 
