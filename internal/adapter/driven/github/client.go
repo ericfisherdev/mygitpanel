@@ -332,28 +332,168 @@ func mapPullRequest(pr *gh.PullRequest, repoFullName string) model.PullRequest {
 }
 
 // FetchCheckRuns retrieves all check runs for the given ref (commit SHA or branch).
-// Stub: will be implemented in Phase 5 Plan 02.
-func (c *Client) FetchCheckRuns(_ context.Context, _ string, _ string) ([]model.CheckRun, error) {
-	return nil, nil
+// It handles pagination automatically and maps go-github types to domain model types.
+func (c *Client) FetchCheckRuns(ctx context.Context, repoFullName string, ref string) ([]model.CheckRun, error) {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := &gh.ListCheckRunsOptions{
+		ListOptions: gh.ListOptions{PerPage: 100},
+	}
+
+	var allRuns []model.CheckRun
+
+	for {
+		result, resp, err := c.gh.Checks.ListCheckRunsForRef(ctx, owner, repo, ref, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing check runs for %s@%s (page %d): %w", repoFullName, ref, opts.Page, err)
+		}
+
+		logRateLimit(resp, repoFullName+"/check-runs", opts.Page, len(result.CheckRuns))
+
+		for _, cr := range result.CheckRuns {
+			allRuns = append(allRuns, mapCheckRun(cr))
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allRuns, nil
 }
 
 // FetchCombinedStatus returns the combined commit status for the given ref.
-// Stub: will be implemented in Phase 5 Plan 02.
-func (c *Client) FetchCombinedStatus(_ context.Context, _ string, _ string) (*model.CombinedStatus, error) {
-	return nil, nil
+// Returns nil, nil if no status checks are configured (zero statuses and empty state).
+func (c *Client) FetchCombinedStatus(ctx context.Context, repoFullName string, ref string) (*model.CombinedStatus, error) {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return nil, err
+	}
+
+	cs, resp, err := c.gh.Repositories.GetCombinedStatus(ctx, owner, repo, ref, nil)
+	if err != nil {
+		return nil, fmt.Errorf("fetching combined status for %s@%s: %w", repoFullName, ref, err)
+	}
+
+	logRateLimit(resp, repoFullName+"/status", 0, len(cs.Statuses))
+
+	return mapCombinedStatus(cs), nil
 }
 
 // FetchPRDetail returns diff stats and mergeable status for a single PR.
-// Stub: will be implemented in Phase 5 Plan 02.
-func (c *Client) FetchPRDetail(_ context.Context, _ string, _ int) (*model.PRDetail, error) {
-	return nil, nil
+func (c *Client) FetchPRDetail(ctx context.Context, repoFullName string, prNumber int) (*model.PRDetail, error) {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return nil, err
+	}
+
+	pr, resp, err := c.gh.PullRequests.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("fetching PR detail for %s#%d: %w", repoFullName, prNumber, err)
+	}
+
+	logRateLimit(resp, repoFullName+"/pr-detail", 0, 1)
+
+	return &model.PRDetail{
+		Additions:    pr.GetAdditions(),
+		Deletions:    pr.GetDeletions(),
+		ChangedFiles: pr.GetChangedFiles(),
+		Mergeable:    mapMergeable(pr.Mergeable),
+	}, nil
 }
 
 // FetchRequiredStatusChecks returns the list of required status check contexts
-// for the given branch's protection rules. Returns empty slice if unprotected.
-// Stub: will be implemented in Phase 5 Plan 02.
-func (c *Client) FetchRequiredStatusChecks(_ context.Context, _ string, _ string) ([]string, error) {
-	return nil, nil
+// for the given branch's protection rules. Returns nil, nil if the branch is
+// not protected (404) or if we lack permissions (403).
+func (c *Client) FetchRequiredStatusChecks(ctx context.Context, repoFullName string, branch string) ([]string, error) {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return nil, err
+	}
+
+	checks, resp, err := c.gh.Repositories.GetRequiredStatusChecks(ctx, owner, repo, branch)
+	if err != nil {
+		if resp != nil && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("fetching required status checks for %s branch %s: %w", repoFullName, branch, err)
+	}
+
+	logRateLimit(resp, repoFullName+"/required-checks", 0, 0)
+
+	requiredContexts := checks.GetChecks()
+	if requiredContexts == nil {
+		return nil, nil
+	}
+
+	var contexts []string
+	for _, check := range requiredContexts {
+		contexts = append(contexts, check.Context)
+	}
+
+	return contexts, nil
+}
+
+// mapCheckRun converts a go-github CheckRun to a domain model CheckRun.
+func mapCheckRun(cr *gh.CheckRun) model.CheckRun {
+	var startedAt, completedAt time.Time
+	if cr.StartedAt != nil {
+		startedAt = cr.GetStartedAt().Time
+	}
+	if cr.CompletedAt != nil {
+		completedAt = cr.GetCompletedAt().Time
+	}
+
+	return model.CheckRun{
+		ID:          cr.GetID(),
+		PRID:        0, // Caller assigns before storing.
+		Name:        cr.GetName(),
+		Status:      cr.GetStatus(),
+		Conclusion:  cr.GetConclusion(),
+		IsRequired:  false, // Set later by health service from branch protection data.
+		DetailsURL:  cr.GetDetailsURL(),
+		StartedAt:   startedAt,
+		CompletedAt: completedAt,
+	}
+}
+
+// mapCombinedStatus converts a go-github CombinedStatus to a domain model CombinedStatus.
+// Returns nil if no statuses exist and state is empty (no CI configured).
+func mapCombinedStatus(cs *gh.CombinedStatus) *model.CombinedStatus {
+	if len(cs.Statuses) == 0 && cs.GetState() == "" {
+		return nil
+	}
+
+	statuses := make([]model.CommitStatus, 0, len(cs.Statuses))
+	for _, s := range cs.Statuses {
+		statuses = append(statuses, model.CommitStatus{
+			Context:     s.GetContext(),
+			State:       s.GetState(),
+			Description: s.GetDescription(),
+			TargetURL:   s.GetTargetURL(),
+		})
+	}
+
+	return &model.CombinedStatus{
+		State:    cs.GetState(),
+		Statuses: statuses,
+	}
+}
+
+// mapMergeable converts a *bool (GitHub's tri-state mergeable field) to a MergeableStatus.
+// nil means GitHub hasn't computed it yet; true means mergeable; false means conflicted.
+func mapMergeable(mergeable *bool) model.MergeableStatus {
+	if mergeable == nil {
+		return model.MergeableUnknown
+	}
+	if *mergeable {
+		return model.MergeableMergeable
+	}
+	return model.MergeableConflicted
 }
 
 // splitRepo splits a "owner/repo" string into its two components.
