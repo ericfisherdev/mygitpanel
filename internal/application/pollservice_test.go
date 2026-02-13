@@ -8,25 +8,49 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/efisher/reviewhub/internal/application"
-	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/application"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
 // --- Mock implementations ---
 
 type mockGitHubClient struct {
-	fetchPRs func(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
+	fetchPRs             func(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
+	fetchReviews         func(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error)
+	fetchReviewComments  func(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error)
+	fetchIssueComments   func(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error)
+	fetchThreadResolution func(ctx context.Context, repoFullName string, prNumber int) (map[int64]bool, error)
 }
 
 func (m *mockGitHubClient) FetchPullRequests(ctx context.Context, repoFullName string) ([]model.PullRequest, error) {
 	return m.fetchPRs(ctx, repoFullName)
 }
 
-func (m *mockGitHubClient) FetchReviews(_ context.Context, _ string, _ int) ([]model.Review, error) {
+func (m *mockGitHubClient) FetchReviews(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error) {
+	if m.fetchReviews != nil {
+		return m.fetchReviews(ctx, repoFullName, prNumber)
+	}
 	return nil, nil
 }
 
-func (m *mockGitHubClient) FetchReviewComments(_ context.Context, _ string, _ int) ([]model.ReviewComment, error) {
+func (m *mockGitHubClient) FetchReviewComments(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error) {
+	if m.fetchReviewComments != nil {
+		return m.fetchReviewComments(ctx, repoFullName, prNumber)
+	}
+	return nil, nil
+}
+
+func (m *mockGitHubClient) FetchIssueComments(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error) {
+	if m.fetchIssueComments != nil {
+		return m.fetchIssueComments(ctx, repoFullName, prNumber)
+	}
+	return nil, nil
+}
+
+func (m *mockGitHubClient) FetchThreadResolution(ctx context.Context, repoFullName string, prNumber int) (map[int64]bool, error) {
+	if m.fetchThreadResolution != nil {
+		return m.fetchThreadResolution(ctx, repoFullName, prNumber)
+	}
 	return nil, nil
 }
 
@@ -58,7 +82,22 @@ func (m *mockPRStore) GetByStatus(_ context.Context, _ model.PRStatus) ([]model.
 	return nil, nil
 }
 
-func (m *mockPRStore) GetByNumber(_ context.Context, _ string, _ int) (*model.PullRequest, error) {
+func (m *mockPRStore) GetByNumber(_ context.Context, repoFullName string, number int) (*model.PullRequest, error) {
+	for _, pr := range m.stored {
+		if pr.RepoFullName == repoFullName && pr.Number == number {
+			return &pr, nil
+		}
+	}
+	// If not found in stored, return a PR with a default ID based on upserts.
+	for _, u := range m.upserts {
+		if u.PR.RepoFullName == repoFullName && u.PR.Number == number {
+			pr := u.PR
+			if pr.ID == 0 {
+				pr.ID = int64(number) // Synthetic ID for testing.
+			}
+			return &pr, nil
+		}
+	}
 	return nil, nil
 }
 
@@ -95,18 +134,75 @@ func (m *mockRepoStore) ListAll(_ context.Context) ([]model.Repository, error) {
 	return m.repos, nil
 }
 
+// mockReviewStore records upsert/update calls for verification.
+type mockReviewStore struct {
+	upsertedReviews        []model.Review
+	upsertedReviewComments []model.ReviewComment
+	upsertedIssueComments  []model.IssueComment
+	updatedResolutions     map[int64]bool
+}
+
+func newMockReviewStore() *mockReviewStore {
+	return &mockReviewStore{
+		updatedResolutions: make(map[int64]bool),
+	}
+}
+
+func (m *mockReviewStore) UpsertReview(_ context.Context, review model.Review) error {
+	m.upsertedReviews = append(m.upsertedReviews, review)
+	return nil
+}
+
+func (m *mockReviewStore) UpsertReviewComment(_ context.Context, comment model.ReviewComment) error {
+	m.upsertedReviewComments = append(m.upsertedReviewComments, comment)
+	return nil
+}
+
+func (m *mockReviewStore) UpsertIssueComment(_ context.Context, comment model.IssueComment) error {
+	m.upsertedIssueComments = append(m.upsertedIssueComments, comment)
+	return nil
+}
+
+func (m *mockReviewStore) GetReviewsByPR(_ context.Context, _ int64) ([]model.Review, error) {
+	return nil, nil
+}
+
+func (m *mockReviewStore) GetReviewCommentsByPR(_ context.Context, _ int64) ([]model.ReviewComment, error) {
+	return nil, nil
+}
+
+func (m *mockReviewStore) GetIssueCommentsByPR(_ context.Context, _ int64) ([]model.IssueComment, error) {
+	return nil, nil
+}
+
+func (m *mockReviewStore) UpdateCommentResolution(_ context.Context, commentID int64, isResolved bool) error {
+	m.updatedResolutions[commentID] = isResolved
+	return nil
+}
+
+func (m *mockReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error {
+	return nil
+}
+
+
 // --- Helper to create a PollService and trigger a single repo poll ---
 
 // pollRepoVia creates a PollService, starts it, and triggers a RefreshRepo
 // to invoke pollRepo for the given repo. It returns after the refresh completes.
 func pollRepoVia(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRStore, username string, teamSlugs []string, repoFullName string) {
 	t.Helper()
+	pollRepoViaFull(t, ghClient, prStore, newMockReviewStore(), username, teamSlugs, repoFullName)
+}
+
+// pollRepoViaFull is like pollRepoVia but accepts a custom review store for verification.
+func pollRepoViaFull(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRStore, reviewStore *mockReviewStore, username string, teamSlugs []string, repoFullName string) {
+	t.Helper()
 
 	repoStore := &mockRepoStore{
 		repos: []model.Repository{{FullName: repoFullName}},
 	}
 
-	svc := application.NewPollService(ghClient, prStore, repoStore, username, teamSlugs, 1*time.Hour)
+	svc := application.NewPollService(ghClient, prStore, repoStore, reviewStore, username, teamSlugs, 1*time.Hour)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -125,6 +221,10 @@ func pollRepoVia(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRStore,
 	// Clear any upserts/deletes from the initial poll so we test fresh.
 	prStore.upserts = nil
 	prStore.deletes = nil
+	reviewStore.upsertedReviews = nil
+	reviewStore.upsertedReviewComments = nil
+	reviewStore.upsertedIssueComments = nil
+	reviewStore.updatedResolutions = make(map[int64]bool)
 
 	err := svc.RefreshRepo(ctx, repoFullName)
 	require.NoError(t, err)
@@ -376,4 +476,88 @@ func TestIsReviewRequestedFrom(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// --- New tests for review data fetching ---
+
+func TestPollRepo_FetchesReviewData(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+
+	var fetchReviewsCalled, fetchReviewCommentsCalled, fetchIssueCommentsCalled bool
+
+	ghClient := &mockGitHubClient{
+		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+			return []model.PullRequest{
+				{Number: 60, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
+			}, nil
+		},
+		fetchReviews: func(_ context.Context, _ string, _ int) ([]model.Review, error) {
+			fetchReviewsCalled = true
+			return []model.Review{
+				{ID: 1001, ReviewerLogin: "alice", State: model.ReviewStateApproved, SubmittedAt: now},
+			}, nil
+		},
+		fetchReviewComments: func(_ context.Context, _ string, _ int) ([]model.ReviewComment, error) {
+			fetchReviewCommentsCalled = true
+			return []model.ReviewComment{
+				{ID: 2001, Author: "alice", Body: "looks good", Path: "main.go", Line: 5, CreatedAt: now, UpdatedAt: now},
+			}, nil
+		},
+		fetchIssueComments: func(_ context.Context, _ string, _ int) ([]model.IssueComment, error) {
+			fetchIssueCommentsCalled = true
+			return []model.IssueComment{
+				{ID: 3001, Author: "bob", Body: "nice work", CreatedAt: now, UpdatedAt: now},
+			}, nil
+		},
+	}
+
+	prStore := &mockPRStore{}
+	reviewStore := newMockReviewStore()
+	pollRepoViaFull(t, ghClient, prStore, reviewStore, "testuser", nil, "org/repo")
+
+	// Verify review fetch methods were called.
+	assert.True(t, fetchReviewsCalled, "FetchReviews should be called for changed PR")
+	assert.True(t, fetchReviewCommentsCalled, "FetchReviewComments should be called for changed PR")
+	assert.True(t, fetchIssueCommentsCalled, "FetchIssueComments should be called for changed PR")
+
+	// Verify review store received upserts with correct PRID.
+	require.Len(t, reviewStore.upsertedReviews, 1)
+	assert.Equal(t, int64(60), reviewStore.upsertedReviews[0].PRID, "review PRID should match stored PR ID")
+
+	require.Len(t, reviewStore.upsertedReviewComments, 1)
+	assert.Equal(t, int64(60), reviewStore.upsertedReviewComments[0].PRID, "review comment PRID should match stored PR ID")
+
+	require.Len(t, reviewStore.upsertedIssueComments, 1)
+	assert.Equal(t, int64(60), reviewStore.upsertedIssueComments[0].PRID, "issue comment PRID should match stored PR ID")
+}
+
+func TestPollRepo_SkipsReviewDataForUnchangedPRs(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+
+	var fetchReviewsCalled bool
+
+	ghClient := &mockGitHubClient{
+		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+			return []model.PullRequest{
+				{Number: 70, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
+			}, nil
+		},
+		fetchReviews: func(_ context.Context, _ string, _ int) ([]model.Review, error) {
+			fetchReviewsCalled = true
+			return nil, nil
+		},
+	}
+
+	prStore := &mockPRStore{
+		stored: []model.PullRequest{
+			{Number: 70, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
+		},
+	}
+
+	reviewStore := newMockReviewStore()
+	pollRepoViaFull(t, ghClient, prStore, reviewStore, "testuser", nil, "org/repo")
+
+	// PR is unchanged (same UpdatedAt), so review fetch should NOT be called.
+	assert.False(t, fetchReviewsCalled, "FetchReviews should NOT be called for unchanged PR")
+	assert.Empty(t, reviewStore.upsertedReviews, "no reviews should be upserted for unchanged PR")
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -9,11 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	githubadapter "github.com/efisher/reviewhub/internal/adapter/driven/github"
-	sqliteadapter "github.com/efisher/reviewhub/internal/adapter/driven/sqlite"
-	httphandler "github.com/efisher/reviewhub/internal/adapter/driving/http"
-	"github.com/efisher/reviewhub/internal/application"
-	"github.com/efisher/reviewhub/internal/config"
+	githubadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
+	sqliteadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/sqlite"
+	httphandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/http"
+	"github.com/ericfisherdev/mygitpanel/internal/application"
+	"github.com/ericfisherdev/mygitpanel/internal/config"
 )
 
 func main() {
@@ -61,6 +61,8 @@ func run() error {
 	// 5. Wire adapters.
 	prStore := sqliteadapter.NewPRRepo(db)
 	repoStore := sqliteadapter.NewRepoRepo(db)
+	reviewStore := sqliteadapter.NewReviewRepo(db)
+	botConfigStore := sqliteadapter.NewBotConfigRepo(db)
 
 	// 6. Create GitHub client.
 	ghClient := githubadapter.NewClient(cfg.GitHubToken, cfg.GitHubUsername)
@@ -70,14 +72,18 @@ func run() error {
 		ghClient,
 		prStore,
 		repoStore,
+		reviewStore,
 		cfg.GitHubUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,
 	)
 	go pollSvc.Start(ctx)
 
+	// 7b. Create review service.
+	reviewSvc := application.NewReviewService(reviewStore, botConfigStore)
+
 	// 7.5. Create HTTP handler and server.
-	h := httphandler.NewHandler(prStore, repoStore, pollSvc, cfg.GitHubUsername, slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, pollSvc, cfg.GitHubUsername, slog.Default())
 	mux := httphandler.NewServeMux(h, slog.Default())
 
 	srv := &http.Server{
@@ -97,7 +103,7 @@ func run() error {
 	}()
 
 	// 8. Log startup complete.
-	slog.Info("reviewhub started",
+	slog.Info("mygitpanel started",
 		"listen_addr", cfg.ListenAddr,
 		"poll_interval", cfg.PollInterval,
 		"teams", cfg.GitHubTeams,

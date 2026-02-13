@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - Domain model, SQLite persistence, configuration, and project skeleton
 - [x] **Phase 2: GitHub Integration** - Polling engine, GitHub API adapter, and PR discovery
 - [x] **Phase 3: Core API** - HTTP endpoints for PR listing, repository management, and health check
-- [ ] **Phase 4: Review Intelligence** - Comment formatting with code context, threading, and bot detection
+- [x] **Phase 4: Review Intelligence** - Comment formatting with code context, threading, and bot detection
 - [ ] **Phase 5: PR Health Signals** - CI/CD status, staleness tracking, diff stats, and merge conflict detection
 - [ ] **Phase 6: Docker Deployment** - Containerization, adaptive polling, and production readiness
 
@@ -80,13 +80,13 @@ Plans:
   3. GitHub suggestion blocks are extracted and presented as structured proposed changes distinct from regular comment text
   4. Inline (line-specific) comments are distinguished from general PR-level comments, and each comment includes reviewer name, timestamp, and review action
   5. Coderabbit reviews are detected by @coderabbitai author, nitpick comments are flagged separately, outdated reviews are marked, and bot usernames are configurable via API endpoint
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
-- [ ] 04-04: TBD
+- [ ] 04-01-PLAN.md -- Domain model expansion (Review, ReviewComment, IssueComment, BotConfig, HeadSHA), port interfaces (ReviewStore, BotConfigStore), SQLite migrations and adapters with tests
+- [ ] 04-02-PLAN.md -- GitHub adapter: FetchReviews, FetchReviewComments, FetchIssueComments with pagination, GraphQL thread resolution, HeadSHA mapping and persistence
+- [ ] 04-03-PLAN.md -- Review enrichment service (threading, suggestion extraction, bot detection, nitpick detection, outdated detection, review status aggregation) and poll service integration
+- [ ] 04-04-PLAN.md -- HTTP API: enriched PR detail response with review DTOs, bot config CRUD endpoints, composition root wiring
 
 ### Phase 5: PR Health Signals
 **Goal**: Each PR shows CI/CD check status, staleness, diff stats, and merge conflict status -- giving the consumer a complete picture of PR health beyond review comments
@@ -129,6 +129,6 @@ Note: Phases 4 and 5 are independent of each other (both depend on Phase 3) but 
 | 1. Foundation | 3/3 | Complete ✓ | 2026-02-10 |
 | 2. GitHub Integration | 2/2 | Complete ✓ | 2026-02-11 |
 | 3. Core API | 2/2 | Complete ✓ | 2026-02-11 |
-| 4. Review Intelligence | 0/4 | Not started | - |
+| 4. Review Intelligence | 4/4 | Complete ✓ | 2026-02-12 |
 | 5. PR Health Signals | 0/3 | Not started | - |
 | 6. Docker Deployment | 0/2 | Not started | - |

@@ -29,3 +29,12 @@ const (
 	CIStatusPending CIStatus = "pending"
 	CIStatusUnknown CIStatus = "unknown"
 )
+
+// CommentType distinguishes between different origins of PR comments.
+type CommentType string
+
+const (
+	CommentTypeInline  CommentType = "inline"  // Review comment on a code line.
+	CommentTypeGeneral CommentType = "general" // Issue comment / PR-level discussion.
+	CommentTypeFile    CommentType = "file"    // Review comment on a file, not a specific line.
+)

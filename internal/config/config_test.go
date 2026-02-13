@@ -9,11 +9,11 @@ import (
 )
 
 func TestLoad_Success(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
-	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
-	t.Setenv("REVIEWHUB_POLL_INTERVAL", "10m")
-	t.Setenv("REVIEWHUB_LISTEN_ADDR", "0.0.0.0:9090")
-	t.Setenv("REVIEWHUB_DB_PATH", "/tmp/test.db")
+	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
+	t.Setenv("MYGITPANEL_POLL_INTERVAL", "10m")
+	t.Setenv("MYGITPANEL_LISTEN_ADDR", "0.0.0.0:9090")
+	t.Setenv("MYGITPANEL_DB_PATH", "/tmp/test.db")
 
 	cfg, err := Load()
 
@@ -26,64 +26,64 @@ func TestLoad_Success(t *testing.T) {
 }
 
 func TestLoad_Defaults(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
-	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
+	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
 	cfg, err := Load()
 
 	require.NoError(t, err)
 	assert.Equal(t, 5*time.Minute, cfg.PollInterval)
 	assert.Equal(t, "127.0.0.1:8080", cfg.ListenAddr)
-	assert.Equal(t, "reviewhub.db", cfg.DBPath)
+	assert.Equal(t, "mygitpanel.db", cfg.DBPath)
 }
 
 func TestLoad_MissingToken(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
+	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
 	cfg, err := Load()
 
 	assert.Nil(t, cfg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "REVIEWHUB_GITHUB_TOKEN")
+	assert.Contains(t, err.Error(), "MYGITPANEL_GITHUB_TOKEN")
 }
 
 func TestLoad_MissingUsername(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 
 	cfg, err := Load()
 
 	assert.Nil(t, cfg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "REVIEWHUB_GITHUB_USERNAME")
+	assert.Contains(t, err.Error(), "MYGITPANEL_GITHUB_USERNAME")
 }
 
 func TestLoad_EmptyToken(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "")
-	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
+	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "")
+	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
 	cfg, err := Load()
 
 	assert.Nil(t, cfg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "REVIEWHUB_GITHUB_TOKEN")
+	assert.Contains(t, err.Error(), "MYGITPANEL_GITHUB_TOKEN")
 }
 
 func TestLoad_InvalidPollInterval(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
-	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
-	t.Setenv("REVIEWHUB_POLL_INTERVAL", "not-a-duration")
+	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
+	t.Setenv("MYGITPANEL_POLL_INTERVAL", "not-a-duration")
 
 	cfg, err := Load()
 
 	assert.Nil(t, cfg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "REVIEWHUB_POLL_INTERVAL")
+	assert.Contains(t, err.Error(), "MYGITPANEL_POLL_INTERVAL")
 }
 
 func TestLoad_GitHubTeams(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
-	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
-	t.Setenv("REVIEWHUB_GITHUB_TEAMS", "team-a, team-b")
+	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
+	t.Setenv("MYGITPANEL_GITHUB_TEAMS", "team-a, team-b")
 
 	cfg, err := Load()
 
@@ -92,8 +92,8 @@ func TestLoad_GitHubTeams(t *testing.T) {
 }
 
 func TestLoad_GitHubTeams_Empty(t *testing.T) {
-	t.Setenv("REVIEWHUB_GITHUB_TOKEN", "ghp_test123")
-	t.Setenv("REVIEWHUB_GITHUB_USERNAME", "testuser")
+	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
+	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
 	cfg, err := Load()
 

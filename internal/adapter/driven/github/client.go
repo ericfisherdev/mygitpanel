@@ -14,8 +14,8 @@ import (
 
 	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
-	"github.com/efisher/reviewhub/internal/domain/port/driven"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 // Compile-time interface satisfaction check.
@@ -23,8 +23,10 @@ var _ driven.GitHubClient = (*Client)(nil)
 
 // Client implements the driven.GitHubClient port using the go-github library.
 type Client struct {
-	gh       *gh.Client
-	username string
+	gh         *gh.Client
+	username   string
+	token      string // Stored for GraphQL Authorization header.
+	graphqlURL string // "https://api.github.com/graphql" in production; derived from baseURL in tests.
 }
 
 // NewClient creates a new GitHub API client with the following transport stack:
@@ -37,14 +39,16 @@ func NewClient(token, username string) *Client {
 	client := gh.NewClient(rateLimitClient).WithAuthToken(token)
 
 	return &Client{
-		gh:       client,
-		username: username,
+		gh:         client,
+		username:   username,
+		token:      token,
+		graphqlURL: "https://api.github.com/graphql",
 	}
 }
 
 // NewClientWithHTTPClient creates a Client with a custom http.Client and base URL.
 // This constructor is intended for testing, allowing injection of an httptest server.
-func NewClientWithHTTPClient(httpClient *http.Client, baseURL, username string) (*Client, error) {
+func NewClientWithHTTPClient(httpClient *http.Client, baseURL, username, token string) (*Client, error) {
 	client := gh.NewClient(httpClient)
 
 	u, err := url.Parse(baseURL)
@@ -53,9 +57,15 @@ func NewClientWithHTTPClient(httpClient *http.Client, baseURL, username string) 
 	}
 	client.BaseURL = u
 
+	// Derive graphqlURL from baseURL so httptest servers can intercept GraphQL requests.
+	graphqlU := *u
+	graphqlU.Path = "/graphql"
+
 	return &Client{
-		gh:       client,
-		username: username,
+		gh:         client,
+		username:   username,
+		token:      token,
+		graphqlURL: graphqlU.String(),
 	}, nil
 }
 
@@ -103,14 +113,154 @@ func (c *Client) FetchPullRequests(ctx context.Context, repoFullName string) ([]
 	return allPRs, nil
 }
 
-// FetchReviews is a stub implementation for Phase 4.
-func (c *Client) FetchReviews(_ context.Context, _ string, _ int) ([]model.Review, error) {
-	return nil, nil
+// FetchReviews retrieves all reviews for a pull request.
+// It handles pagination automatically and maps go-github types to domain model types.
+func (c *Client) FetchReviews(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error) {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := &gh.ListOptions{PerPage: 100}
+	var allReviews []model.Review
+
+	for {
+		reviews, resp, err := c.gh.PullRequests.ListReviews(ctx, owner, repo, prNumber, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing reviews for %s#%d (page %d): %w", repoFullName, prNumber, opts.Page, err)
+		}
+
+		for _, r := range reviews {
+			allReviews = append(allReviews, mapReview(r))
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allReviews, nil
 }
 
-// FetchReviewComments is a stub implementation for Phase 4.
-func (c *Client) FetchReviewComments(_ context.Context, _ string, _ int) ([]model.ReviewComment, error) {
-	return nil, nil
+// FetchReviewComments retrieves all review comments (inline code comments) for a pull request.
+// It handles pagination automatically and maps go-github types to domain model types.
+func (c *Client) FetchReviewComments(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error) {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := &gh.PullRequestListCommentsOptions{
+		ListOptions: gh.ListOptions{PerPage: 100},
+	}
+	var allComments []model.ReviewComment
+
+	for {
+		comments, resp, err := c.gh.PullRequests.ListComments(ctx, owner, repo, prNumber, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing review comments for %s#%d (page %d): %w", repoFullName, prNumber, opts.Page, err)
+		}
+
+		for _, comment := range comments {
+			allComments = append(allComments, mapReviewComment(comment))
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allComments, nil
+}
+
+// FetchIssueComments retrieves all general PR-level comments (from the Issues API) for a pull request.
+// It handles pagination automatically and maps go-github types to domain model types.
+func (c *Client) FetchIssueComments(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error) {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := &gh.IssueListCommentsOptions{
+		ListOptions: gh.ListOptions{PerPage: 100},
+	}
+	var allComments []model.IssueComment
+
+	for {
+		comments, resp, err := c.gh.Issues.ListComments(ctx, owner, repo, prNumber, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing issue comments for %s#%d (page %d): %w", repoFullName, prNumber, opts.Page, err)
+		}
+
+		for _, comment := range comments {
+			allComments = append(allComments, mapIssueComment(comment))
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allComments, nil
+}
+
+// mapReview converts a go-github PullRequestReview to a domain model Review.
+func mapReview(r *gh.PullRequestReview) model.Review {
+	return model.Review{
+		ID:            r.GetID(),
+		PRID:          0, // Caller assigns before storing; adapter has no knowledge of database ID.
+		ReviewerLogin: r.GetUser().GetLogin(),
+		State:         model.ReviewState(strings.ToLower(r.GetState())),
+		Body:          r.GetBody(),
+		CommitID:      r.GetCommitID(),
+		SubmittedAt:   r.GetSubmittedAt().Time,
+		IsBot:         false, // Bot detection happens in the enrichment service, not the adapter.
+	}
+}
+
+// mapReviewComment converts a go-github PullRequestComment to a domain model ReviewComment.
+func mapReviewComment(c *gh.PullRequestComment) model.ReviewComment {
+	var inReplyTo *int64
+	if c.InReplyTo != nil {
+		val := c.GetInReplyTo()
+		inReplyTo = &val
+	}
+
+	return model.ReviewComment{
+		ID:          c.GetID(),
+		ReviewID:    c.GetPullRequestReviewID(),
+		PRID:        0, // Caller assigns before storing.
+		Author:      c.GetUser().GetLogin(),
+		Body:        c.GetBody(),
+		Path:        c.GetPath(),
+		Line:        c.GetLine(),
+		StartLine:   c.GetStartLine(),
+		Side:        c.GetSide(),
+		SubjectType: c.GetSubjectType(),
+		DiffHunk:    c.GetDiffHunk(),
+		CommitID:    c.GetCommitID(),
+		IsResolved:  false, // Set later from GraphQL data.
+		IsOutdated:  false, // Set later by enrichment service.
+		InReplyToID: inReplyTo,
+		CreatedAt:   c.GetCreatedAt().Time,
+		UpdatedAt:   c.GetUpdatedAt().Time,
+	}
+}
+
+// mapIssueComment converts a go-github IssueComment to a domain model IssueComment.
+func mapIssueComment(c *gh.IssueComment) model.IssueComment {
+	return model.IssueComment{
+		ID:        c.GetID(),
+		PRID:      0, // Caller assigns before storing.
+		Author:    c.GetUser().GetLogin(),
+		Body:      c.GetBody(),
+		IsBot:     false, // Enrichment service handles bot detection.
+		CreatedAt: c.GetCreatedAt().Time,
+		UpdatedAt: c.GetUpdatedAt().Time,
+	}
 }
 
 // logRateLimit logs the GitHub API rate limit status after each call.
@@ -170,6 +320,7 @@ func mapPullRequest(pr *gh.PullRequest, repoFullName string) model.PullRequest {
 		URL:                pr.GetHTMLURL(),
 		Branch:             pr.GetHead().GetRef(),
 		BaseBranch:         pr.GetBase().GetRef(),
+		HeadSHA:            pr.GetHead().GetSHA(),
 		Labels:             labels,
 		OpenedAt:           pr.GetCreatedAt().Time,
 		UpdatedAt:          pr.GetUpdatedAt().Time,

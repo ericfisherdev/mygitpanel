@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
-	"github.com/efisher/reviewhub/internal/domain/port/driven"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 // Compile-time interface satisfaction check.
@@ -29,8 +29,8 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 	const query = `
 		INSERT INTO pull_requests (
 			number, repo_full_name, title, author, status, is_draft, needs_review,
-			url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			url, branch, base_branch, labels, head_sha, opened_at, updated_at, last_activity_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(repo_full_name, number) DO UPDATE SET
 			title = excluded.title,
 			author = excluded.author,
@@ -41,6 +41,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 			branch = excluded.branch,
 			base_branch = excluded.base_branch,
 			labels = excluded.labels,
+			head_sha = excluded.head_sha,
 			opened_at = excluded.opened_at,
 			updated_at = excluded.updated_at,
 			last_activity_at = excluded.last_activity_at
@@ -67,7 +68,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 
 	_, err = r.db.Writer.ExecContext(ctx, query,
 		pr.Number, pr.RepoFullName, pr.Title, pr.Author, string(pr.Status), isDraft, needsReview,
-		pr.URL, pr.Branch, pr.BaseBranch, string(labelsJSON),
+		pr.URL, pr.Branch, pr.BaseBranch, string(labelsJSON), pr.HeadSHA,
 		pr.OpenedAt.UTC(), pr.UpdatedAt.UTC(), pr.LastActivityAt.UTC(),
 	)
 	if err != nil {
@@ -81,7 +82,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 func (r *PRRepo) GetByRepository(ctx context.Context, repoFullName string) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
+		       url, branch, base_branch, labels, head_sha, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		WHERE repo_full_name = ?
 		ORDER BY number
@@ -94,7 +95,7 @@ func (r *PRRepo) GetByRepository(ctx context.Context, repoFullName string) ([]mo
 func (r *PRRepo) GetByStatus(ctx context.Context, status model.PRStatus) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
+		       url, branch, base_branch, labels, head_sha, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		WHERE status = ?
 		ORDER BY updated_at DESC
@@ -108,7 +109,7 @@ func (r *PRRepo) GetByStatus(ctx context.Context, status model.PRStatus) ([]mode
 func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number int) (*model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
+		       url, branch, base_branch, labels, head_sha, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		WHERE repo_full_name = ? AND number = ?
 	`
@@ -128,7 +129,7 @@ func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number in
 func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
+		       url, branch, base_branch, labels, head_sha, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		ORDER BY updated_at DESC
 	`
@@ -141,7 +142,7 @@ func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 func (r *PRRepo) ListNeedingReview(ctx context.Context) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, opened_at, updated_at, last_activity_at
+		       url, branch, base_branch, labels, head_sha, opened_at, updated_at, last_activity_at
 		FROM pull_requests
 		WHERE needs_review = 1
 		ORDER BY updated_at DESC
@@ -206,7 +207,7 @@ func scanPR(s scanner) (*model.PullRequest, error) {
 	err := s.Scan(
 		&pr.ID, &pr.Number, &pr.RepoFullName, &pr.Title, &pr.Author,
 		&status, &isDraft, &needsReview, &pr.URL, &pr.Branch, &pr.BaseBranch,
-		&labelsJSON, &openedAt, &updatedAt, &lastActivityAt,
+		&labelsJSON, &pr.HeadSHA, &openedAt, &updatedAt, &lastActivityAt,
 	)
 	if err != nil {
 		return nil, err

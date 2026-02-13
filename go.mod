@@ -1,4 +1,4 @@
-module github.com/efisher/reviewhub
+module github.com/ericfisherdev/mygitpanel
 
 go 1.25.4
 

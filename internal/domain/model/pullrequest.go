@@ -15,6 +15,7 @@ type PullRequest struct {
 	Branch         string
 	BaseBranch     string
 	NeedsReview    bool
+	HeadSHA        string // Current head commit SHA; used for outdated review detection.
 	Labels         []string
 	OpenedAt       time.Time
 	UpdatedAt      time.Time
