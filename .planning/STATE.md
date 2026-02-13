@@ -5,23 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Core value:** Review comments formatted with enough code context that an AI agent can understand and fix the code
-**Current focus:** Phase 4 complete - Review Intelligence
+**Current focus:** Phase 5 in progress - PR Health Signals
 
 ## Current Position
 
-Phase: 4 of 6 (Review Intelligence)
-Plan: 4 of 4 in current phase
-Status: Phase complete
-Last activity: 2026-02-13 - Completed 04-04-PLAN.md
+Phase: 5 of 6 (PR Health Signals)
+Plan: 2 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-13 - Completed 05-02-PLAN.md
 
-Progress: [█████████████░░░░] ~76%
+Progress: [███████████████░░] ~87%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
+
+- Total plans completed: 13
 - Average duration: 6min
-- Total execution time: 1.1 hours
+- Total execution time: 1.3 hours
 
 **By Phase:**
 
@@ -31,10 +32,12 @@ Progress: [█████████████░░░░] ~76%
 | 02-github-integration | 2/2 | 16min | 8min |
 | 03-core-api | 2/2 | 12min | 6min |
 | 04-review-intelligence | 4/4 | 19min | 4.8min |
+| 05-pr-health-signals | 2/3 | 11min | 5.5min |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (5min), 04-02 (4min), 04-03 (5min), 04-04 (5min)
-- Trend: stable/improving
+
+- Last 5 plans: 04-03 (5min), 04-04 (5min), 05-01 (5min), 05-02 (6min)
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -91,6 +94,13 @@ Recent decisions affecting current work:
 - [04-04]: List endpoints skip enrichment by design -- lightweight responses without ReviewService overhead
 - [04-04]: IsNitpickComment exported from application package for HTTP handler nitpick detection
 - [04-04]: Bot config endpoints reuse UNIQUE constraint error detection pattern from repo endpoints
+- [05-01]: Full replacement strategy for check runs (DELETE + INSERT in tx) rather than per-run upsert
+- [05-01]: Empty MergeableStatus/CIStatus default to "unknown" in PRRepo.Upsert
+- [05-01]: GitHub adapter and test mock get stub implementations for new GitHubClient methods to keep build green
+- [05-02]: Both "canceled" and "cancelled" matched in CI status switch for GitHub API vs linter compatibility
+- [05-02]: mapCombinedStatus returns nil when zero statuses and empty state (no CI configured)
+- [05-02]: fetchHealthData returns early if FetchCheckRuns fails; continues independently on other failures
+- [05-02]: Health data upserts run after review data upserts in poll cycle
 
 ### Pending Todos
 
@@ -103,6 +113,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-13T05:27:23Z
-Stopped at: Completed 04-04-PLAN.md (Phase 4 complete)
-Resume file: Phase 5 planning
+Last session: 2026-02-13T22:27:50Z
+Stopped at: Completed 05-02-PLAN.md (Plan 2 of 3 in Phase 5)
+Resume file: .planning/phases/05-pr-health-signals/05-03-PLAN.md
