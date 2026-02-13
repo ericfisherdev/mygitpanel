@@ -75,8 +75,8 @@ type mockBotConfigStore struct {
 	removeErr error
 }
 
-func (m *mockBotConfigStore) Add(_ context.Context, bot model.BotConfig) error {
-	return m.addErr
+func (m *mockBotConfigStore) Add(_ context.Context, bot model.BotConfig) (model.BotConfig, error) {
+	return bot, m.addErr
 }
 func (m *mockBotConfigStore) Remove(_ context.Context, _ string) error {
 	return m.removeErr

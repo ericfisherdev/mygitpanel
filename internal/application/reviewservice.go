@@ -35,15 +35,16 @@ type Suggestion struct {
 
 // PRReviewSummary is the complete enriched view of a PR's review state.
 type PRReviewSummary struct {
-	Reviews              []model.Review
-	Threads              []CommentThread
-	IssueComments        []model.IssueComment
-	Suggestions          []Suggestion
-	ReviewStatus         model.ReviewState
-	HasBotReview         bool
-	HasCoderabbitReview  bool
-	AwaitingCoderabbit   bool
-	ResolvedThreadCount  int
+	Reviews               []model.Review
+	Threads               []CommentThread
+	IssueComments         []model.IssueComment
+	Suggestions           []Suggestion
+	BotUsernames          []string
+	ReviewStatus          model.ReviewState
+	HasBotReview          bool
+	HasCoderabbitReview   bool
+	AwaitingCoderabbit    bool
+	ResolvedThreadCount   int
 	UnresolvedThreadCount int
 }
 
@@ -126,6 +127,7 @@ func (s *ReviewService) GetPRReviewSummary(ctx context.Context, prID int64, head
 		Threads:               threads,
 		IssueComments:         issueComments,
 		Suggestions:           suggestions,
+		BotUsernames:          botUsernames,
 		ReviewStatus:          reviewStatus,
 		HasBotReview:          hasBotReview,
 		HasCoderabbitReview:   hasCoderabbitReview,
@@ -253,8 +255,8 @@ func extractSuggestions(comments []model.ReviewComment) []Suggestion {
 	var suggestions []Suggestion
 
 	for _, c := range comments {
-		matches := suggestionPattern.FindStringSubmatch(c.Body)
-		if matches == nil {
+		allMatches := suggestionPattern.FindAllStringSubmatch(c.Body, -1)
+		if len(allMatches) == 0 {
 			continue
 		}
 
@@ -263,14 +265,16 @@ func extractSuggestions(comments []model.ReviewComment) []Suggestion {
 			startLine = c.Line
 		}
 
-		suggestions = append(suggestions, Suggestion{
-			CommentID:    c.ID,
-			FilePath:     c.Path,
-			StartLine:    startLine,
-			EndLine:      c.Line,
-			ProposedCode: matches[1],
-			OriginalBody: c.Body,
-		})
+		for _, matches := range allMatches {
+			suggestions = append(suggestions, Suggestion{
+				CommentID:    c.ID,
+				FilePath:     c.Path,
+				StartLine:    startLine,
+				EndLine:      c.Line,
+				ProposedCode: matches[1],
+				OriginalBody: c.Body,
+			})
+		}
 	}
 
 	return suggestions

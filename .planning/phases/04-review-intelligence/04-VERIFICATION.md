@@ -38,7 +38,7 @@ re_verification: false
 | `internal/adapter/driving/http/response.go` | Enriched DTO structs for reviews, comments, threads, suggestions | ✓ VERIFIED | 273 lines; contains ReviewThreadResponse, SuggestionResponse, IssueCommentResponse, ReviewResponse, ReviewCommentResponse with all required fields; no stubs |
 | `internal/adapter/driving/http/handler.go` | Updated GetPR handler using ReviewService for enriched responses | ✓ VERIFIED | 310 lines; has reviewSvc field, GetPR calls GetPRReviewSummary, enrichPRResponse populates all enriched fields; no stubs |
 | `internal/adapter/driving/http/handler_botconfig.go` | Bot configuration CRUD endpoints | ✓ VERIFIED | 76 lines; implements ListBots, AddBot, RemoveBot with validation and error handling; no stubs |
-| `cmd/reviewhub/main.go` | Composition root with all Phase 4 dependencies wired | ✓ VERIFIED | 128 lines; creates ReviewRepo, BotConfigRepo, ReviewService, passes to PollService and Handler; go build succeeds |
+| `cmd/mygitpanel/main.go` | Composition root with all Phase 4 dependencies wired | ✓ VERIFIED | 128 lines; creates ReviewRepo, BotConfigRepo, ReviewService, passes to PollService and Handler; go build succeeds |
 
 ### Key Link Verification
 
@@ -83,7 +83,7 @@ None detected. All files have:
 
 #### 1. End-to-End PR Detail API Response
 
-**Test:** Start reviewhub server, configure a repository with active PRs that have reviews and comments, wait for polling to fetch data, then GET /api/v1/repos/{owner}/{repo}/prs/{number}
+**Test:** Start mygitpanel server, configure a repository with active PRs that have reviews and comments, wait for polling to fetch data, then GET /api/v1/repos/{owner}/{repo}/prs/{number}
 
 **Expected:** 
 - Response includes `threads` array with inline code comments grouped by conversation

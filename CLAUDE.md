@@ -27,7 +27,7 @@ No Makefile or Dockerfile exists yet (Docker deployment is Phase 6).
 
 Dependencies flow inward — domain has zero external dependencies. The composition root (`cmd/mygitpanel/main.go`) wires everything together via constructor injection.
 
-```
+```text
 cmd/mygitpanel/main.go             ← Composition root
 internal/
   domain/model/                    ← Pure entities (PullRequest, Repository, Review, ReviewComment, enums)

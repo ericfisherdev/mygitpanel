@@ -55,8 +55,8 @@ type mockBotConfigStoreForService struct {
 	usernames []string
 }
 
-func (m *mockBotConfigStoreForService) Add(_ context.Context, _ model.BotConfig) error {
-	return nil
+func (m *mockBotConfigStoreForService) Add(_ context.Context, config model.BotConfig) (model.BotConfig, error) {
+	return config, nil
 }
 
 func (m *mockBotConfigStoreForService) Remove(_ context.Context, _ string) error {

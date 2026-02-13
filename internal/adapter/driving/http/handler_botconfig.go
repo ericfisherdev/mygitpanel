@@ -45,7 +45,8 @@ func (h *Handler) AddBot(w http.ResponseWriter, r *http.Request) {
 		AddedAt:  time.Now().UTC(),
 	}
 
-	if err := h.botConfigStore.Add(r.Context(), bot); err != nil {
+	saved, err := h.botConfigStore.Add(r.Context(), bot)
+	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			writeError(w, http.StatusConflict, "bot username already exists")
 			return
@@ -55,7 +56,7 @@ func (h *Handler) AddBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toBotConfigResponse(bot))
+	writeJSON(w, http.StatusCreated, toBotConfigResponse(saved))
 }
 
 // RemoveBot removes a bot username from the configuration.

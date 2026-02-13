@@ -8,7 +8,7 @@ import (
 
 // BotConfigStore defines the driven port for managing bot username configuration.
 type BotConfigStore interface {
-	Add(ctx context.Context, config model.BotConfig) error
+	Add(ctx context.Context, config model.BotConfig) (model.BotConfig, error)
 	Remove(ctx context.Context, username string) error
 	ListAll(ctx context.Context) ([]model.BotConfig, error)
 	// GetUsernames returns only the username strings, ordered alphabetically.

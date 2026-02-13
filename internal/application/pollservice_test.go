@@ -184,13 +184,6 @@ func (m *mockReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error {
 	return nil
 }
 
-// mockBotConfigStore returns empty config for poll service tests.
-type mockBotConfigStore struct{}
-
-func (m *mockBotConfigStore) Add(_ context.Context, _ model.BotConfig) error      { return nil }
-func (m *mockBotConfigStore) Remove(_ context.Context, _ string) error             { return nil }
-func (m *mockBotConfigStore) ListAll(_ context.Context) ([]model.BotConfig, error) { return nil, nil }
-func (m *mockBotConfigStore) GetUsernames(_ context.Context) ([]string, error)     { return nil, nil }
 
 // --- Helper to create a PollService and trigger a single repo poll ---
 
@@ -209,7 +202,7 @@ func pollRepoViaFull(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRSt
 		repos: []model.Repository{{FullName: repoFullName}},
 	}
 
-	svc := application.NewPollService(ghClient, prStore, repoStore, reviewStore, &mockBotConfigStore{}, username, teamSlugs, 1*time.Hour)
+	svc := application.NewPollService(ghClient, prStore, repoStore, reviewStore, username, teamSlugs, 1*time.Hour)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

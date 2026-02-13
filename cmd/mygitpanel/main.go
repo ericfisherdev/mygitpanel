@@ -73,7 +73,6 @@ func run() error {
 		prStore,
 		repoStore,
 		reviewStore,
-		botConfigStore,
 		cfg.GitHubUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
@@ -23,20 +24,29 @@ func NewBotConfigRepo(db *DB) *BotConfigRepo {
 
 // Add inserts a new bot configuration entry. Returns an error if the username
 // already exists (unique constraint violation).
-func (r *BotConfigRepo) Add(ctx context.Context, config model.BotConfig) error {
+func (r *BotConfigRepo) Add(ctx context.Context, config model.BotConfig) (model.BotConfig, error) {
 	const query = `INSERT INTO bot_config (username, added_at) VALUES (?, ?)`
 
 	addedAt := config.AddedAt
 	if addedAt.IsZero() {
-		addedAt = addedAt.UTC()
+		addedAt = time.Now().UTC()
 	}
 
-	_, err := r.db.Writer.ExecContext(ctx, query, config.Username, addedAt.UTC())
+	result, err := r.db.Writer.ExecContext(ctx, query, config.Username, addedAt.UTC())
 	if err != nil {
-		return fmt.Errorf("add bot config %q: %w", config.Username, err)
+		return model.BotConfig{}, fmt.Errorf("add bot config %q: %w", config.Username, err)
 	}
 
-	return nil
+	id, err := result.LastInsertId()
+	if err != nil {
+		return model.BotConfig{}, fmt.Errorf("get last insert id: %w", err)
+	}
+
+	return model.BotConfig{
+		ID:       id,
+		Username: config.Username,
+		AddedAt:  addedAt.UTC(),
+	}, nil
 }
 
 // Remove deletes a bot configuration entry by username. Returns an error if

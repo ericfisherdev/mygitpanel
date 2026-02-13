@@ -33,7 +33,7 @@ key-files:
     - internal/adapter/driving/http/handler_test.go
     - internal/application/reviewservice.go
     - internal/application/reviewservice_test.go
-    - cmd/reviewhub/main.go
+    - cmd/mygitpanel/main.go
 
 key-decisions:
   - "Review enrichment failure in GetPR is non-fatal -- returns basic PRResponse with empty enriched fields"
@@ -84,7 +84,7 @@ Each task was committed atomically:
 - `internal/adapter/driving/http/handler_test.go` - Updated all NewHandler calls; added 7 new tests for enrichment, error resilience, CFMT-05, and bot CRUD
 - `internal/application/reviewservice.go` - Exported IsNitpickComment for HTTP handler use
 - `internal/application/reviewservice_test.go` - Updated IsNitpickComment call to exported name
-- `cmd/reviewhub/main.go` - Added ReviewService creation; updated NewHandler call with botConfigStore and reviewSvc
+- `cmd/mygitpanel/main.go` - Added ReviewService creation; updated NewHandler call with botConfigStore and reviewSvc
 
 ## Decisions Made
 - Review enrichment failure in GetPR is non-fatal: logs error and returns basic PRResponse with empty enriched fields, maintaining API availability
@@ -110,7 +110,7 @@ Each task was committed atomically:
 **Impact on plan:** Minor test implementation fix. No scope creep.
 
 ## Issues Encountered
-- `cmd/reviewhub/main.go` gitignored by the `reviewhub` binary pattern in `.gitignore` -- used `git add -f` since the file is already tracked
+- `cmd/mygitpanel/main.go` gitignored by the `reviewhub` binary pattern in `.gitignore` -- used `git add -f` since the file is already tracked
 
 ## User Setup Required
 None - no external service configuration required.

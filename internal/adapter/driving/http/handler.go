@@ -135,16 +135,7 @@ func (h *Handler) GetPR(w http.ResponseWriter, r *http.Request) {
 // enrichPRResponse populates the enriched review fields on a PRResponse from
 // a PRReviewSummary. It is separated from GetPR for testability and clarity.
 func (h *Handler) enrichPRResponse(resp *PRResponse, summary *application.PRReviewSummary, headSHA string) {
-	// Get bot usernames for nitpick detection in reviews.
-	var botUsernames []string
-	if h.botConfigStore != nil {
-		bots, err := h.botConfigStore.GetUsernames(context.Background())
-		if err != nil {
-			h.logger.Error("failed to get bot usernames for enrichment", "error", err)
-		} else {
-			botUsernames = bots
-		}
-	}
+	botUsernames := summary.BotUsernames
 
 	resp.Reviews = make([]ReviewResponse, 0, len(summary.Reviews))
 	for _, rev := range summary.Reviews {

@@ -20,15 +20,14 @@ type refreshRequest struct {
 // PollService orchestrates periodic GitHub polling, PR discovery,
 // and persistence.
 type PollService struct {
-	ghClient       driven.GitHubClient
-	prStore        driven.PRStore
-	repoStore      driven.RepoStore
-	reviewStore    driven.ReviewStore
-	botConfigStore driven.BotConfigStore
-	username       string
-	teamSlugs      []string
-	interval       time.Duration
-	refreshCh      chan refreshRequest
+	ghClient    driven.GitHubClient
+	prStore     driven.PRStore
+	repoStore   driven.RepoStore
+	reviewStore driven.ReviewStore
+	username    string
+	teamSlugs   []string
+	interval    time.Duration
+	refreshCh   chan refreshRequest
 }
 
 // NewPollService creates a new PollService with all required dependencies.
@@ -37,21 +36,19 @@ func NewPollService(
 	prStore driven.PRStore,
 	repoStore driven.RepoStore,
 	reviewStore driven.ReviewStore,
-	botConfigStore driven.BotConfigStore,
 	username string,
 	teamSlugs []string,
 	interval time.Duration,
 ) *PollService {
 	return &PollService{
-		ghClient:       ghClient,
-		prStore:        prStore,
-		repoStore:      repoStore,
-		reviewStore:    reviewStore,
-		botConfigStore: botConfigStore,
-		username:       username,
-		teamSlugs:      teamSlugs,
-		interval:       interval,
-		refreshCh:      make(chan refreshRequest),
+		ghClient:    ghClient,
+		prStore:     prStore,
+		repoStore:   repoStore,
+		reviewStore: reviewStore,
+		username:    username,
+		teamSlugs:   teamSlugs,
+		interval:    interval,
+		refreshCh:   make(chan refreshRequest),
 	}
 }
 

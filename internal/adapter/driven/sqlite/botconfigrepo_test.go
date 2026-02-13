@@ -30,11 +30,13 @@ func TestBotConfigRepo_AddAndListAll(t *testing.T) {
 	repo := NewBotConfigRepo(db)
 	ctx := context.Background()
 
-	err := repo.Add(ctx, model.BotConfig{
+	saved, err := repo.Add(ctx, model.BotConfig{
 		Username: "dependabot[bot]",
 		AddedAt:  time.Now().UTC(),
 	})
 	require.NoError(t, err)
+	assert.NotZero(t, saved.ID)
+	assert.Equal(t, "dependabot[bot]", saved.Username)
 
 	configs, err := repo.ListAll(ctx)
 	require.NoError(t, err)
@@ -52,7 +54,7 @@ func TestBotConfigRepo_AddDuplicate(t *testing.T) {
 	repo := NewBotConfigRepo(db)
 	ctx := context.Background()
 
-	err := repo.Add(ctx, model.BotConfig{
+	_, err := repo.Add(ctx, model.BotConfig{
 		Username: "coderabbitai",
 		AddedAt:  time.Now().UTC(),
 	})

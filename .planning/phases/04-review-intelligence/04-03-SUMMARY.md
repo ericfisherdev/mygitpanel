@@ -29,7 +29,7 @@ key-files:
   modified:
     - internal/application/pollservice.go
     - internal/application/pollservice_test.go
-    - cmd/reviewhub/main.go
+    - cmd/mygitpanel/main.go
 
 key-decisions:
   - "Enrichment helpers are unexported package-level functions (not methods) for direct testability within same package"
@@ -78,7 +78,7 @@ Each task was committed atomically:
 - `internal/application/reviewservice_test.go` - 16 tests covering threading, suggestions, bot detection, nitpick detection, outdated detection, review status aggregation, full integration
 - `internal/application/pollservice.go` - Added ReviewStore/BotConfigStore deps, fetchReviewData method, review data fetch after PR upsert
 - `internal/application/pollservice_test.go` - Updated mocks for new constructor params, added 2 new tests for review data fetching and skip behavior
-- `cmd/reviewhub/main.go` - Wired ReviewRepo and BotConfigRepo into PollService constructor
+- `cmd/mygitpanel/main.go` - Wired ReviewRepo and BotConfigRepo into PollService constructor
 
 ## Decisions Made
 - Enrichment helpers are unexported package-level functions (not methods on ReviewService) for direct testability within the same package
