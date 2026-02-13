@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -43,7 +44,7 @@ func makePR(repoFullName string, number int, title string, status model.PRStatus
 		Author:         "testuser",
 		Status:         status,
 		IsDraft:        false,
-		URL:            "https://github.com/" + repoFullName + "/pull/" + string(rune('0'+number)),
+		URL:            fmt.Sprintf("https://github.com/%s/pull/%d", repoFullName, number),
 		Branch:         "feature-branch",
 		BaseBranch:     "main",
 		Labels:         []string{},

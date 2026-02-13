@@ -173,7 +173,7 @@ func setupMuxWithHealth(
 	repoStore *mockRepoStore,
 	checkStore driven.CheckStore,
 ) http.Handler {
-	healthSvc := application.NewHealthService(checkStore)
+	healthSvc := application.NewHealthService(checkStore, prStore)
 	h := httphandler.NewHandler(prStore, repoStore, nil, nil, healthSvc, nil, "testuser", slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
