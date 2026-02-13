@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 ## Current Position
 
 Phase: 4 of 6 (Review Intelligence)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-13 - Completed 04-02-PLAN.md
+Last activity: 2026-02-13 - Completed 04-03-PLAN.md
 
-Progress: [██████████░░░░░░░] ~59%
+Progress: [███████████░░░░░░] ~65%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 6min
-- Total execution time: 0.92 hours
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [██████████░░░░░░░] ~59%
 | 01-foundation | 3/3 | 21min | 7min |
 | 02-github-integration | 2/2 | 16min | 8min |
 | 03-core-api | 2/2 | 12min | 6min |
-| 04-review-intelligence | 2/4 | 9min | 4.5min |
+| 04-review-intelligence | 3/4 | 14min | 4.7min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (5min), 03-02 (7min), 04-01 (5min), 04-02 (4min)
+- Last 5 plans: 03-02 (7min), 04-01 (5min), 04-02 (4min), 04-03 (5min)
 - Trend: stable/improving
 
 *Updated after each plan completion*
@@ -82,6 +82,11 @@ Recent decisions affecting current work:
 - [04-02]: All GraphQL error paths return empty map, never propagate errors -- supplementary data source
 - [04-02]: NewClientWithHTTPClient gains token as 4th parameter; derives graphqlURL from baseURL for testability
 - [04-02]: PRID=0 convention: adapter sets PRID to 0, caller assigns actual DB ID before persisting
+- [04-03]: Enrichment helpers are unexported package-level functions (not methods) for direct testability within same package
+- [04-03]: fetchReviewData calls each fetch step independently -- partial failures logged but do not abort poll
+- [04-03]: Review data fetching gated on PR update detection (unchanged PRs skip review fetch for rate limits)
+- [04-03]: GetByNumber after Upsert to retrieve stored PR ID (avoids changing PRStore interface)
+- [04-03]: CodeRabbit awaiting detection compares review CommitID against headSHA per-review
 
 ### Pending Todos
 
@@ -94,6 +99,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-13T05:11:39Z
-Stopped at: Completed 04-02-PLAN.md
-Resume file: .planning/phases/04-review-intelligence/04-03-PLAN.md
+Last session: 2026-02-13T05:19:42Z
+Stopped at: Completed 04-03-PLAN.md
+Resume file: .planning/phases/04-review-intelligence/04-04-PLAN.md
