@@ -61,6 +61,8 @@ func run() error {
 	// 5. Wire adapters.
 	prStore := sqliteadapter.NewPRRepo(db)
 	repoStore := sqliteadapter.NewRepoRepo(db)
+	reviewStore := sqliteadapter.NewReviewRepo(db)
+	botConfigStore := sqliteadapter.NewBotConfigRepo(db)
 
 	// 6. Create GitHub client.
 	ghClient := githubadapter.NewClient(cfg.GitHubToken, cfg.GitHubUsername)
@@ -70,6 +72,8 @@ func run() error {
 		ghClient,
 		prStore,
 		repoStore,
+		reviewStore,
+		botConfigStore,
 		cfg.GitHubUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,

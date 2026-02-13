@@ -20,13 +20,15 @@ type refreshRequest struct {
 // PollService orchestrates periodic GitHub polling, PR discovery,
 // and persistence.
 type PollService struct {
-	ghClient  driven.GitHubClient
-	prStore   driven.PRStore
-	repoStore driven.RepoStore
-	username  string
-	teamSlugs []string
-	interval  time.Duration
-	refreshCh chan refreshRequest
+	ghClient       driven.GitHubClient
+	prStore        driven.PRStore
+	repoStore      driven.RepoStore
+	reviewStore    driven.ReviewStore
+	botConfigStore driven.BotConfigStore
+	username       string
+	teamSlugs      []string
+	interval       time.Duration
+	refreshCh      chan refreshRequest
 }
 
 // NewPollService creates a new PollService with all required dependencies.
@@ -34,18 +36,22 @@ func NewPollService(
 	ghClient driven.GitHubClient,
 	prStore driven.PRStore,
 	repoStore driven.RepoStore,
+	reviewStore driven.ReviewStore,
+	botConfigStore driven.BotConfigStore,
 	username string,
 	teamSlugs []string,
 	interval time.Duration,
 ) *PollService {
 	return &PollService{
-		ghClient:  ghClient,
-		prStore:   prStore,
-		repoStore: repoStore,
-		username:  username,
-		teamSlugs: teamSlugs,
-		interval:  interval,
-		refreshCh: make(chan refreshRequest),
+		ghClient:       ghClient,
+		prStore:        prStore,
+		repoStore:      repoStore,
+		reviewStore:    reviewStore,
+		botConfigStore: botConfigStore,
+		username:       username,
+		teamSlugs:      teamSlugs,
+		interval:       interval,
+		refreshCh:      make(chan refreshRequest),
 	}
 }
 
@@ -198,6 +204,18 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 
 		if err := s.prStore.Upsert(ctx, pr); err != nil {
 			slog.Error("upsert failed", "repo", repoFullName, "pr", pr.Number, "error", err)
+			continue
+		}
+
+		// Fetch review data for changed PRs. We need the stored PR's ID
+		// (auto-increment) for foreign key references in review tables.
+		storedPR, err := s.prStore.GetByNumber(ctx, pr.RepoFullName, pr.Number)
+		if err != nil || storedPR == nil {
+			slog.Error("failed to retrieve PR for review fetch", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+		} else {
+			if err := s.fetchReviewData(ctx, *storedPR); err != nil {
+				slog.Error("review data fetch failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+			}
 		}
 	}
 
@@ -242,6 +260,68 @@ func IsReviewRequestedFrom(pr model.PullRequest, username string, teamSlugs []st
 	}
 
 	return false
+}
+
+// fetchReviewData fetches reviews, review comments, issue comments, and thread
+// resolution for a PR and stores them via ReviewStore. Each fetch step is
+// independent -- partial failures are logged but do not abort the overall operation.
+func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest) error {
+	reviews, err := s.ghClient.FetchReviews(ctx, pr.RepoFullName, pr.Number)
+	if err != nil {
+		slog.Error("fetch reviews failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+	} else {
+		for _, review := range reviews {
+			review.PRID = pr.ID
+			if err := s.reviewStore.UpsertReview(ctx, review); err != nil {
+				slog.Error("upsert review failed", "repo", pr.RepoFullName, "pr", pr.Number, "review", review.ID, "error", err)
+			}
+		}
+	}
+
+	comments, err := s.ghClient.FetchReviewComments(ctx, pr.RepoFullName, pr.Number)
+	if err != nil {
+		slog.Error("fetch review comments failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+	} else {
+		for _, comment := range comments {
+			comment.PRID = pr.ID
+			if err := s.reviewStore.UpsertReviewComment(ctx, comment); err != nil {
+				slog.Error("upsert review comment failed", "repo", pr.RepoFullName, "pr", pr.Number, "comment", comment.ID, "error", err)
+			}
+		}
+	}
+
+	issueComments, err := s.ghClient.FetchIssueComments(ctx, pr.RepoFullName, pr.Number)
+	if err != nil {
+		slog.Error("fetch issue comments failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+	} else {
+		for _, ic := range issueComments {
+			ic.PRID = pr.ID
+			if err := s.reviewStore.UpsertIssueComment(ctx, ic); err != nil {
+				slog.Error("upsert issue comment failed", "repo", pr.RepoFullName, "pr", pr.Number, "comment", ic.ID, "error", err)
+			}
+		}
+	}
+
+	resolutionMap, err := s.ghClient.FetchThreadResolution(ctx, pr.RepoFullName, pr.Number)
+	if err != nil {
+		slog.Error("fetch thread resolution failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+	} else {
+		for commentID, isResolved := range resolutionMap {
+			if err := s.reviewStore.UpdateCommentResolution(ctx, commentID, isResolved); err != nil {
+				slog.Error("update comment resolution failed", "repo", pr.RepoFullName, "pr", pr.Number, "comment", commentID, "error", err)
+			}
+		}
+	}
+
+	slog.Debug("review data fetched",
+		"repo", pr.RepoFullName,
+		"pr", pr.Number,
+		"reviews", len(reviews),
+		"review_comments", len(comments),
+		"issue_comments", len(issueComments),
+	)
+
+	return nil
 }
 
 // handleRefresh dispatches a manual refresh request.
