@@ -36,7 +36,7 @@ Progress: [████████████████░] ~93%
 
 **Recent Trend:**
 
-- Last 5 plans: 04-04 (5min), 05-01 (5min), 05-02 (6min), 05-03 (3min)
+- Last 4 plans: 04-04 (5min), 05-01 (5min), 05-02 (6min), 05-03 (3min)
 - Trend: stable to improving
 
 *Updated after each plan completion*

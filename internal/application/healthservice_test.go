@@ -210,17 +210,41 @@ func (s *testCheckStore) GetCheckRunsByPR(_ context.Context, _ int64) ([]model.C
 	return s.runs, nil
 }
 
+// testPRStore returns a PR with a pre-set CIStatus for GetPRHealthSummary tests.
+type testPRStore struct {
+	pr *model.PullRequest
+}
+
+func (s *testPRStore) Upsert(_ context.Context, _ model.PullRequest) error { return nil }
+func (s *testPRStore) GetByRepository(_ context.Context, _ string) ([]model.PullRequest, error) {
+	return nil, nil
+}
+func (s *testPRStore) GetByStatus(_ context.Context, _ model.PRStatus) ([]model.PullRequest, error) {
+	return nil, nil
+}
+func (s *testPRStore) GetByNumber(_ context.Context, _ string, _ int) (*model.PullRequest, error) {
+	return s.pr, nil
+}
+func (s *testPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) { return nil, nil }
+func (s *testPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
+func (s *testPRStore) Delete(_ context.Context, _ string, _ int) error { return nil }
+
 func TestGetPRHealthSummary(t *testing.T) {
-	t.Run("returns check runs and computed CI status", func(t *testing.T) {
-		store := &testCheckStore{
+	t.Run("returns check runs and stored CI status from PR", func(t *testing.T) {
+		checkStore := &testCheckStore{
 			runs: []model.CheckRun{
 				{Name: "build", Status: "completed", Conclusion: "success"},
 				{Name: "test", Status: "completed", Conclusion: "success"},
 			},
 		}
+		prStore := &testPRStore{pr: &model.PullRequest{
+			ID: 42, RepoFullName: "org/repo", Number: 1, CIStatus: model.CIStatusPassing,
+		}}
 
-		svc := NewHealthService(store)
-		summary, err := svc.GetPRHealthSummary(context.Background(), 42)
+		svc := NewHealthService(checkStore, prStore)
+		summary, err := svc.GetPRHealthSummary(context.Background(), 42, "org/repo", 1)
 
 		require.NoError(t, err)
 		require.NotNil(t, summary)
@@ -228,11 +252,14 @@ func TestGetPRHealthSummary(t *testing.T) {
 		assert.Equal(t, model.CIStatusPassing, summary.CIStatus)
 	})
 
-	t.Run("returns unknown when no check runs stored", func(t *testing.T) {
-		store := &testCheckStore{runs: nil}
+	t.Run("returns unknown when PR has no stored CI status", func(t *testing.T) {
+		checkStore := &testCheckStore{runs: nil}
+		prStore := &testPRStore{pr: &model.PullRequest{
+			ID: 99, RepoFullName: "org/repo", Number: 2, CIStatus: model.CIStatusUnknown,
+		}}
 
-		svc := NewHealthService(store)
-		summary, err := svc.GetPRHealthSummary(context.Background(), 99)
+		svc := NewHealthService(checkStore, prStore)
+		summary, err := svc.GetPRHealthSummary(context.Background(), 99, "org/repo", 2)
 
 		require.NoError(t, err)
 		require.NotNil(t, summary)
@@ -240,16 +267,20 @@ func TestGetPRHealthSummary(t *testing.T) {
 		assert.Equal(t, model.CIStatusUnknown, summary.CIStatus)
 	})
 
-	t.Run("returns failing when any check run failed", func(t *testing.T) {
-		store := &testCheckStore{
+	t.Run("returns stored failing status even with passing check runs", func(t *testing.T) {
+		// PR's stored CIStatus was computed during poll with both Checks API and
+		// Status API — the Status API reported failure even though check runs passed.
+		checkStore := &testCheckStore{
 			runs: []model.CheckRun{
 				{Name: "build", Status: "completed", Conclusion: "success"},
-				{Name: "test", Status: "completed", Conclusion: "failure"},
 			},
 		}
+		prStore := &testPRStore{pr: &model.PullRequest{
+			ID: 42, RepoFullName: "org/repo", Number: 1, CIStatus: model.CIStatusFailing,
+		}}
 
-		svc := NewHealthService(store)
-		summary, err := svc.GetPRHealthSummary(context.Background(), 42)
+		svc := NewHealthService(checkStore, prStore)
+		summary, err := svc.GetPRHealthSummary(context.Background(), 42, "org/repo", 1)
 
 		require.NoError(t, err)
 		assert.Equal(t, model.CIStatusFailing, summary.CIStatus)

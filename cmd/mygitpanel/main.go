@@ -86,7 +86,7 @@ func run() error {
 	reviewSvc := application.NewReviewService(reviewStore, botConfigStore)
 
 	// 7c. Create health service.
-	healthSvc := application.NewHealthService(checkStore)
+	healthSvc := application.NewHealthService(checkStore, prStore)
 
 	// 7.5. Create HTTP handler and server.
 	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())

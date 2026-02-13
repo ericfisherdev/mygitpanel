@@ -30,6 +30,12 @@ type PollService struct {
 	teamSlugs   []string
 	interval    time.Duration
 	refreshCh   chan refreshRequest
+
+	// branchProtectionCache caches required status check contexts per
+	// "repo/branch" key during a poll cycle. Branch protection rarely changes,
+	// so multiple PRs targeting the same base branch reuse a single API call.
+	// Cleared at the start of each poll cycle.
+	branchProtectionCache map[string][]string
 }
 
 // NewPollService creates a new PollService with all required dependencies.
@@ -136,6 +142,9 @@ func (s *PollService) RefreshPR(ctx context.Context, repoFullName string, prNumb
 // pollAll polls all watched repositories for open PRs.
 func (s *PollService) pollAll(ctx context.Context) error {
 	start := time.Now()
+
+	// Reset per-cycle branch protection cache.
+	s.branchProtectionCache = make(map[string][]string)
 
 	repos, err := s.repoStore.ListAll(ctx)
 	if err != nil {
@@ -355,12 +364,17 @@ func (s *PollService) fetchHealthData(ctx context.Context, pr model.PullRequest)
 		// Continue with nil combined status.
 	}
 
-	// Step 4: Fetch required status checks from branch protection.
-	var requiredContexts []string
-	requiredContexts, err = s.ghClient.FetchRequiredStatusChecks(ctx, pr.RepoFullName, pr.BaseBranch)
-	if err != nil {
-		slog.Error("fetch required status checks failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
-		// Continue with nil requiredContexts -- all checks default to not required.
+	// Step 4: Fetch required status checks from branch protection (cached per branch per cycle).
+	cacheKey := pr.RepoFullName + "/" + pr.BaseBranch
+	requiredContexts, cached := s.branchProtectionCache[cacheKey]
+	if !cached {
+		requiredContexts, err = s.ghClient.FetchRequiredStatusChecks(ctx, pr.RepoFullName, pr.BaseBranch)
+		if err != nil {
+			slog.Error("fetch required status checks failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+			// Continue with nil requiredContexts -- all checks default to not required.
+		}
+		// Cache even nil results to avoid repeated 404/403 calls for the same branch.
+		s.branchProtectionCache[cacheKey] = requiredContexts
 	}
 
 	// Step 5: Mark required checks.

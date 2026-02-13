@@ -18,24 +18,34 @@ type PRHealthSummary struct {
 // data into structured output for the HTTP API. It depends only on port interfaces.
 type HealthService struct {
 	checkStore driven.CheckStore
+	prStore    driven.PRStore
 }
 
 // NewHealthService creates a new HealthService with the required dependencies.
-func NewHealthService(checkStore driven.CheckStore) *HealthService {
+func NewHealthService(checkStore driven.CheckStore, prStore driven.PRStore) *HealthService {
 	return &HealthService{
 		checkStore: checkStore,
+		prStore:    prStore,
 	}
 }
 
 // GetPRHealthSummary assembles the health view for a PR by loading stored
-// check runs and computing the combined CI status.
-func (s *HealthService) GetPRHealthSummary(ctx context.Context, prID int64) (*PRHealthSummary, error) {
+// check runs and the PR's persisted CIStatus. The CIStatus was computed during
+// the poll cycle with both Checks API and Status API data, so we use the stored
+// value rather than recomputing from check runs alone.
+func (s *HealthService) GetPRHealthSummary(ctx context.Context, prID int64, repoFullName string, number int) (*PRHealthSummary, error) {
 	checkRuns, err := s.checkStore.GetCheckRunsByPR(ctx, prID)
 	if err != nil {
 		return nil, err
 	}
 
-	ciStatus := computeCombinedCIStatus(checkRuns, nil)
+	// Use the CIStatus persisted on the PR, which was computed during poll
+	// with both Checks API and Status API data.
+	ciStatus := model.CIStatusUnknown
+	pr, err := s.prStore.GetByNumber(ctx, repoFullName, number)
+	if err == nil && pr != nil {
+		ciStatus = pr.CIStatus
+	}
 
 	return &PRHealthSummary{
 		CheckRuns: checkRuns,

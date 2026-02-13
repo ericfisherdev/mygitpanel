@@ -135,7 +135,7 @@ func (h *Handler) GetPR(w http.ResponseWriter, r *http.Request) {
 
 	// Enrich with health data if HealthService is available.
 	if h.healthSvc != nil {
-		healthSummary, err := h.healthSvc.GetPRHealthSummary(r.Context(), pr.ID)
+		healthSummary, err := h.healthSvc.GetPRHealthSummary(r.Context(), pr.ID, pr.RepoFullName, pr.Number)
 		if err != nil {
 			h.logger.Error("failed to get health summary", "error", err)
 			// Fall through -- health enrichment failure is not fatal.
