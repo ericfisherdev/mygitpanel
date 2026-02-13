@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Core value:** Review comments formatted with enough code context that an AI agent can understand and fix the code
-**Current focus:** Phase 4 - Review Intelligence
+**Current focus:** Phase 4 complete - Review Intelligence
 
 ## Current Position
 
 Phase: 4 of 6 (Review Intelligence)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-02-13 - Completed 04-03-PLAN.md
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-02-13 - Completed 04-04-PLAN.md
 
-Progress: [███████████░░░░░░] ~65%
+Progress: [█████████████░░░░] ~76%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 6min
-- Total execution time: 1.0 hours
+- Total execution time: 1.1 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [███████████░░░░░░] ~65%
 | 01-foundation | 3/3 | 21min | 7min |
 | 02-github-integration | 2/2 | 16min | 8min |
 | 03-core-api | 2/2 | 12min | 6min |
-| 04-review-intelligence | 3/4 | 14min | 4.7min |
+| 04-review-intelligence | 4/4 | 19min | 4.8min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (7min), 04-01 (5min), 04-02 (4min), 04-03 (5min)
+- Last 5 plans: 04-01 (5min), 04-02 (4min), 04-03 (5min), 04-04 (5min)
 - Trend: stable/improving
 
 *Updated after each plan completion*
@@ -87,6 +87,10 @@ Recent decisions affecting current work:
 - [04-03]: Review data fetching gated on PR update detection (unchanged PRs skip review fetch for rate limits)
 - [04-03]: GetByNumber after Upsert to retrieve stored PR ID (avoids changing PRStore interface)
 - [04-03]: CodeRabbit awaiting detection compares review CommitID against headSHA per-review
+- [04-04]: Review enrichment failure in GetPR is non-fatal -- returns basic PRResponse with empty enriched fields
+- [04-04]: List endpoints skip enrichment by design -- lightweight responses without ReviewService overhead
+- [04-04]: IsNitpickComment exported from application package for HTTP handler nitpick detection
+- [04-04]: Bot config endpoints reuse UNIQUE constraint error detection pattern from repo endpoints
 
 ### Pending Todos
 
@@ -99,6 +103,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-13T05:19:42Z
-Stopped at: Completed 04-03-PLAN.md
-Resume file: .planning/phases/04-review-intelligence/04-04-PLAN.md
+Last session: 2026-02-13T05:27:23Z
+Stopped at: Completed 04-04-PLAN.md (Phase 4 complete)
+Resume file: Phase 5 planning
