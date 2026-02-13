@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -70,7 +71,7 @@ func (r *RepoRepo) GetByFullName(ctx context.Context, fullName string) (*model.R
 	const query = `SELECT id, full_name, owner, name, added_at FROM repositories WHERE full_name = ?`
 
 	repo, err := scanRepository(r.db.Reader.QueryRowContext(ctx, query, fullName))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

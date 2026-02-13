@@ -1,3 +1,4 @@
+// Package httphandler implements the HTTP REST API driving adapter.
 package httphandler
 
 import (
@@ -231,9 +232,9 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fire-and-forget async refresh with background context since the HTTP
-	// request context will be cancelled after the response is sent.
+	// request context will be canceled after the response is sent.
 	if h.pollSvc != nil {
-		go func() {
+		go func() { //nolint:contextcheck // intentional background context for fire-and-forget
 			if err := h.pollSvc.RefreshRepo(context.Background(), req.FullName); err != nil {
 				h.logger.Error("async repo refresh failed", "repo", req.FullName, "error", err)
 			}

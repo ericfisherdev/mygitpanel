@@ -1,0 +1,135 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - contextcheck
+    - dupl
+    - errname
+    - errorlint
+    - exhaustive
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - mnd
+    - goprintffuncname
+    - gosec
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - sqlclosecheck
+    - tparallel
+    - unconvert
+    - unparam
+    - whitespace
+
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (io.Closer).Close
+    gocyclo:
+      min-complexity: 20
+    gocognit:
+      min-complexity: 30
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+      ignore-string-values:
+        - "true"
+        - "false"
+    misspell:
+      locale: US
+    nestif:
+      min-complexity: 4
+    mnd:
+      ignored-numbers:
+        - '0'
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '24'
+        - '10'
+        - '30'
+        - '100'
+        - '120'
+      ignored-functions:
+        - 'context.WithTimeout'
+        - 'context.WithDeadline'
+        - 'strings.SplitN'
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          arguments: [disableStutteringCheck]
+        - name: increment-decrement
+        - name: var-naming
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - errcheck
+          - gosec
+          - mnd
+          - gocognit
+          - unparam
+      - path: cmd/
+        linters:
+          - gochecknoinits
+      # Adapter implementations follow similar patterns by design
+      - path: internal/adapter/driven/
+        text: "lines are duplicate of"
+        linters:
+          - dupl
+      # HTTP handlers follow similar request/response patterns
+      - path: internal/adapter/driving/http/
+        text: "lines are duplicate of"
+        linters:
+          - dupl
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true

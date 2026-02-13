@@ -1,3 +1,4 @@
+// Package github implements the GitHubClient port using the go-github library.
 package github
 
 import (

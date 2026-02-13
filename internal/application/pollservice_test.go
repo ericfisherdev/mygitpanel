@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,10 +16,10 @@ import (
 // --- Mock implementations ---
 
 type mockGitHubClient struct {
-	fetchPRs             func(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
-	fetchReviews         func(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error)
-	fetchReviewComments  func(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error)
-	fetchIssueComments   func(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error)
+	fetchPRs              func(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
+	fetchReviews          func(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error)
+	fetchReviewComments   func(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error)
+	fetchIssueComments    func(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error)
 	fetchThreadResolution func(ctx context.Context, repoFullName string, prNumber int) (map[int64]bool, error)
 }
 
@@ -64,17 +65,22 @@ type deleteCall struct {
 }
 
 type mockPRStore struct {
+	mu      sync.Mutex
 	upserts []upsertCall
 	deletes []deleteCall
 	stored  []model.PullRequest
 }
 
 func (m *mockPRStore) Upsert(_ context.Context, pr model.PullRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.upserts = append(m.upserts, upsertCall{PR: pr})
 	return nil
 }
 
 func (m *mockPRStore) GetByRepository(_ context.Context, _ string) ([]model.PullRequest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.stored, nil
 }
 
@@ -83,6 +89,8 @@ func (m *mockPRStore) GetByStatus(_ context.Context, _ model.PRStatus) ([]model.
 }
 
 func (m *mockPRStore) GetByNumber(_ context.Context, repoFullName string, number int) (*model.PullRequest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, pr := range m.stored {
 		if pr.RepoFullName == repoFullName && pr.Number == number {
 			return &pr, nil
@@ -110,8 +118,17 @@ func (m *mockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest,
 }
 
 func (m *mockPRStore) Delete(_ context.Context, repoFullName string, number int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.deletes = append(m.deletes, deleteCall{RepoFullName: repoFullName, Number: number})
 	return nil
+}
+
+func (m *mockPRStore) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.upserts = nil
+	m.deletes = nil
 }
 
 type mockRepoStore struct {
@@ -136,6 +153,7 @@ func (m *mockRepoStore) ListAll(_ context.Context) ([]model.Repository, error) {
 
 // mockReviewStore records upsert/update calls for verification.
 type mockReviewStore struct {
+	mu                     sync.Mutex
 	upsertedReviews        []model.Review
 	upsertedReviewComments []model.ReviewComment
 	upsertedIssueComments  []model.IssueComment
@@ -149,16 +167,22 @@ func newMockReviewStore() *mockReviewStore {
 }
 
 func (m *mockReviewStore) UpsertReview(_ context.Context, review model.Review) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.upsertedReviews = append(m.upsertedReviews, review)
 	return nil
 }
 
 func (m *mockReviewStore) UpsertReviewComment(_ context.Context, comment model.ReviewComment) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.upsertedReviewComments = append(m.upsertedReviewComments, comment)
 	return nil
 }
 
 func (m *mockReviewStore) UpsertIssueComment(_ context.Context, comment model.IssueComment) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.upsertedIssueComments = append(m.upsertedIssueComments, comment)
 	return nil
 }
@@ -176,6 +200,8 @@ func (m *mockReviewStore) GetIssueCommentsByPR(_ context.Context, _ int64) ([]mo
 }
 
 func (m *mockReviewStore) UpdateCommentResolution(_ context.Context, commentID int64, isResolved bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.updatedResolutions[commentID] = isResolved
 	return nil
 }
@@ -184,6 +210,14 @@ func (m *mockReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error {
 	return nil
 }
 
+func (m *mockReviewStore) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.upsertedReviews = nil
+	m.upsertedReviewComments = nil
+	m.upsertedIssueComments = nil
+	m.updatedResolutions = make(map[int64]bool)
+}
 
 // --- Helper to create a PollService and trigger a single repo poll ---
 
@@ -219,12 +253,8 @@ func pollRepoViaFull(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRSt
 	time.Sleep(50 * time.Millisecond)
 
 	// Clear any upserts/deletes from the initial poll so we test fresh.
-	prStore.upserts = nil
-	prStore.deletes = nil
-	reviewStore.upsertedReviews = nil
-	reviewStore.upsertedReviewComments = nil
-	reviewStore.upsertedIssueComments = nil
-	reviewStore.updatedResolutions = make(map[int64]bool)
+	prStore.reset()
+	reviewStore.reset()
 
 	err := svc.RefreshRepo(ctx, repoFullName)
 	require.NoError(t, err)

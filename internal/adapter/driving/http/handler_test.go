@@ -95,7 +95,7 @@ type mockReviewStore struct {
 	issueComments  []model.IssueComment
 }
 
-func (m *mockReviewStore) UpsertReview(_ context.Context, _ model.Review) error    { return nil }
+func (m *mockReviewStore) UpsertReview(_ context.Context, _ model.Review) error { return nil }
 func (m *mockReviewStore) UpsertReviewComment(_ context.Context, _ model.ReviewComment) error {
 	return nil
 }
@@ -159,10 +159,6 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
 	err := json.NewDecoder(rec.Body).Decode(v)
 	require.NoError(t, err)
-}
-
-func int64Ptr(v int64) *int64 {
-	return &v
 }
 
 // --- Tests ---
