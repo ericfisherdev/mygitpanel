@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Core value:** Review comments formatted with enough code context that an AI agent can understand and fix the code
-**Current focus:** Phase 5 in progress - PR Health Signals
+**Current focus:** Phase 5 complete - PR Health Signals; Phase 6 next
 
 ## Current Position
 
 Phase: 5 of 6 (PR Health Signals)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-13 - Completed 05-02-PLAN.md
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-13 - Completed 05-03-PLAN.md
 
-Progress: [███████████████░░] ~87%
+Progress: [████████████████░] ~93%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 13
+- Total plans completed: 14
 - Average duration: 6min
-- Total execution time: 1.3 hours
+- Total execution time: 1.35 hours
 
 **By Phase:**
 
@@ -32,12 +32,12 @@ Progress: [███████████████░░] ~87%
 | 02-github-integration | 2/2 | 16min | 8min |
 | 03-core-api | 2/2 | 12min | 6min |
 | 04-review-intelligence | 4/4 | 19min | 4.8min |
-| 05-pr-health-signals | 2/3 | 11min | 5.5min |
+| 05-pr-health-signals | 3/3 | 14min | 4.7min |
 
 **Recent Trend:**
 
-- Last 5 plans: 04-03 (5min), 04-04 (5min), 05-01 (5min), 05-02 (6min)
-- Trend: stable
+- Last 5 plans: 04-04 (5min), 05-01 (5min), 05-02 (6min), 05-03 (3min)
+- Trend: stable to improving
 
 *Updated after each plan completion*
 
@@ -101,6 +101,9 @@ Recent decisions affecting current work:
 - [05-02]: mapCombinedStatus returns nil when zero statuses and empty state (no CI configured)
 - [05-02]: fetchHealthData returns early if FetchCheckRuns fails; continues independently on other failures
 - [05-02]: Health data upserts run after review data upserts in poll cycle
+- [05-03]: Health enrichment failure in GetPR is non-fatal -- same pattern as review enrichment
+- [05-03]: CIStatus on detail endpoint overwritten by HealthService computation (more accurate than stored value)
+- [05-03]: List endpoints show health fields from PR model only -- no HealthService call for lightweight responses
 
 ### Pending Todos
 
@@ -113,6 +116,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-13T22:27:50Z
-Stopped at: Completed 05-02-PLAN.md (Plan 2 of 3 in Phase 5)
-Resume file: .planning/phases/05-pr-health-signals/05-03-PLAN.md
+Last session: 2026-02-13T22:33:45Z
+Stopped at: Completed 05-03-PLAN.md (Phase 5 complete)
+Resume file: .planning/phases/06-docker-deployment/ (Phase 6 planning)
