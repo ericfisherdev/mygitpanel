@@ -80,8 +80,11 @@ func run() error {
 	)
 	go pollSvc.Start(ctx)
 
+	// 7b. Create review service.
+	reviewSvc := application.NewReviewService(reviewStore, botConfigStore)
+
 	// 7.5. Create HTTP handler and server.
-	h := httphandler.NewHandler(prStore, repoStore, pollSvc, cfg.GitHubUsername, slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, pollSvc, cfg.GitHubUsername, slog.Default())
 	mux := httphandler.NewServeMux(h, slog.Default())
 
 	srv := &http.Server{
