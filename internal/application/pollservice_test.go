@@ -16,11 +16,15 @@ import (
 // --- Mock implementations ---
 
 type mockGitHubClient struct {
-	fetchPRs              func(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
-	fetchReviews          func(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error)
-	fetchReviewComments   func(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error)
-	fetchIssueComments    func(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error)
-	fetchThreadResolution func(ctx context.Context, repoFullName string, prNumber int) (map[int64]bool, error)
+	fetchPRs                  func(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
+	fetchReviews              func(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error)
+	fetchReviewComments       func(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error)
+	fetchIssueComments        func(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error)
+	fetchThreadResolution     func(ctx context.Context, repoFullName string, prNumber int) (map[int64]bool, error)
+	fetchCheckRuns            func(ctx context.Context, repoFullName string, ref string) ([]model.CheckRun, error)
+	fetchCombinedStatus       func(ctx context.Context, repoFullName string, ref string) (*model.CombinedStatus, error)
+	fetchPRDetail             func(ctx context.Context, repoFullName string, prNumber int) (*model.PRDetail, error)
+	fetchRequiredStatusChecks func(ctx context.Context, repoFullName string, branch string) ([]string, error)
 }
 
 func (m *mockGitHubClient) FetchPullRequests(ctx context.Context, repoFullName string) ([]model.PullRequest, error) {
@@ -55,19 +59,31 @@ func (m *mockGitHubClient) FetchThreadResolution(ctx context.Context, repoFullNa
 	return nil, nil
 }
 
-func (m *mockGitHubClient) FetchCheckRuns(_ context.Context, _ string, _ string) ([]model.CheckRun, error) {
+func (m *mockGitHubClient) FetchCheckRuns(ctx context.Context, repoFullName string, ref string) ([]model.CheckRun, error) {
+	if m.fetchCheckRuns != nil {
+		return m.fetchCheckRuns(ctx, repoFullName, ref)
+	}
 	return nil, nil
 }
 
-func (m *mockGitHubClient) FetchCombinedStatus(_ context.Context, _ string, _ string) (*model.CombinedStatus, error) {
+func (m *mockGitHubClient) FetchCombinedStatus(ctx context.Context, repoFullName string, ref string) (*model.CombinedStatus, error) {
+	if m.fetchCombinedStatus != nil {
+		return m.fetchCombinedStatus(ctx, repoFullName, ref)
+	}
 	return nil, nil
 }
 
-func (m *mockGitHubClient) FetchPRDetail(_ context.Context, _ string, _ int) (*model.PRDetail, error) {
+func (m *mockGitHubClient) FetchPRDetail(ctx context.Context, repoFullName string, prNumber int) (*model.PRDetail, error) {
+	if m.fetchPRDetail != nil {
+		return m.fetchPRDetail(ctx, repoFullName, prNumber)
+	}
 	return nil, nil
 }
 
-func (m *mockGitHubClient) FetchRequiredStatusChecks(_ context.Context, _ string, _ string) ([]string, error) {
+func (m *mockGitHubClient) FetchRequiredStatusChecks(ctx context.Context, repoFullName string, branch string) ([]string, error) {
+	if m.fetchRequiredStatusChecks != nil {
+		return m.fetchRequiredStatusChecks(ctx, repoFullName, branch)
+	}
 	return nil, nil
 }
 
@@ -235,24 +251,55 @@ func (m *mockReviewStore) reset() {
 	m.updatedResolutions = make(map[int64]bool)
 }
 
+// mockCheckStore records replace/get calls for verification.
+type mockCheckStore struct {
+	mu       sync.Mutex
+	replaced map[int64][]model.CheckRun
+}
+
+func newMockCheckStore() *mockCheckStore {
+	return &mockCheckStore{
+		replaced: make(map[int64][]model.CheckRun),
+	}
+}
+
+func (m *mockCheckStore) ReplaceCheckRunsForPR(_ context.Context, prID int64, runs []model.CheckRun) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.replaced[prID] = runs
+	return nil
+}
+
+func (m *mockCheckStore) GetCheckRunsByPR(_ context.Context, prID int64) ([]model.CheckRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.replaced[prID], nil
+}
+
+func (m *mockCheckStore) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.replaced = make(map[int64][]model.CheckRun)
+}
+
 // --- Helper to create a PollService and trigger a single repo poll ---
 
 // pollRepoVia creates a PollService, starts it, and triggers a RefreshRepo
 // to invoke pollRepo for the given repo. It returns after the refresh completes.
 func pollRepoVia(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRStore, username string, teamSlugs []string, repoFullName string) {
 	t.Helper()
-	pollRepoViaFull(t, ghClient, prStore, newMockReviewStore(), username, teamSlugs, repoFullName)
+	pollRepoViaFull(t, ghClient, prStore, newMockReviewStore(), newMockCheckStore(), username, teamSlugs, repoFullName)
 }
 
-// pollRepoViaFull is like pollRepoVia but accepts a custom review store for verification.
-func pollRepoViaFull(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRStore, reviewStore *mockReviewStore, username string, teamSlugs []string, repoFullName string) {
+// pollRepoViaFull is like pollRepoVia but accepts custom review and check stores for verification.
+func pollRepoViaFull(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRStore, reviewStore *mockReviewStore, checkStore *mockCheckStore, username string, teamSlugs []string, repoFullName string) {
 	t.Helper()
 
 	repoStore := &mockRepoStore{
 		repos: []model.Repository{{FullName: repoFullName}},
 	}
 
-	svc := application.NewPollService(ghClient, prStore, repoStore, reviewStore, username, teamSlugs, 1*time.Hour)
+	svc := application.NewPollService(ghClient, prStore, repoStore, reviewStore, checkStore, username, teamSlugs, 1*time.Hour)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -271,6 +318,7 @@ func pollRepoViaFull(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRSt
 	// Clear any upserts/deletes from the initial poll so we test fresh.
 	prStore.reset()
 	reviewStore.reset()
+	checkStore.reset()
 
 	err := svc.RefreshRepo(ctx, repoFullName)
 	require.NoError(t, err)
@@ -297,7 +345,8 @@ func TestPollRepo_AuthoredPRs(t *testing.T) {
 	prStore := &mockPRStore{}
 	pollRepoVia(t, ghClient, prStore, "testuser", nil, "org/repo")
 
-	assert.Len(t, prStore.upserts, 1)
+	// First upsert is from poll loop; additional upserts from health data fetching.
+	require.GreaterOrEqual(t, len(prStore.upserts), 1)
 	assert.Equal(t, 1, prStore.upserts[0].PR.Number)
 	assert.False(t, prStore.upserts[0].PR.NeedsReview, "authored PR should not need review")
 }
@@ -330,7 +379,8 @@ func TestPollRepo_ReviewRequestedPRs(t *testing.T) {
 	prStore := &mockPRStore{}
 	pollRepoVia(t, ghClient, prStore, "testuser", nil, "org/repo")
 
-	assert.Len(t, prStore.upserts, 1)
+	// First upsert is from poll loop; additional upserts from health data fetching.
+	require.GreaterOrEqual(t, len(prStore.upserts), 1)
 	assert.Equal(t, 10, prStore.upserts[0].PR.Number)
 	assert.True(t, prStore.upserts[0].PR.NeedsReview, "review-requested PR should need review")
 }
@@ -356,7 +406,8 @@ func TestPollRepo_TeamReviewRequest(t *testing.T) {
 	prStore := &mockPRStore{}
 	pollRepoVia(t, ghClient, prStore, "testuser", []string{"my-team"}, "org/repo")
 
-	assert.Len(t, prStore.upserts, 1)
+	// First upsert is from poll loop; additional upserts from health data fetching.
+	require.GreaterOrEqual(t, len(prStore.upserts), 1)
 	assert.Equal(t, 20, prStore.upserts[0].PR.Number)
 }
 
@@ -381,8 +432,13 @@ func TestPollRepo_Deduplication(t *testing.T) {
 	prStore := &mockPRStore{}
 	pollRepoVia(t, ghClient, prStore, "testuser", nil, "org/repo")
 
-	// PR is both authored and review-requested, but only one upsert.
-	assert.Len(t, prStore.upserts, 1)
+	// PR is both authored and review-requested, but only one poll-loop upsert
+	// (plus health data upserts).
+	require.GreaterOrEqual(t, len(prStore.upserts), 1)
+	// All upserts should be for the same PR number.
+	for _, u := range prStore.upserts {
+		assert.Equal(t, 30, u.PR.Number)
+	}
 }
 
 func TestPollRepo_SkipUnchanged(t *testing.T) {
@@ -441,7 +497,8 @@ func TestPollRepo_DraftFlagging(t *testing.T) {
 	prStore := &mockPRStore{}
 	pollRepoVia(t, ghClient, prStore, "testuser", nil, "org/repo")
 
-	require.Len(t, prStore.upserts, 1)
+	// First upsert is from poll loop; additional upserts from health data fetching.
+	require.GreaterOrEqual(t, len(prStore.upserts), 1)
 	assert.True(t, prStore.upserts[0].PR.IsDraft)
 }
 
@@ -559,7 +616,7 @@ func TestPollRepo_FetchesReviewData(t *testing.T) {
 
 	prStore := &mockPRStore{}
 	reviewStore := newMockReviewStore()
-	pollRepoViaFull(t, ghClient, prStore, reviewStore, "testuser", nil, "org/repo")
+	pollRepoViaFull(t, ghClient, prStore, reviewStore, newMockCheckStore(), "testuser", nil, "org/repo")
 
 	// Verify review fetch methods were called.
 	assert.True(t, fetchReviewsCalled, "FetchReviews should be called for changed PR")
@@ -601,7 +658,7 @@ func TestPollRepo_SkipsReviewDataForUnchangedPRs(t *testing.T) {
 	}
 
 	reviewStore := newMockReviewStore()
-	pollRepoViaFull(t, ghClient, prStore, reviewStore, "testuser", nil, "org/repo")
+	pollRepoViaFull(t, ghClient, prStore, reviewStore, newMockCheckStore(), "testuser", nil, "org/repo")
 
 	// PR is unchanged (same UpdatedAt), so review fetch should NOT be called.
 	assert.False(t, fetchReviewsCalled, "FetchReviews should NOT be called for unchanged PR")
