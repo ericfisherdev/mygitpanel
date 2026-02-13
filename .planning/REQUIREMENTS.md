@@ -132,9 +132,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DISC-05 | Phase 2 | Complete |
 | STAT-01 | Phase 3 | Complete |
 | STAT-02 | Phase 4 | Pending |
-| STAT-03 | Phase 5 | Pending |
-| STAT-04 | Phase 5 | Pending |
-| STAT-05 | Phase 5 | Pending |
+| STAT-03 | Phase 5 | Complete |
+| STAT-04 | Phase 5 | Complete |
+| STAT-05 | Phase 5 | Complete |
 | STAT-06 | Phase 4 | Pending |
 | STAT-07 | Phase 3 | Complete |
 | REVW-01 | Phase 4 | Pending |
@@ -149,9 +149,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFMT-05 | Phase 4 | Pending |
 | CFMT-06 | Phase 4 | Pending |
 | CFMT-07 | Phase 4 | Pending |
-| CICD-01 | Phase 5 | Pending |
-| CICD-02 | Phase 5 | Pending |
-| CICD-03 | Phase 5 | Pending |
+| CICD-01 | Phase 5 | Complete |
+| CICD-02 | Phase 5 | Complete |
+| CICD-03 | Phase 5 | Complete |
 | REPO-01 | Phase 3 | Complete |
 | REPO-02 | Phase 3 | Complete |
 | REPO-03 | Phase 3 | Complete |
