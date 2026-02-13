@@ -297,3 +297,49 @@ func TestPRRepo_IsDraft(t *testing.T) {
 
 	assert.True(t, got.IsDraft)
 }
+
+func TestPRRepo_HealthSignals(t *testing.T) {
+	db := setupTestDB(t)
+	addTestRepo(t, db, "octocat/hello-world")
+	prRepo := NewPRRepo(db)
+	ctx := context.Background()
+
+	pr := makePR("octocat/hello-world", 1, "Health PR", model.PRStatusOpen)
+	pr.Additions = 10
+	pr.Deletions = 5
+	pr.ChangedFiles = 3
+	pr.MergeableStatus = model.MergeableMergeable
+	pr.CIStatus = model.CIStatusPassing
+	require.NoError(t, prRepo.Upsert(ctx, pr))
+
+	got, err := prRepo.GetByNumber(ctx, "octocat/hello-world", 1)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	assert.Equal(t, 10, got.Additions)
+	assert.Equal(t, 5, got.Deletions)
+	assert.Equal(t, 3, got.ChangedFiles)
+	assert.Equal(t, model.MergeableMergeable, got.MergeableStatus)
+	assert.Equal(t, model.CIStatusPassing, got.CIStatus)
+}
+
+func TestPRRepo_HealthSignals_Defaults(t *testing.T) {
+	db := setupTestDB(t)
+	addTestRepo(t, db, "octocat/hello-world")
+	prRepo := NewPRRepo(db)
+	ctx := context.Background()
+
+	// PR with zero-value / empty health signals should default to "unknown".
+	pr := makePR("octocat/hello-world", 1, "Default Signals", model.PRStatusOpen)
+	require.NoError(t, prRepo.Upsert(ctx, pr))
+
+	got, err := prRepo.GetByNumber(ctx, "octocat/hello-world", 1)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	assert.Equal(t, 0, got.Additions)
+	assert.Equal(t, 0, got.Deletions)
+	assert.Equal(t, 0, got.ChangedFiles)
+	assert.Equal(t, model.MergeableUnknown, got.MergeableStatus)
+	assert.Equal(t, model.CIStatusUnknown, got.CIStatus)
+}
