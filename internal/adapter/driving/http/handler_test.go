@@ -88,6 +88,19 @@ func (m *mockBotConfigStore) GetUsernames(_ context.Context) ([]string, error) {
 	return m.usernames, m.err
 }
 
+// mockCheckStore implements driven.CheckStore for handler tests.
+type mockCheckStore struct {
+	checkRuns []model.CheckRun
+	err       error
+}
+
+func (m *mockCheckStore) ReplaceCheckRunsForPR(_ context.Context, _ int64, _ []model.CheckRun) error {
+	return nil
+}
+func (m *mockCheckStore) GetCheckRunsByPR(_ context.Context, _ int64) ([]model.CheckRun, error) {
+	return m.checkRuns, m.err
+}
+
 // mockReviewStore implements driven.ReviewStore for handler tests.
 type mockReviewStore struct {
 	reviews        []model.Review
@@ -130,9 +143,9 @@ var (
 	testTimeStr = "2026-02-10T12:00:00Z"
 )
 
-// setupMux creates a mux with nil reviewSvc and nil botConfigStore (backward compat).
+// setupMux creates a mux with nil reviewSvc, nil healthSvc, and nil botConfigStore (backward compat).
 func setupMux(prStore *mockPRStore, repoStore *mockRepoStore) http.Handler {
-	h := httphandler.NewHandler(prStore, repoStore, nil, nil, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, nil, nil, nil, nil, "testuser", slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 
@@ -144,13 +157,24 @@ func setupMuxWithReview(
 	reviewStore driven.ReviewStore,
 ) http.Handler {
 	reviewSvc := application.NewReviewService(reviewStore, botConfigStore)
-	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, nil, nil, "testuser", slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 
 // setupMuxWithBots creates a mux for bot config endpoint tests.
 func setupMuxWithBots(botStore *mockBotConfigStore) http.Handler {
-	h := httphandler.NewHandler(&mockPRStore{}, &mockRepoStore{}, botStore, nil, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(&mockPRStore{}, &mockRepoStore{}, botStore, nil, nil, nil, "testuser", slog.Default())
+	return httphandler.NewServeMux(h, slog.Default())
+}
+
+// setupMuxWithHealth creates a mux with a real HealthService backed by a mock CheckStore.
+func setupMuxWithHealth(
+	prStore *mockPRStore,
+	repoStore *mockRepoStore,
+	checkStore driven.CheckStore,
+) http.Handler {
+	healthSvc := application.NewHealthService(checkStore)
+	h := httphandler.NewHandler(prStore, repoStore, nil, nil, healthSvc, nil, "testuser", slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 
@@ -960,4 +984,146 @@ func TestRemoveBot(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 	assert.Empty(t, rec.Body.String())
+}
+
+// --- Phase 5 Health Signal Tests ---
+
+func TestGetPR_WithHealthSignals(t *testing.T) {
+	now := testTime
+
+	prStore := &mockPRStore{pr: &model.PullRequest{
+		ID:              1,
+		Number:          42,
+		RepoFullName:    "owner/repo",
+		Title:           "Fix bug",
+		Author:          "alice",
+		Status:          model.PRStatusOpen,
+		HeadSHA:         "abc123",
+		URL:             "https://github.com/owner/repo/pull/42",
+		Branch:          "fix-bug",
+		BaseBranch:      "main",
+		Additions:       100,
+		Deletions:       50,
+		ChangedFiles:    8,
+		MergeableStatus: model.MergeableMergeable,
+		CIStatus:        model.CIStatusPassing,
+		OpenedAt:        now,
+		UpdatedAt:       now,
+		LastActivityAt:  now,
+	}}
+
+	checkStore := &mockCheckStore{
+		checkRuns: []model.CheckRun{
+			{
+				ID:         5001,
+				PRID:       1,
+				Name:       "build",
+				Status:     "completed",
+				Conclusion: "success",
+				IsRequired: true,
+				DetailsURL: "https://github.com/owner/repo/actions/runs/5001",
+			},
+			{
+				ID:         5002,
+				PRID:       1,
+				Name:       "lint",
+				Status:     "completed",
+				Conclusion: "success",
+				IsRequired: false,
+				DetailsURL: "https://github.com/owner/repo/actions/runs/5002",
+			},
+		},
+	}
+
+	mux := setupMuxWithHealth(prStore, &mockRepoStore{}, checkStore)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/repos/owner/repo/prs/42", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]any
+	decodeJSON(t, rec, &resp)
+
+	// Basic fields
+	assert.Equal(t, float64(42), resp["number"])
+
+	// Health signal fields from PR model
+	assert.Equal(t, float64(100), resp["additions"])
+	assert.Equal(t, float64(50), resp["deletions"])
+	assert.Equal(t, float64(8), resp["changed_files"])
+	assert.Equal(t, "mergeable", resp["mergeable_status"])
+
+	// CI status should be overwritten by HealthService computation
+	assert.Equal(t, "passing", resp["ci_status"])
+
+	// Check runs enriched from HealthService
+	checkRuns, ok := resp["check_runs"].([]any)
+	require.True(t, ok)
+	require.Len(t, checkRuns, 2)
+
+	firstCheck := checkRuns[0].(map[string]any)
+	assert.Equal(t, float64(5001), firstCheck["id"])
+	assert.Equal(t, "build", firstCheck["name"])
+	assert.Equal(t, "completed", firstCheck["status"])
+	assert.Equal(t, "success", firstCheck["conclusion"])
+	assert.Equal(t, true, firstCheck["is_required"])
+	assert.Equal(t, "https://github.com/owner/repo/actions/runs/5001", firstCheck["details_url"])
+
+	secondCheck := checkRuns[1].(map[string]any)
+	assert.Equal(t, "lint", secondCheck["name"])
+	assert.Equal(t, false, secondCheck["is_required"])
+}
+
+func TestListPRs_IncludesHealthFields(t *testing.T) {
+	now := testTime
+
+	prStore := &mockPRStore{prs: []model.PullRequest{
+		{
+			Number:          42,
+			RepoFullName:    "owner/repo",
+			Title:           "Fix bug",
+			Author:          "alice",
+			Status:          model.PRStatusOpen,
+			Additions:       25,
+			Deletions:       10,
+			ChangedFiles:    3,
+			MergeableStatus: model.MergeableConflicted,
+			CIStatus:        model.CIStatusFailing,
+			OpenedAt:        now,
+			UpdatedAt:       now,
+			LastActivityAt:  now,
+		},
+	}}
+
+	mux := setupMux(prStore, &mockRepoStore{})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/prs", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp []map[string]any
+	decodeJSON(t, rec, &resp)
+	require.Len(t, resp, 1)
+
+	pr := resp[0]
+	assert.Equal(t, float64(25), pr["additions"])
+	assert.Equal(t, float64(10), pr["deletions"])
+	assert.Equal(t, float64(3), pr["changed_files"])
+	assert.Equal(t, "conflicted", pr["mergeable_status"])
+	assert.Equal(t, "failing", pr["ci_status"])
+
+	// days_since_opened and days_since_last_activity should be present (numeric)
+	_, hasDaysOpened := pr["days_since_opened"]
+	assert.True(t, hasDaysOpened, "should have days_since_opened field")
+	_, hasDaysActivity := pr["days_since_last_activity"]
+	assert.True(t, hasDaysActivity, "should have days_since_last_activity field")
+
+	// check_runs should be an empty array on list endpoints
+	checkRuns, ok := pr["check_runs"].([]any)
+	require.True(t, ok, "check_runs should be an array")
+	assert.Len(t, checkRuns, 0, "check_runs should be empty on list endpoint")
 }

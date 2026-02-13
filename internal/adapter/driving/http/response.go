@@ -63,6 +63,16 @@ type PRResponse struct {
 	AwaitingCoderabbit  bool                   `json:"awaiting_coderabbit"`
 	ResolvedThreads     int                    `json:"resolved_threads"`
 	UnresolvedThreads   int                    `json:"unresolved_threads"`
+
+	// Health signal fields -- populated from PR model on all endpoints.
+	DaysSinceOpened       int                `json:"days_since_opened"`
+	DaysSinceLastActivity int                `json:"days_since_last_activity"`
+	Additions             int                `json:"additions"`
+	Deletions             int                `json:"deletions"`
+	ChangedFiles          int                `json:"changed_files"`
+	MergeableStatus       string             `json:"mergeable_status"`
+	CIStatus              string             `json:"ci_status"`
+	CheckRuns             []CheckRunResponse `json:"check_runs"`
 }
 
 // ReviewResponse is the JSON representation of a single review.
@@ -118,6 +128,16 @@ type IssueCommentResponse struct {
 	Body      string `json:"body"`
 	IsBot     bool   `json:"is_bot"`
 	CreatedAt string `json:"created_at"`
+}
+
+// CheckRunResponse is the JSON representation of an individual CI/CD check run.
+type CheckRunResponse struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	IsRequired bool   `json:"is_required"`
+	DetailsURL string `json:"details_url"`
 }
 
 // BotConfigResponse is the JSON representation of a bot configuration entry.
@@ -178,6 +198,16 @@ func toPRResponse(pr model.PullRequest) PRResponse {
 		Threads:       []ReviewThreadResponse{},
 		IssueComments: []IssueCommentResponse{},
 		Suggestions:   []SuggestionResponse{},
+
+		// Health signals from PR model -- available on all endpoints.
+		DaysSinceOpened:       pr.DaysSinceOpened(),
+		DaysSinceLastActivity: pr.DaysSinceLastActivity(),
+		Additions:             pr.Additions,
+		Deletions:             pr.Deletions,
+		ChangedFiles:          pr.ChangedFiles,
+		MergeableStatus:       string(pr.MergeableStatus),
+		CIStatus:              string(pr.CIStatus),
+		CheckRuns:             []CheckRunResponse{},
 	}
 }
 
@@ -251,6 +281,18 @@ func toIssueCommentResponse(c model.IssueComment) IssueCommentResponse {
 		Body:      c.Body,
 		IsBot:     c.IsBot,
 		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+// toCheckRunResponse converts a domain CheckRun to its JSON representation.
+func toCheckRunResponse(cr model.CheckRun) CheckRunResponse {
+	return CheckRunResponse{
+		ID:         cr.ID,
+		Name:       cr.Name,
+		Status:     cr.Status,
+		Conclusion: cr.Conclusion,
+		IsRequired: cr.IsRequired,
+		DetailsURL: cr.DetailsURL,
 	}
 }
 

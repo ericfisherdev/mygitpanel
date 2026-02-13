@@ -21,6 +21,7 @@ type Handler struct {
 	repoStore      driven.RepoStore
 	botConfigStore driven.BotConfigStore
 	reviewSvc      *application.ReviewService
+	healthSvc      *application.HealthService
 	pollSvc        *application.PollService
 	username       string
 	logger         *slog.Logger
@@ -32,6 +33,7 @@ func NewHandler(
 	repoStore driven.RepoStore,
 	botConfigStore driven.BotConfigStore,
 	reviewSvc *application.ReviewService,
+	healthSvc *application.HealthService,
 	pollSvc *application.PollService,
 	username string,
 	logger *slog.Logger,
@@ -41,6 +43,7 @@ func NewHandler(
 		repoStore:      repoStore,
 		botConfigStore: botConfigStore,
 		reviewSvc:      reviewSvc,
+		healthSvc:      healthSvc,
 		pollSvc:        pollSvc,
 		username:       username,
 		logger:         logger,
@@ -127,6 +130,23 @@ func (h *Handler) GetPR(w http.ResponseWriter, r *http.Request) {
 
 		if summary != nil {
 			h.enrichPRResponse(&resp, summary, pr.HeadSHA)
+		}
+	}
+
+	// Enrich with health data if HealthService is available.
+	if h.healthSvc != nil {
+		healthSummary, err := h.healthSvc.GetPRHealthSummary(r.Context(), pr.ID)
+		if err != nil {
+			h.logger.Error("failed to get health summary", "error", err)
+			// Fall through -- health enrichment failure is not fatal.
+		}
+
+		if healthSummary != nil {
+			resp.CheckRuns = make([]CheckRunResponse, 0, len(healthSummary.CheckRuns))
+			for _, cr := range healthSummary.CheckRuns {
+				resp.CheckRuns = append(resp.CheckRuns, toCheckRunResponse(cr))
+			}
+			resp.CIStatus = string(healthSummary.CIStatus)
 		}
 	}
 
