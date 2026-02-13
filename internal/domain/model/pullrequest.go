@@ -4,22 +4,27 @@ import "time"
 
 // PullRequest represents a GitHub pull request tracked by ReviewHub.
 type PullRequest struct {
-	ID             int64
-	Number         int
-	RepoFullName   string
-	Title          string
-	Author         string
-	Status         PRStatus
-	IsDraft        bool
-	URL            string
-	Branch         string
-	BaseBranch     string
-	NeedsReview    bool
-	HeadSHA        string // Current head commit SHA; used for outdated review detection.
-	Labels         []string
-	OpenedAt       time.Time
-	UpdatedAt      time.Time
-	LastActivityAt time.Time
+	ID              int64
+	Number          int
+	RepoFullName    string
+	Title           string
+	Author          string
+	Status          PRStatus
+	IsDraft         bool
+	URL             string
+	Branch          string
+	BaseBranch      string
+	NeedsReview     bool
+	HeadSHA         string // Current head commit SHA; used for outdated review detection.
+	Additions       int
+	Deletions       int
+	ChangedFiles    int
+	MergeableStatus MergeableStatus // Default MergeableUnknown.
+	CIStatus        CIStatus        // Default CIStatusUnknown.
+	Labels          []string
+	OpenedAt        time.Time
+	UpdatedAt       time.Time
+	LastActivityAt  time.Time
 
 	// Transient fields populated during GitHub fetch, not persisted.
 	RequestedReviewers []string

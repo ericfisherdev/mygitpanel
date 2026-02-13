@@ -55,6 +55,22 @@ func (m *mockGitHubClient) FetchThreadResolution(ctx context.Context, repoFullNa
 	return nil, nil
 }
 
+func (m *mockGitHubClient) FetchCheckRuns(_ context.Context, _ string, _ string) ([]model.CheckRun, error) {
+	return nil, nil
+}
+
+func (m *mockGitHubClient) FetchCombinedStatus(_ context.Context, _ string, _ string) (*model.CombinedStatus, error) {
+	return nil, nil
+}
+
+func (m *mockGitHubClient) FetchPRDetail(_ context.Context, _ string, _ int) (*model.PRDetail, error) {
+	return nil, nil
+}
+
+func (m *mockGitHubClient) FetchRequiredStatusChecks(_ context.Context, _ string, _ string) ([]string, error) {
+	return nil, nil
+}
+
 type upsertCall struct {
 	PR model.PullRequest
 }

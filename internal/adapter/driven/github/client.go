@@ -331,6 +331,31 @@ func mapPullRequest(pr *gh.PullRequest, repoFullName string) model.PullRequest {
 	}
 }
 
+// FetchCheckRuns retrieves all check runs for the given ref (commit SHA or branch).
+// Stub: will be implemented in Phase 5 Plan 02.
+func (c *Client) FetchCheckRuns(_ context.Context, _ string, _ string) ([]model.CheckRun, error) {
+	return nil, nil
+}
+
+// FetchCombinedStatus returns the combined commit status for the given ref.
+// Stub: will be implemented in Phase 5 Plan 02.
+func (c *Client) FetchCombinedStatus(_ context.Context, _ string, _ string) (*model.CombinedStatus, error) {
+	return nil, nil
+}
+
+// FetchPRDetail returns diff stats and mergeable status for a single PR.
+// Stub: will be implemented in Phase 5 Plan 02.
+func (c *Client) FetchPRDetail(_ context.Context, _ string, _ int) (*model.PRDetail, error) {
+	return nil, nil
+}
+
+// FetchRequiredStatusChecks returns the list of required status check contexts
+// for the given branch's protection rules. Returns empty slice if unprotected.
+// Stub: will be implemented in Phase 5 Plan 02.
+func (c *Client) FetchRequiredStatusChecks(_ context.Context, _ string, _ string) ([]string, error) {
+	return nil, nil
+}
+
 // splitRepo splits a "owner/repo" string into its two components.
 func splitRepo(fullName string) (string, string, error) {
 	parts := strings.SplitN(fullName, "/", 2)
