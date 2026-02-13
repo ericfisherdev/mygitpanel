@@ -1,6 +1,6 @@
 module github.com/ericfisherdev/mygitpanel
 
-go 1.25.4
+go 1.25.7
 
 require (
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
