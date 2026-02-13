@@ -145,9 +145,9 @@ func isBotUser(login string, botUsernames []string) bool {
 	return false
 }
 
-// isNitpickComment returns true if the author is a bot AND the body contains
+// IsNitpickComment returns true if the author is a bot AND the body contains
 // a nitpick pattern indicator.
-func isNitpickComment(author, body string, botUsernames []string) bool {
+func IsNitpickComment(author, body string, botUsernames []string) bool {
 	if !isBotUser(author, botUsernames) {
 		return false
 	}

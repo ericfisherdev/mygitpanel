@@ -16,27 +16,33 @@ import (
 
 // Handler is the HTTP driving adapter that serves the REST API.
 type Handler struct {
-	prStore   driven.PRStore
-	repoStore driven.RepoStore
-	pollSvc   *application.PollService
-	username  string
-	logger    *slog.Logger
+	prStore        driven.PRStore
+	repoStore      driven.RepoStore
+	botConfigStore driven.BotConfigStore
+	reviewSvc      *application.ReviewService
+	pollSvc        *application.PollService
+	username       string
+	logger         *slog.Logger
 }
 
 // NewHandler creates a Handler with all required dependencies.
 func NewHandler(
 	prStore driven.PRStore,
 	repoStore driven.RepoStore,
+	botConfigStore driven.BotConfigStore,
+	reviewSvc *application.ReviewService,
 	pollSvc *application.PollService,
 	username string,
 	logger *slog.Logger,
 ) *Handler {
 	return &Handler{
-		prStore:   prStore,
-		repoStore: repoStore,
-		pollSvc:   pollSvc,
-		username:  username,
-		logger:    logger,
+		prStore:        prStore,
+		repoStore:      repoStore,
+		botConfigStore: botConfigStore,
+		reviewSvc:      reviewSvc,
+		pollSvc:        pollSvc,
+		username:       username,
+		logger:         logger,
 	}
 }
 
@@ -52,6 +58,9 @@ func NewServeMux(h *Handler, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/v1/repos", h.AddRepo)
 	mux.HandleFunc("DELETE /api/v1/repos/{owner}/{repo}", h.RemoveRepo)
 	mux.HandleFunc("GET /api/v1/health", h.Health)
+	mux.HandleFunc("GET /api/v1/bots", h.ListBots)
+	mux.HandleFunc("POST /api/v1/bots", h.AddBot)
+	mux.HandleFunc("DELETE /api/v1/bots/{username}", h.RemoveBot)
 
 	// Recovery innermost so panics are caught before logging.
 	wrapped := recoveryMiddleware(logger, mux)
@@ -77,7 +86,9 @@ func (h *Handler) ListPRs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// GetPR returns a single pull request by repository and number.
+// GetPR returns a single pull request by repository and number, enriched with
+// review data when available. Review enrichment failure is non-fatal: the basic
+// PR response is returned if ReviewService is nil or returns an error.
 func (h *Handler) GetPR(w http.ResponseWriter, r *http.Request) {
 	owner := r.PathValue("owner")
 	repo := r.PathValue("repo")
@@ -103,7 +114,64 @@ func (h *Handler) GetPR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toPRResponse(*pr))
+	resp := toPRResponse(*pr)
+
+	// Enrich with review data if ReviewService is available.
+	if h.reviewSvc != nil {
+		summary, err := h.reviewSvc.GetPRReviewSummary(r.Context(), pr.ID, pr.HeadSHA)
+		if err != nil {
+			h.logger.Error("failed to get review summary", "error", err)
+			// Fall through with basic response -- review enrichment failure is not fatal.
+		}
+
+		if summary != nil {
+			h.enrichPRResponse(&resp, summary, pr.HeadSHA)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// enrichPRResponse populates the enriched review fields on a PRResponse from
+// a PRReviewSummary. It is separated from GetPR for testability and clarity.
+func (h *Handler) enrichPRResponse(resp *PRResponse, summary *application.PRReviewSummary, headSHA string) {
+	// Get bot usernames for nitpick detection in reviews.
+	var botUsernames []string
+	if h.botConfigStore != nil {
+		bots, err := h.botConfigStore.GetUsernames(context.Background())
+		if err != nil {
+			h.logger.Error("failed to get bot usernames for enrichment", "error", err)
+		} else {
+			botUsernames = bots
+		}
+	}
+
+	resp.Reviews = make([]ReviewResponse, 0, len(summary.Reviews))
+	for _, rev := range summary.Reviews {
+		resp.Reviews = append(resp.Reviews, toReviewResponse(rev, headSHA, botUsernames))
+	}
+
+	resp.Threads = make([]ReviewThreadResponse, 0, len(summary.Threads))
+	for _, thread := range summary.Threads {
+		resp.Threads = append(resp.Threads, toReviewThreadResponse(thread))
+	}
+
+	resp.IssueComments = make([]IssueCommentResponse, 0, len(summary.IssueComments))
+	for _, ic := range summary.IssueComments {
+		resp.IssueComments = append(resp.IssueComments, toIssueCommentResponse(ic))
+	}
+
+	resp.Suggestions = make([]SuggestionResponse, 0, len(summary.Suggestions))
+	for _, sug := range summary.Suggestions {
+		resp.Suggestions = append(resp.Suggestions, toSuggestionResponse(sug))
+	}
+
+	resp.ReviewStatus = string(summary.ReviewStatus)
+	resp.HasBotReview = summary.HasBotReview
+	resp.HasCoderabbitReview = summary.HasCoderabbitReview
+	resp.AwaitingCoderabbit = summary.AwaitingCoderabbit
+	resp.ResolvedThreads = summary.ResolvedThreadCount
+	resp.UnresolvedThreads = summary.UnresolvedThreadCount
 }
 
 // ListPRsNeedingAttention returns only pull requests that need review.

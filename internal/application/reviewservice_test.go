@@ -229,7 +229,7 @@ func TestIsNitpickComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isNitpickComment(tt.author, tt.body, bots)
+			got := IsNitpickComment(tt.author, tt.body, bots)
 			assert.Equal(t, tt.want, got)
 		})
 	}

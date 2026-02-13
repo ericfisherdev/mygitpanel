@@ -12,7 +12,9 @@ import (
 	"time"
 
 	httphandler "github.com/efisher/reviewhub/internal/adapter/driving/http"
+	"github.com/efisher/reviewhub/internal/application"
 	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/efisher/reviewhub/internal/domain/port/driven"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +67,62 @@ func (m *mockRepoStore) ListAll(_ context.Context) ([]model.Repository, error) {
 	return m.repos, m.err
 }
 
+type mockBotConfigStore struct {
+	bots      []model.BotConfig
+	usernames []string
+	err       error
+	addErr    error
+	removeErr error
+}
+
+func (m *mockBotConfigStore) Add(_ context.Context, bot model.BotConfig) error {
+	return m.addErr
+}
+func (m *mockBotConfigStore) Remove(_ context.Context, _ string) error {
+	return m.removeErr
+}
+func (m *mockBotConfigStore) ListAll(_ context.Context) ([]model.BotConfig, error) {
+	return m.bots, m.err
+}
+func (m *mockBotConfigStore) GetUsernames(_ context.Context) ([]string, error) {
+	return m.usernames, m.err
+}
+
+// mockReviewStore implements driven.ReviewStore for handler tests.
+type mockReviewStore struct {
+	reviews        []model.Review
+	reviewComments []model.ReviewComment
+	issueComments  []model.IssueComment
+}
+
+func (m *mockReviewStore) UpsertReview(_ context.Context, _ model.Review) error    { return nil }
+func (m *mockReviewStore) UpsertReviewComment(_ context.Context, _ model.ReviewComment) error {
+	return nil
+}
+func (m *mockReviewStore) UpsertIssueComment(_ context.Context, _ model.IssueComment) error {
+	return nil
+}
+func (m *mockReviewStore) GetReviewsByPR(_ context.Context, _ int64) ([]model.Review, error) {
+	return m.reviews, nil
+}
+func (m *mockReviewStore) GetReviewCommentsByPR(_ context.Context, _ int64) ([]model.ReviewComment, error) {
+	return m.reviewComments, nil
+}
+func (m *mockReviewStore) GetIssueCommentsByPR(_ context.Context, _ int64) ([]model.IssueComment, error) {
+	return m.issueComments, nil
+}
+func (m *mockReviewStore) UpdateCommentResolution(_ context.Context, _ int64, _ bool) error {
+	return nil
+}
+func (m *mockReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error { return nil }
+
+// errReviewStore returns an error from GetReviewsByPR.
+type errReviewStore struct{ mockReviewStore }
+
+func (m *errReviewStore) GetReviewsByPR(_ context.Context, _ int64) ([]model.Review, error) {
+	return nil, errors.New("review store error")
+}
+
 // --- Test helpers ---
 
 var (
@@ -72,8 +130,27 @@ var (
 	testTimeStr = "2026-02-10T12:00:00Z"
 )
 
+// setupMux creates a mux with nil reviewSvc and nil botConfigStore (backward compat).
 func setupMux(prStore *mockPRStore, repoStore *mockRepoStore) http.Handler {
-	h := httphandler.NewHandler(prStore, repoStore, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, nil, nil, nil, "testuser", slog.Default())
+	return httphandler.NewServeMux(h, slog.Default())
+}
+
+// setupMuxWithReview creates a mux with a real ReviewService backed by mock stores.
+func setupMuxWithReview(
+	prStore *mockPRStore,
+	repoStore *mockRepoStore,
+	botConfigStore driven.BotConfigStore,
+	reviewStore driven.ReviewStore,
+) http.Handler {
+	reviewSvc := application.NewReviewService(reviewStore, botConfigStore)
+	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, nil, "testuser", slog.Default())
+	return httphandler.NewServeMux(h, slog.Default())
+}
+
+// setupMuxWithBots creates a mux for bot config endpoint tests.
+func setupMuxWithBots(botStore *mockBotConfigStore) http.Handler {
+	h := httphandler.NewHandler(&mockPRStore{}, &mockRepoStore{}, botStore, nil, nil, "testuser", slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 
@@ -82,6 +159,10 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
 	err := json.NewDecoder(rec.Body).Decode(v)
 	require.NoError(t, err)
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }
 
 // --- Tests ---
@@ -152,13 +233,13 @@ func TestListPRs(t *testing.T) {
 				labels, ok := pr["labels"].([]any)
 				require.True(t, ok)
 				assert.Len(t, labels, 2)
-				// Reviews and Comments are empty arrays, not null
+				// Reviews and IssueComments are empty arrays, not null
 				reviews, ok := pr["reviews"].([]any)
 				require.True(t, ok)
 				assert.Len(t, reviews, 0)
-				comments, ok := pr["comments"].([]any)
+				issueComments, ok := pr["issue_comments"].([]any)
 				require.True(t, ok)
-				assert.Len(t, comments, 0)
+				assert.Len(t, issueComments, 0)
 			},
 		},
 		{
@@ -518,8 +599,369 @@ func TestNilLabelsBecomesEmptyArray(t *testing.T) {
 	body := rec.Body.String()
 	assert.Contains(t, body, `"labels":[]`)
 	assert.Contains(t, body, `"reviews":[]`)
-	assert.Contains(t, body, `"comments":[]`)
+	assert.Contains(t, body, `"issue_comments":[]`)
 	assert.NotContains(t, body, `"labels":null`)
 	assert.NotContains(t, body, `"reviews":null`)
-	assert.NotContains(t, body, `"comments":null`)
+	assert.NotContains(t, body, `"issue_comments":null`)
+}
+
+// --- New Phase 4 Tests ---
+
+func TestGetPR_WithEnrichedReviews(t *testing.T) {
+	now := testTime
+
+	prStore := &mockPRStore{pr: &model.PullRequest{
+		ID:           1,
+		Number:       42,
+		RepoFullName: "owner/repo",
+		Title:        "Fix bug",
+		Author:       "alice",
+		Status:       model.PRStatusOpen,
+		HeadSHA:      "current-sha",
+		URL:          "https://github.com/owner/repo/pull/42",
+		Branch:       "fix-bug",
+		BaseBranch:   "main",
+		OpenedAt:     now,
+		UpdatedAt:    now,
+	}}
+
+	reviewStore := &mockReviewStore{
+		reviews: []model.Review{
+			{
+				ID:            1001,
+				PRID:          1,
+				ReviewerLogin: "bob",
+				State:         model.ReviewStateApproved,
+				Body:          "LGTM",
+				CommitID:      "current-sha",
+				SubmittedAt:   now,
+			},
+			{
+				ID:            1002,
+				PRID:          1,
+				ReviewerLogin: "coderabbitai",
+				State:         model.ReviewStateCommented,
+				Body:          "**Nitpick** minor style issue",
+				CommitID:      "old-sha",
+				SubmittedAt:   now.Add(-1 * time.Hour),
+				IsBot:         true,
+			},
+		},
+		reviewComments: []model.ReviewComment{
+			{
+				ID:          2001,
+				PRID:        1,
+				Author:      "bob",
+				Body:        "Please fix:\n```suggestion\nreturn nil\n```",
+				Path:        "main.go",
+				Line:        10,
+				StartLine:   8,
+				Side:        "RIGHT",
+				SubjectType: "line",
+				DiffHunk:    "@@ -7,5 +7,5 @@\n old line",
+				CommitID:    "current-sha",
+				InReplyToID: nil,
+				IsResolved:  false,
+				CreatedAt:   now,
+			},
+		},
+		issueComments: []model.IssueComment{
+			{
+				ID:        3001,
+				PRID:      1,
+				Author:    "charlie",
+				Body:      "Great work overall!",
+				IsBot:     false,
+				CreatedAt: now,
+			},
+		},
+	}
+
+	botConfigStore := &mockBotConfigStore{
+		usernames: []string{"coderabbitai", "github-actions[bot]"},
+	}
+
+	mux := setupMuxWithReview(prStore, &mockRepoStore{}, botConfigStore, reviewStore)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/repos/owner/repo/prs/42", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]any
+	decodeJSON(t, rec, &resp)
+
+	// Basic fields
+	assert.Equal(t, float64(42), resp["number"])
+	assert.Equal(t, "current-sha", resp["head_sha"])
+
+	// Reviews
+	reviews, ok := resp["reviews"].([]any)
+	require.True(t, ok)
+	require.Len(t, reviews, 2)
+
+	firstReview := reviews[0].(map[string]any)
+	assert.Equal(t, "bob", firstReview["reviewer"])
+	assert.Equal(t, "approved", firstReview["state"])
+	assert.Equal(t, false, firstReview["is_outdated"])
+	assert.Equal(t, false, firstReview["is_bot"])
+
+	secondReview := reviews[1].(map[string]any)
+	assert.Equal(t, "coderabbitai", secondReview["reviewer"])
+	assert.Equal(t, true, secondReview["is_outdated"])
+	assert.Equal(t, true, secondReview["is_bot"])
+	assert.Equal(t, true, secondReview["is_nitpick"])
+
+	// Threads
+	threads, ok := resp["threads"].([]any)
+	require.True(t, ok)
+	require.Len(t, threads, 1)
+	thread := threads[0].(map[string]any)
+	rootComment := thread["root_comment"].(map[string]any)
+	assert.Equal(t, "main.go", rootComment["file_path"])
+	assert.Equal(t, float64(10), rootComment["line"])
+	assert.Equal(t, "bob", rootComment["author"])
+	assert.Equal(t, float64(1), thread["comment_count"])
+
+	// Suggestions
+	suggestions, ok := resp["suggestions"].([]any)
+	require.True(t, ok)
+	require.Len(t, suggestions, 1)
+	sug := suggestions[0].(map[string]any)
+	assert.Equal(t, "return nil", sug["proposed_code"])
+	assert.Equal(t, "main.go", sug["file_path"])
+
+	// Issue comments
+	issueComments, ok := resp["issue_comments"].([]any)
+	require.True(t, ok)
+	require.Len(t, issueComments, 1)
+	ic := issueComments[0].(map[string]any)
+	assert.Equal(t, "charlie", ic["author"])
+	assert.Equal(t, false, ic["is_bot"])
+
+	// Bot flags
+	assert.Equal(t, true, resp["has_bot_review"])
+	assert.Equal(t, true, resp["has_coderabbit_review"])
+	assert.Equal(t, true, resp["awaiting_coderabbit"])
+
+	// Review status (only bob is human, bob approved)
+	assert.Equal(t, "approved", resp["review_status"])
+}
+
+func TestGetPR_ReviewServiceError(t *testing.T) {
+	prStore := &mockPRStore{pr: &model.PullRequest{
+		ID:           1,
+		Number:       42,
+		RepoFullName: "owner/repo",
+		Title:        "Fix bug",
+		Author:       "alice",
+		Status:       model.PRStatusOpen,
+		HeadSHA:      "abc123",
+		URL:          "https://github.com/owner/repo/pull/42",
+		Branch:       "fix-bug",
+		BaseBranch:   "main",
+		OpenedAt:     testTime,
+		UpdatedAt:    testTime,
+	}}
+
+	// errReviewStore causes GetReviewsByPR to error, which means
+	// GetPRReviewSummary will return an error.
+	errStore := &errReviewStore{}
+	botConfigStore := &mockBotConfigStore{usernames: []string{"bot"}}
+
+	mux := setupMuxWithReview(prStore, &mockRepoStore{}, botConfigStore, errStore)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/repos/owner/repo/prs/42", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	// Should still return 200 with basic data -- enrichment failure is non-fatal.
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]any
+	decodeJSON(t, rec, &resp)
+	assert.Equal(t, float64(42), resp["number"])
+	assert.Equal(t, "owner/repo", resp["repository"])
+
+	// Enriched fields should be empty defaults.
+	reviews, ok := resp["reviews"].([]any)
+	require.True(t, ok)
+	assert.Len(t, reviews, 0)
+}
+
+func TestGetPR_CFMT05_InlineVsGeneralSeparation(t *testing.T) {
+	now := testTime
+
+	prStore := &mockPRStore{pr: &model.PullRequest{
+		ID:           1,
+		Number:       42,
+		RepoFullName: "owner/repo",
+		Title:        "Feature PR",
+		Author:       "alice",
+		Status:       model.PRStatusOpen,
+		HeadSHA:      "sha-123",
+		OpenedAt:     now,
+		UpdatedAt:    now,
+	}}
+
+	// 2 inline threads + 1 general issue comment.
+	reviewStore := &mockReviewStore{
+		reviewComments: []model.ReviewComment{
+			{
+				ID:          100,
+				PRID:        1,
+				Author:      "reviewer1",
+				Body:        "Inline comment on code",
+				Path:        "service.go",
+				Line:        15,
+				Side:        "RIGHT",
+				SubjectType: "line",
+				DiffHunk:    "@@ -10,5 +10,5 @@",
+				InReplyToID: nil,
+				CreatedAt:   now,
+			},
+			{
+				ID:          200,
+				PRID:        1,
+				Author:      "reviewer2",
+				Body:        "Another inline comment",
+				Path:        "handler.go",
+				Line:        30,
+				Side:        "RIGHT",
+				SubjectType: "line",
+				DiffHunk:    "@@ -25,5 +25,5 @@",
+				InReplyToID: nil,
+				CreatedAt:   now.Add(1 * time.Minute),
+			},
+		},
+		issueComments: []model.IssueComment{
+			{
+				ID:        300,
+				PRID:      1,
+				Author:    "reviewer3",
+				Body:      "General discussion comment",
+				CreatedAt: now.Add(2 * time.Minute),
+			},
+		},
+	}
+
+	botConfigStore := &mockBotConfigStore{usernames: []string{}}
+
+	mux := setupMuxWithReview(prStore, &mockRepoStore{}, botConfigStore, reviewStore)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/repos/owner/repo/prs/42", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Capture raw body before decoding (decoding drains the buffer).
+	body := rec.Body.String()
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body), &resp))
+
+	// Threads: 2 inline code comment threads.
+	threads, ok := resp["threads"].([]any)
+	require.True(t, ok)
+	require.Len(t, threads, 2, "should have 2 inline thread entries")
+
+	// Each thread has root_comment with file_path proving they are inline/code comments.
+	for i, threadAny := range threads {
+		thread := threadAny.(map[string]any)
+		root := thread["root_comment"].(map[string]any)
+		assert.NotEmpty(t, root["file_path"], "thread %d root_comment should have file_path", i)
+	}
+
+	// Issue comments: 1 general PR-level comment.
+	issueComments, ok := resp["issue_comments"].([]any)
+	require.True(t, ok)
+	require.Len(t, issueComments, 1, "should have 1 general issue comment")
+
+	// Issue comments have NO file_path field (it is a separate struct with no file_path).
+	ic := issueComments[0].(map[string]any)
+	_, hasFilePath := ic["file_path"]
+	assert.False(t, hasFilePath, "issue_comments should not have file_path field")
+
+	// Verify the two JSON keys are distinct.
+	assert.Contains(t, body, `"threads"`)
+	assert.Contains(t, body, `"issue_comments"`)
+}
+
+func TestListBots(t *testing.T) {
+	botStore := &mockBotConfigStore{
+		bots: []model.BotConfig{
+			{ID: 1, Username: "coderabbitai", AddedAt: testTime},
+			{ID: 2, Username: "github-actions[bot]", AddedAt: testTime},
+			{ID: 3, Username: "copilot[bot]", AddedAt: testTime},
+		},
+	}
+
+	mux := setupMuxWithBots(botStore)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp []map[string]any
+	decodeJSON(t, rec, &resp)
+	require.Len(t, resp, 3)
+	assert.Equal(t, "coderabbitai", resp[0]["username"])
+	assert.Equal(t, testTimeStr, resp[0]["added_at"])
+	assert.Equal(t, "github-actions[bot]", resp[1]["username"])
+	assert.Equal(t, "copilot[bot]", resp[2]["username"])
+}
+
+func TestAddBot(t *testing.T) {
+	botStore := &mockBotConfigStore{}
+
+	mux := setupMuxWithBots(botStore)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots", strings.NewReader(`{"username":"newbot"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var resp map[string]any
+	decodeJSON(t, rec, &resp)
+	assert.Equal(t, "newbot", resp["username"])
+	assert.NotEmpty(t, resp["added_at"])
+}
+
+func TestAddBot_Duplicate(t *testing.T) {
+	botStore := &mockBotConfigStore{
+		addErr: errors.New("UNIQUE constraint failed: bot_config.username"),
+	}
+
+	mux := setupMuxWithBots(botStore)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots", strings.NewReader(`{"username":"existing"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusConflict, rec.Code)
+
+	var resp map[string]any
+	decodeJSON(t, rec, &resp)
+	assert.Equal(t, "bot username already exists", resp["error"])
+}
+
+func TestRemoveBot(t *testing.T) {
+	botStore := &mockBotConfigStore{}
+
+	mux := setupMuxWithBots(botStore)
+	// URL-encoded brackets: copilot%5Bbot%5D -> copilot[bot]
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bots/copilot%5Bbot%5D", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Empty(t, rec.Body.String())
 }
