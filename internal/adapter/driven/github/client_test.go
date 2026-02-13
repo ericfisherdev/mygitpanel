@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	ghAdapter "github.com/efisher/reviewhub/internal/adapter/driven/github"
-	"github.com/efisher/reviewhub/internal/domain/model"
+	ghAdapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -3,7 +3,7 @@ package driven
 import (
 	"context"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
 // GitHubClient defines the driven port for fetching data from the GitHub API.

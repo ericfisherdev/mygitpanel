@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	httphandler "github.com/efisher/reviewhub/internal/adapter/driving/http"
-	"github.com/efisher/reviewhub/internal/application"
-	"github.com/efisher/reviewhub/internal/domain/model"
-	"github.com/efisher/reviewhub/internal/domain/port/driven"
+	httphandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/http"
+	"github.com/ericfisherdev/mygitpanel/internal/application"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

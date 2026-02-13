@@ -3,7 +3,7 @@ package driven
 import (
 	"context"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
 // BotConfigStore defines the driven port for managing bot username configuration.

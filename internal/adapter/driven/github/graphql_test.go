@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	ghAdapter "github.com/efisher/reviewhub/internal/adapter/driven/github"
+	ghAdapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
 // ListBots returns all configured bot usernames.

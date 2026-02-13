@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
-	"github.com/efisher/reviewhub/internal/domain/port/driven"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 // Compile-time interface satisfaction check.

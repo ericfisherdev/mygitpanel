@@ -14,8 +14,8 @@ import (
 
 	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
-	"github.com/efisher/reviewhub/internal/domain/port/driven"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 // Compile-time interface satisfaction check.

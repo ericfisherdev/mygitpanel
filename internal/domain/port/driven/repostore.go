@@ -3,7 +3,7 @@ package driven
 import (
 	"context"
 
-	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
 // RepoStore defines the driven port for repository persistence.

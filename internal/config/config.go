@@ -18,41 +18,41 @@ type Config struct {
 }
 
 // Load reads configuration from environment variables and returns a validated Config.
-// Required variables: REVIEWHUB_GITHUB_TOKEN, REVIEWHUB_GITHUB_USERNAME.
-// Optional variables with defaults: REVIEWHUB_POLL_INTERVAL (5m),
-// REVIEWHUB_LISTEN_ADDR (127.0.0.1:8080), REVIEWHUB_DB_PATH (reviewhub.db).
+// Required variables: MYGITPANEL_GITHUB_TOKEN, MYGITPANEL_GITHUB_USERNAME.
+// Optional variables with defaults: MYGITPANEL_POLL_INTERVAL (5m),
+// MYGITPANEL_LISTEN_ADDR (127.0.0.1:8080), MYGITPANEL_DB_PATH (mygitpanel.db).
 func Load() (*Config, error) {
-	token, ok := os.LookupEnv("REVIEWHUB_GITHUB_TOKEN")
+	token, ok := os.LookupEnv("MYGITPANEL_GITHUB_TOKEN")
 	if !ok || token == "" {
-		return nil, fmt.Errorf("REVIEWHUB_GITHUB_TOKEN is required but not set")
+		return nil, fmt.Errorf("MYGITPANEL_GITHUB_TOKEN is required but not set")
 	}
 
-	username, ok := os.LookupEnv("REVIEWHUB_GITHUB_USERNAME")
+	username, ok := os.LookupEnv("MYGITPANEL_GITHUB_USERNAME")
 	if !ok || username == "" {
-		return nil, fmt.Errorf("REVIEWHUB_GITHUB_USERNAME is required but not set")
+		return nil, fmt.Errorf("MYGITPANEL_GITHUB_USERNAME is required but not set")
 	}
 
 	pollInterval := 5 * time.Minute
-	if v, ok := os.LookupEnv("REVIEWHUB_POLL_INTERVAL"); ok {
+	if v, ok := os.LookupEnv("MYGITPANEL_POLL_INTERVAL"); ok {
 		parsed, err := time.ParseDuration(v)
 		if err != nil {
-			return nil, fmt.Errorf("REVIEWHUB_POLL_INTERVAL has invalid duration %q: %w", v, err)
+			return nil, fmt.Errorf("MYGITPANEL_POLL_INTERVAL has invalid duration %q: %w", v, err)
 		}
 		pollInterval = parsed
 	}
 
 	listenAddr := "127.0.0.1:8080"
-	if v, ok := os.LookupEnv("REVIEWHUB_LISTEN_ADDR"); ok {
+	if v, ok := os.LookupEnv("MYGITPANEL_LISTEN_ADDR"); ok {
 		listenAddr = v
 	}
 
-	dbPath := "reviewhub.db"
-	if v, ok := os.LookupEnv("REVIEWHUB_DB_PATH"); ok {
+	dbPath := "mygitpanel.db"
+	if v, ok := os.LookupEnv("MYGITPANEL_DB_PATH"); ok {
 		dbPath = v
 	}
 
 	var githubTeams []string
-	if v, ok := os.LookupEnv("REVIEWHUB_GITHUB_TEAMS"); ok && v != "" {
+	if v, ok := os.LookupEnv("MYGITPANEL_GITHUB_TEAMS"); ok && v != "" {
 		for _, slug := range strings.Split(v, ",") {
 			slug = strings.TrimSpace(slug)
 			if slug != "" {

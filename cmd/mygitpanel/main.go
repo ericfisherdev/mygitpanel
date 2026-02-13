@@ -9,11 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	githubadapter "github.com/efisher/reviewhub/internal/adapter/driven/github"
-	sqliteadapter "github.com/efisher/reviewhub/internal/adapter/driven/sqlite"
-	httphandler "github.com/efisher/reviewhub/internal/adapter/driving/http"
-	"github.com/efisher/reviewhub/internal/application"
-	"github.com/efisher/reviewhub/internal/config"
+	githubadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
+	sqliteadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/sqlite"
+	httphandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/http"
+	"github.com/ericfisherdev/mygitpanel/internal/application"
+	"github.com/ericfisherdev/mygitpanel/internal/config"
 )
 
 func main() {
@@ -104,7 +104,7 @@ func run() error {
 	}()
 
 	// 8. Log startup complete.
-	slog.Info("reviewhub started",
+	slog.Info("mygitpanel started",
 		"listen_addr", cfg.ListenAddr,
 		"poll_interval", cfg.PollInterval,
 		"teams", cfg.GitHubTeams,

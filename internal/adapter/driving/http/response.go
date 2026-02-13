@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/efisher/reviewhub/internal/application"
-	"github.com/efisher/reviewhub/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/application"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
 // writeJSON marshals v to JSON and writes it to the response with the given

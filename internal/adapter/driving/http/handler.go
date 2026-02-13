@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/efisher/reviewhub/internal/application"
-	"github.com/efisher/reviewhub/internal/domain/model"
-	"github.com/efisher/reviewhub/internal/domain/port/driven"
+	"github.com/ericfisherdev/mygitpanel/internal/application"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 // Handler is the HTTP driving adapter that serves the REST API.
