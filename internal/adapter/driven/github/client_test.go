@@ -34,18 +34,18 @@ func newTestClient(t *testing.T, handler http.Handler) (*ghAdapter.Client, *http
 
 // prJSON is a helper struct for building GitHub API pull request responses.
 type prJSON struct {
-	Number   int        `json:"number"`
-	Title    string     `json:"title"`
-	State    string     `json:"state"`
-	Draft    bool       `json:"draft"`
-	HTMLURL  string     `json:"html_url"`
-	User     userJSON   `json:"user"`
-	Head     refJSON    `json:"head"`
-	Base     refJSON    `json:"base"`
-	Labels   []lblJSON  `json:"labels"`
-	Created  string     `json:"created_at"`
-	Updated  string     `json:"updated_at"`
-	MergedAt *string    `json:"merged_at,omitempty"`
+	Number   int       `json:"number"`
+	Title    string    `json:"title"`
+	State    string    `json:"state"`
+	Draft    bool      `json:"draft"`
+	HTMLURL  string    `json:"html_url"`
+	User     userJSON  `json:"user"`
+	Head     refJSON   `json:"head"`
+	Base     refJSON   `json:"base"`
+	Labels   []lblJSON `json:"labels"`
+	Created  string    `json:"created_at"`
+	Updated  string    `json:"updated_at"`
+	MergedAt *string   `json:"merged_at,omitempty"`
 }
 
 type userJSON struct {

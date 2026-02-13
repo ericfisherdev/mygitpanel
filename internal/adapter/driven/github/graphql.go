@@ -105,7 +105,7 @@ func (c *Client) FetchThreadResolution(ctx context.Context, repoFullName string,
 		slog.Warn("graphql: request failed", "error", err, "repo", repoFullName, "pr", prNumber)
 		return map[int64]bool{}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Warn("graphql: non-200 response", "status", resp.StatusCode, "repo", repoFullName, "pr", prNumber)

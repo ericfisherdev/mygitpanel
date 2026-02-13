@@ -1,3 +1,4 @@
+// Package driven defines secondary port interfaces for external adapters.
 package driven
 
 import (

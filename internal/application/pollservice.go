@@ -1,3 +1,4 @@
+// Package application contains use-case orchestration services.
 package application
 
 import (
@@ -54,7 +55,7 @@ func NewPollService(
 
 // Start begins the polling loop. It runs an immediate poll, then polls on the
 // configured interval. It also listens for manual refresh requests. Start blocks
-// until the context is cancelled.
+// until the context is canceled.
 func (s *PollService) Start(ctx context.Context) {
 	if err := s.pollAll(ctx); err != nil {
 		slog.Error("initial poll failed", "error", err)
@@ -80,7 +81,7 @@ func (s *PollService) Start(ctx context.Context) {
 
 // RefreshRepo triggers a manual refresh for a specific repository, bypassing
 // the polling interval. It blocks until the refresh completes or the context
-// is cancelled.
+// is canceled.
 func (s *PollService) RefreshRepo(ctx context.Context, repoFullName string) error {
 	done := make(chan error, 1)
 	req := refreshRequest{
@@ -210,9 +211,7 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 		if err != nil || storedPR == nil {
 			slog.Error("failed to retrieve PR for review fetch", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 		} else {
-			if err := s.fetchReviewData(ctx, *storedPR); err != nil {
-				slog.Error("review data fetch failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
-			}
+			s.fetchReviewData(ctx, *storedPR)
 		}
 	}
 
@@ -262,7 +261,7 @@ func IsReviewRequestedFrom(pr model.PullRequest, username string, teamSlugs []st
 // fetchReviewData fetches reviews, review comments, issue comments, and thread
 // resolution for a PR and stores them via ReviewStore. Each fetch step is
 // independent -- partial failures are logged but do not abort the overall operation.
-func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest) error {
+func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest) {
 	reviews, err := s.ghClient.FetchReviews(ctx, pr.RepoFullName, pr.Number)
 	if err != nil {
 		slog.Error("fetch reviews failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
@@ -317,8 +316,6 @@ func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest)
 		"review_comments", len(comments),
 		"issue_comments", len(issueComments),
 	)
-
-	return nil
 }
 
 // handleRefresh dispatches a manual refresh request.

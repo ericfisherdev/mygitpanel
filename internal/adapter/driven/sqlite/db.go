@@ -1,10 +1,11 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // SQLite driver registration.
 )
 
 // DB provides dual reader/writer database connections with WAL mode enabled.
@@ -18,7 +19,7 @@ type DB struct {
 
 // NewDB creates a new dual-connection SQLite database with WAL mode, busy timeout,
 // synchronous NORMAL, foreign keys enabled, and a 64MB cache.
-func NewDB(dbPath string) (*DB, error) {
+func NewDB(ctx context.Context, dbPath string) (*DB, error) {
 	dsn := fmt.Sprintf(
 		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-64000)",
 		dbPath,
@@ -30,21 +31,21 @@ func NewDB(dbPath string) (*DB, error) {
 	}
 	writer.SetMaxOpenConns(1)
 
-	if err := writer.Ping(); err != nil {
-		writer.Close()
+	if err := writer.PingContext(ctx); err != nil {
+		_ = writer.Close()
 		return nil, fmt.Errorf("ping writer: %w", err)
 	}
 
 	reader, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		writer.Close()
+		_ = writer.Close()
 		return nil, fmt.Errorf("open reader: %w", err)
 	}
 	reader.SetMaxOpenConns(4)
 
-	if err := reader.Ping(); err != nil {
-		reader.Close()
-		writer.Close()
+	if err := reader.PingContext(ctx); err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
 		return nil, fmt.Errorf("ping reader: %w", err)
 	}
 

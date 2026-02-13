@@ -10,7 +10,7 @@ import (
 )
 
 // writeJSON marshals v to JSON and writes it to the response with the given
-// status code. If marshalling fails, a 500 error is written instead.
+// status code. If marshaling fails, a 500 error is written instead.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -37,32 +37,32 @@ type errorResponse struct {
 
 // PRResponse is the JSON representation of a pull request.
 type PRResponse struct {
-	Number       int      `json:"number"`
-	Repository   string   `json:"repository"`
-	Title        string   `json:"title"`
-	Author       string   `json:"author"`
-	Status       string   `json:"status"`
-	IsDraft      bool     `json:"is_draft"`
-	NeedsReview  bool     `json:"needs_review"`
-	URL          string   `json:"url"`
-	Branch       string   `json:"branch"`
-	BaseBranch   string   `json:"base_branch"`
-	Labels       []string `json:"labels"`
-	OpenedAt     string   `json:"opened_at"`
-	UpdatedAt    string   `json:"updated_at"`
+	Number      int      `json:"number"`
+	Repository  string   `json:"repository"`
+	Title       string   `json:"title"`
+	Author      string   `json:"author"`
+	Status      string   `json:"status"`
+	IsDraft     bool     `json:"is_draft"`
+	NeedsReview bool     `json:"needs_review"`
+	URL         string   `json:"url"`
+	Branch      string   `json:"branch"`
+	BaseBranch  string   `json:"base_branch"`
+	Labels      []string `json:"labels"`
+	OpenedAt    string   `json:"opened_at"`
+	UpdatedAt   string   `json:"updated_at"`
 
 	// Enriched review data -- populated only on single PR detail endpoint.
-	HeadSHA              string                 `json:"head_sha"`
-	Reviews              []ReviewResponse       `json:"reviews"`
-	Threads              []ReviewThreadResponse `json:"threads"`
-	IssueComments        []IssueCommentResponse `json:"issue_comments"`
-	Suggestions          []SuggestionResponse   `json:"suggestions"`
-	ReviewStatus         string                 `json:"review_status"`
-	HasBotReview         bool                   `json:"has_bot_review"`
-	HasCoderabbitReview  bool                   `json:"has_coderabbit_review"`
-	AwaitingCoderabbit   bool                   `json:"awaiting_coderabbit"`
-	ResolvedThreads      int                    `json:"resolved_threads"`
-	UnresolvedThreads    int                    `json:"unresolved_threads"`
+	HeadSHA             string                 `json:"head_sha"`
+	Reviews             []ReviewResponse       `json:"reviews"`
+	Threads             []ReviewThreadResponse `json:"threads"`
+	IssueComments       []IssueCommentResponse `json:"issue_comments"`
+	Suggestions         []SuggestionResponse   `json:"suggestions"`
+	ReviewStatus        string                 `json:"review_status"`
+	HasBotReview        bool                   `json:"has_bot_review"`
+	HasCoderabbitReview bool                   `json:"has_coderabbit_review"`
+	AwaitingCoderabbit  bool                   `json:"awaiting_coderabbit"`
+	ResolvedThreads     int                    `json:"resolved_threads"`
+	UnresolvedThreads   int                    `json:"unresolved_threads"`
 }
 
 // ReviewResponse is the JSON representation of a single review.

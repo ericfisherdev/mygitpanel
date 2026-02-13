@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 )
@@ -12,7 +13,7 @@ func setupTestDB(t *testing.T) *DB {
 
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 
-	db, err := NewDB(dbPath)
+	db, err := NewDB(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("create test db: %v", err)
 	}

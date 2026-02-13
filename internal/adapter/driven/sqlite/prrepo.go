@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
@@ -115,7 +116,7 @@ func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number in
 	`
 
 	pr, err := scanPR(r.db.Reader.QueryRowContext(ctx, query, repoFullName, number))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

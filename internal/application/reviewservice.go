@@ -12,7 +12,7 @@ import (
 )
 
 // suggestionPattern matches GitHub suggestion blocks in comment bodies.
-// Example: ```suggestion\n<proposed code>\n```
+// Example: ```suggestion\n<proposed code>\n```.
 var suggestionPattern = regexp.MustCompile("(?s)`{3,}suggestion[^\n]*\n(.*?)\n`{3,}")
 
 // CommentThread groups a root review comment with its replies.

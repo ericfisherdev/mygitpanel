@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -41,7 +42,7 @@ func run() error {
 	defer stop()
 
 	// 3. Open database (dual reader/writer with WAL mode).
-	db, err := sqliteadapter.NewDB(cfg.DBPath)
+	db, err := sqliteadapter.NewDB(ctx, cfg.DBPath)
 	if err != nil {
 		return err
 	}
@@ -97,7 +98,7 @@ func run() error {
 
 	go func() {
 		slog.Info("http server starting", "addr", cfg.ListenAddr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("http server error", "error", err)
 		}
 	}()

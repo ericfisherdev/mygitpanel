@@ -1,3 +1,4 @@
+// Package sqlite implements the driven port interfaces using SQLite.
 package sqlite
 
 import (

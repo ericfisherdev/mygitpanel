@@ -11,7 +11,7 @@ type ReviewComment struct {
 	Body        string
 	Path        string
 	Line        int
-	StartLine   int    // Multi-line comment range start; 0 if single-line.
+	StartLine   int // Multi-line comment range start; 0 if single-line.
 	Side        string
 	SubjectType string // From GitHub: "line" or "file".
 	DiffHunk    string
