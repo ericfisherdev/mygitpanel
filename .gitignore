@@ -1,1 +1,32 @@
-.planning/
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+reviewhub
+
+# Test binary
+*.test
+
+# Go build cache/output
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/settings.local.json
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal

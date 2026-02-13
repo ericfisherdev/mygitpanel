@@ -125,18 +125,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DISC-01 | Phase 2 | Pending |
-| DISC-02 | Phase 2 | Pending |
-| DISC-03 | Phase 2 | Pending |
-| DISC-04 | Phase 2 | Pending |
-| DISC-05 | Phase 2 | Pending |
-| STAT-01 | Phase 3 | Pending |
+| DISC-01 | Phase 2 | Complete |
+| DISC-02 | Phase 2 | Complete |
+| DISC-03 | Phase 2 | Complete |
+| DISC-04 | Phase 2 | Complete |
+| DISC-05 | Phase 2 | Complete |
+| STAT-01 | Phase 3 | Complete |
 | STAT-02 | Phase 4 | Pending |
 | STAT-03 | Phase 5 | Pending |
 | STAT-04 | Phase 5 | Pending |
 | STAT-05 | Phase 5 | Pending |
 | STAT-06 | Phase 4 | Pending |
-| STAT-07 | Phase 3 | Pending |
+| STAT-07 | Phase 3 | Complete |
 | REVW-01 | Phase 4 | Pending |
 | REVW-02 | Phase 4 | Pending |
 | REVW-03 | Phase 4 | Pending |
@@ -152,28 +152,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CICD-01 | Phase 5 | Pending |
 | CICD-02 | Phase 5 | Pending |
 | CICD-03 | Phase 5 | Pending |
-| REPO-01 | Phase 3 | Pending |
-| REPO-02 | Phase 3 | Pending |
-| REPO-03 | Phase 3 | Pending |
+| REPO-01 | Phase 3 | Complete |
+| REPO-02 | Phase 3 | Complete |
+| REPO-03 | Phase 3 | Complete |
 | REPO-04 | Phase 4 | Pending |
-| POLL-01 | Phase 2 | Pending |
-| POLL-02 | Phase 2 | Pending |
+| POLL-01 | Phase 2 | Complete |
+| POLL-02 | Phase 2 | Complete |
 | POLL-03 | Phase 6 | Pending |
-| POLL-04 | Phase 2 | Pending |
-| POLL-05 | Phase 2 | Pending |
-| POLL-06 | Phase 2 | Pending |
-| POLL-07 | Phase 2 | Pending |
-| INFR-01 | Phase 1 | Pending |
-| INFR-02 | Phase 1 | Pending |
+| POLL-04 | Phase 2 | Complete |
+| POLL-05 | Phase 2 | Complete |
+| POLL-06 | Phase 2 | Complete |
+| POLL-07 | Phase 2 | Complete |
+| INFR-01 | Phase 1 | Complete |
+| INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 6 | Pending |
 | INFR-04 | Phase 6 | Pending |
-| INFR-05 | Phase 1 | Pending |
-| INFR-06 | Phase 1 | Pending |
-| INFR-07 | Phase 1 | Pending |
-| API-01 | Phase 3 | Pending |
-| API-02 | Phase 3 | Pending |
-| API-03 | Phase 3 | Pending |
-| API-04 | Phase 3 | Pending |
+| INFR-05 | Phase 1 | Complete |
+| INFR-06 | Phase 1 | Complete |
+| INFR-07 | Phase 1 | Complete |
+| API-01 | Phase 3 | Complete |
+| API-02 | Phase 3 | Complete |
+| API-03 | Phase 3 | Complete |
+| API-04 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 49 total

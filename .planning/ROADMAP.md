@@ -12,9 +12,9 @@ ReviewHub delivers a Dockerized Go API that tracks GitHub pull requests and form
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Domain model, SQLite persistence, configuration, and project skeleton
-- [ ] **Phase 2: GitHub Integration** - Polling engine, GitHub API adapter, and PR discovery
-- [ ] **Phase 3: Core API** - HTTP endpoints for PR listing, repository management, and health check
+- [x] **Phase 1: Foundation** - Domain model, SQLite persistence, configuration, and project skeleton
+- [x] **Phase 2: GitHub Integration** - Polling engine, GitHub API adapter, and PR discovery
+- [x] **Phase 3: Core API** - HTTP endpoints for PR listing, repository management, and health check
 - [ ] **Phase 4: Review Intelligence** - Comment formatting with code context, threading, and bot detection
 - [ ] **Phase 5: PR Health Signals** - CI/CD status, staleness tracking, diff stats, and merge conflict detection
 - [ ] **Phase 6: Docker Deployment** - Containerization, adaptive polling, and production readiness
@@ -31,12 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Application shuts down gracefully on SIGTERM/SIGINT -- drains in-flight work, closes database connection, and exits cleanly
   4. Domain model entities (PullRequest, Repository, Review, ReviewComment, CheckStatus) exist as pure Go structs with zero external dependencies
   5. Port interfaces (PRStore, RepoStore, GitHubClient) are defined and the SQLite adapter implements the store ports with passing tests
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md -- Go module init, domain model entities, port interfaces, and config loader with tests
+- [ ] 01-02-PLAN.md -- SQLite dual-connection wrapper, embedded migrations, PRRepo and RepoRepo adapters with tests
+- [ ] 01-03-PLAN.md -- Composition root (main.go) wiring config, database, migrations, and graceful shutdown
 
 ### Phase 2: GitHub Integration
 **Goal**: The system fetches PR data from GitHub for configured repositories, respects rate limits, handles pagination, and persists discovered PRs to SQLite
@@ -48,12 +48,11 @@ Plans:
   3. System correctly distinguishes draft PRs from ready PRs
   4. System tracks GitHub API rate limit budget, uses conditional requests (ETags) to avoid consuming limits on unchanged data, uses `updated_at` timestamps to skip re-processing, and handles pagination for all list endpoints
   5. A manual refresh can be triggered for a specific repository or PR, bypassing the polling interval
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md -- GitHub API adapter with go-github v82, transport stack (ETag caching + rate limiting), pagination, and domain model mapping
+- [ ] 02-02-PLAN.md -- Polling engine with PR discovery (author/reviewer/team filtering), deduplication, stale cleanup, manual refresh, and composition root wiring
 
 ### Phase 3: Core API
 **Goal**: PR data and repository configuration are accessible via structured HTTP endpoints that a CLI agent can consume, with basic PR metadata on every response
@@ -65,12 +64,11 @@ Plans:
   3. GET endpoint returns only PRs needing attention (changes requested or needs review)
   4. POST/DELETE/GET endpoints allow adding, removing, and listing watched repositories at runtime without restart
   5. Health check endpoint returns application status and the API is accessible on localhost only
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md -- Add needs_review persistence: domain model field, port method, SQLite migration, adapter implementation, and poll service integration
+- [ ] 03-02-PLAN.md -- HTTP handler infrastructure (DTOs, middleware, 7 endpoints), table-driven tests, and composition root wiring with graceful shutdown
 
 ### Phase 4: Review Intelligence
 **Goal**: Review comments are formatted with targeted code context, threaded into conversations, and enriched with bot detection -- enabling an AI agent to read a comment and generate a working fix
@@ -128,9 +126,9 @@ Note: Phases 4 and 5 are independent of each other (both depend on Phase 3) but 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
-| 2. GitHub Integration | 0/3 | Not started | - |
-| 3. Core API | 0/3 | Not started | - |
+| 1. Foundation | 3/3 | Complete ✓ | 2026-02-10 |
+| 2. GitHub Integration | 2/2 | Complete ✓ | 2026-02-11 |
+| 3. Core API | 2/2 | Complete ✓ | 2026-02-11 |
 | 4. Review Intelligence | 0/4 | Not started | - |
 | 5. PR Health Signals | 0/3 | Not started | - |
 | 6. Docker Deployment | 0/2 | Not started | - |
