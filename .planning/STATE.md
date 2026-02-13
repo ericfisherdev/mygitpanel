@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 
 ## Current Position
 
-Phase: 3 of 6 (Core API)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-11 - Completed 03-02-PLAN.md
+Phase: 4 of 6 (Review Intelligence)
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-02-13 - Completed 04-01-PLAN.md
 
-Progress: [████████░░░░░░░░░] ~50%
+Progress: [█████████░░░░░░░░] ~53%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 7min
-- Total execution time: 0.77 hours
+- Total execution time: 0.85 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [████████░░░░░░░░░] ~50%
 | 01-foundation | 3/3 | 21min | 7min |
 | 02-github-integration | 2/2 | 16min | 8min |
 | 03-core-api | 2/2 | 12min | 6min |
+| 04-review-intelligence | 1/4 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (8min), 02-02 (8min), 03-01 (5min), 03-02 (7min)
+- Last 5 plans: 02-02 (8min), 03-01 (5min), 03-02 (7min), 04-01 (5min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -73,6 +74,10 @@ Recent decisions affecting current work:
 - [03-02]: Empty arrays (not null) for labels, reviews, comments in JSON responses
 - [03-02]: Fire-and-forget goroutine with context.Background() for async refresh on AddRepo
 - [03-02]: Recovery middleware innermost, logging outermost for panic-safe request logging
+- [04-01]: GitHub review ID used as primary key (not autoincrement) for idempotent upsert on reviews table
+- [04-01]: bot_config table seeded with 3 defaults: coderabbitai, github-actions[bot], copilot[bot]
+- [04-01]: CommentType enum added for inline/general/file distinction
+- [04-01]: in_reply_to_id uses nullable INTEGER with sql.NullInt64 for proper NULL handling
 
 ### Pending Todos
 
@@ -85,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-11T18:49:35Z
-Stopped at: Completed 03-02-PLAN.md
-Resume file: None
+Last session: 2026-02-13T05:04:56Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-review-intelligence/04-02-PLAN.md
