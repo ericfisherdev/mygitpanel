@@ -25,6 +25,7 @@ type PollService struct {
 	prStore     driven.PRStore
 	repoStore   driven.RepoStore
 	reviewStore driven.ReviewStore
+	checkStore  driven.CheckStore
 	username    string
 	teamSlugs   []string
 	interval    time.Duration
@@ -37,6 +38,7 @@ func NewPollService(
 	prStore driven.PRStore,
 	repoStore driven.RepoStore,
 	reviewStore driven.ReviewStore,
+	checkStore driven.CheckStore,
 	username string,
 	teamSlugs []string,
 	interval time.Duration,
@@ -46,6 +48,7 @@ func NewPollService(
 		prStore:     prStore,
 		repoStore:   repoStore,
 		reviewStore: reviewStore,
+		checkStore:  checkStore,
 		username:    username,
 		teamSlugs:   teamSlugs,
 		interval:    interval,
@@ -205,13 +208,14 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 			continue
 		}
 
-		// Fetch review data for changed PRs. We need the stored PR's ID
-		// (auto-increment) for foreign key references in review tables.
+		// Fetch review and health data for changed PRs. We need the stored PR's ID
+		// (auto-increment) for foreign key references in review/check tables.
 		storedPR, err := s.prStore.GetByNumber(ctx, pr.RepoFullName, pr.Number)
 		if err != nil || storedPR == nil {
 			slog.Error("failed to retrieve PR for review fetch", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 		} else {
 			s.fetchReviewData(ctx, *storedPR)
+			s.fetchHealthData(ctx, *storedPR)
 		}
 	}
 
@@ -315,6 +319,76 @@ func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest)
 		"reviews", len(reviews),
 		"review_comments", len(comments),
 		"issue_comments", len(issueComments),
+	)
+}
+
+// fetchHealthData fetches check runs, combined status, PR detail, and required
+// status checks for a PR and persists them. Each fetch step is independent --
+// partial failures are logged but do not abort the overall operation.
+func (s *PollService) fetchHealthData(ctx context.Context, pr model.PullRequest) {
+	// Step 1: Fetch PR detail (diff stats + mergeable status).
+	detail, err := s.ghClient.FetchPRDetail(ctx, pr.RepoFullName, pr.Number)
+	if err != nil {
+		slog.Error("fetch PR detail failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+	} else if detail != nil {
+		pr.Additions = detail.Additions
+		pr.Deletions = detail.Deletions
+		pr.ChangedFiles = detail.ChangedFiles
+		pr.MergeableStatus = detail.Mergeable
+		if err := s.prStore.Upsert(ctx, pr); err != nil {
+			slog.Error("upsert PR detail failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+		}
+	}
+
+	// Step 2: Fetch check runs.
+	checkRuns, err := s.ghClient.FetchCheckRuns(ctx, pr.RepoFullName, pr.HeadSHA)
+	if err != nil {
+		slog.Error("fetch check runs failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+		return // Skip remaining check processing without check runs.
+	}
+
+	// Step 3: Fetch combined status (may fail independently).
+	var combinedStatus *model.CombinedStatus
+	combinedStatus, err = s.ghClient.FetchCombinedStatus(ctx, pr.RepoFullName, pr.HeadSHA)
+	if err != nil {
+		slog.Error("fetch combined status failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+		// Continue with nil combined status.
+	}
+
+	// Step 4: Fetch required status checks from branch protection.
+	var requiredContexts []string
+	requiredContexts, err = s.ghClient.FetchRequiredStatusChecks(ctx, pr.RepoFullName, pr.BaseBranch)
+	if err != nil {
+		slog.Error("fetch required status checks failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+		// Continue with nil requiredContexts -- all checks default to not required.
+	}
+
+	// Step 5: Mark required checks.
+	markRequiredChecks(checkRuns, requiredContexts)
+
+	// Step 6: Set PRID on all check runs.
+	for i := range checkRuns {
+		checkRuns[i].PRID = pr.ID
+	}
+
+	// Step 7: Persist check runs (full replacement).
+	if err := s.checkStore.ReplaceCheckRunsForPR(ctx, pr.ID, checkRuns); err != nil {
+		slog.Error("replace check runs failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+	}
+
+	// Step 8: Compute and persist combined CI status.
+	ciStatus := computeCombinedCIStatus(checkRuns, combinedStatus)
+	pr.CIStatus = ciStatus
+	if err := s.prStore.Upsert(ctx, pr); err != nil {
+		slog.Error("upsert CI status failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
+	}
+
+	slog.Debug("health data fetched",
+		"repo", pr.RepoFullName,
+		"pr", pr.Number,
+		"check_runs", len(checkRuns),
+		"ci_status", string(ciStatus),
+		"mergeable_status", string(pr.MergeableStatus),
 	)
 }
 

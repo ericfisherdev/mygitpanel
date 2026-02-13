@@ -63,6 +63,7 @@ func run() error {
 	prStore := sqliteadapter.NewPRRepo(db)
 	repoStore := sqliteadapter.NewRepoRepo(db)
 	reviewStore := sqliteadapter.NewReviewRepo(db)
+	checkStore := sqliteadapter.NewCheckRepo(db)
 	botConfigStore := sqliteadapter.NewBotConfigRepo(db)
 
 	// 6. Create GitHub client.
@@ -74,6 +75,7 @@ func run() error {
 		prStore,
 		repoStore,
 		reviewStore,
+		checkStore,
 		cfg.GitHubUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,
