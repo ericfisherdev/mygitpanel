@@ -76,9 +76,9 @@ Each task was committed atomically:
 ## Files Created/Modified
 - `internal/application/reviewservice.go` - ReviewService with GetPRReviewSummary, CommentThread/Suggestion/PRReviewSummary types, all enrichment helper functions
 - `internal/application/reviewservice_test.go` - 16 tests covering threading, suggestions, bot detection, nitpick detection, outdated detection, review status aggregation, full integration
-- `internal/application/pollservice.go` - Added ReviewStore dep, fetchReviewData method, review data fetch after PR upsert
-- `internal/application/pollservice_test.go` - Updated mocks for new constructor params, added 2 new tests for review data fetching and skip behavior
-- `cmd/mygitpanel/main.go` - Wired ReviewRepo and BotConfigRepo into PollService constructor
+- `internal/application/pollservice.go` - Added ReviewStore as struct field and constructor param, fetchReviewData method for review data fetch after PR upsert
+- `internal/application/pollservice_test.go` - Added mockReviewStore, updated constructor calls, added 2 new tests for review data fetching and skip behavior
+- `cmd/mygitpanel/main.go` - Wired ReviewRepo into PollService constructor, BotConfigRepo into ReviewService and Handler
 
 ## Decisions Made
 - Enrichment helpers are unexported package-level functions (not methods on ReviewService) for direct testability within the same package
