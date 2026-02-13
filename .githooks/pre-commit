@@ -44,9 +44,13 @@ echo "    ✓ build passed"
 echo ""
 echo ">>> [4/5] Markdown Lint"
 
-echo "    Running markdownlint..."
-markdownlint '**/*.md' --ignore node_modules --ignore .planning 2>/dev/null || true
-echo "    ✓ markdownlint passed"
+if command -v markdownlint &>/dev/null; then
+    echo "    Running markdownlint..."
+    markdownlint '**/*.md' --ignore node_modules --ignore .planning
+    echo "    ✓ markdownlint passed"
+else
+    echo "    ⏭ markdownlint not installed, skipping"
+fi
 
 # 5. Security Scan - same as CI Security Scan job
 echo ""
