@@ -109,14 +109,14 @@ Plans:
 **Depends on**: Phases 4 and 5
 **Requirements**: INFR-03, INFR-04, POLL-03
 **Success Criteria** (what must be TRUE):
-  1. Application runs in a Docker container built via multi-stage Alpine build with no CGO dependency, and SQLite data persists across container restarts via Docker volume
+  1. Application runs in a Docker container built via multi-stage scratch build with no CGO dependency, and SQLite data persists across container restarts via Docker volume
   2. Adaptive polling adjusts frequency based on PR activity -- recently active PRs are polled more frequently, stale ones less -- reducing rate limit consumption
   3. `docker compose up` starts the full application with a single command, and the API is accessible on localhost
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md -- Docker containerization: multi-stage scratch Dockerfile, docker-compose.yml with volume persistence, healthcheck binary, CA cert embedding, .env template
+- [ ] 06-02-PLAN.md -- Adaptive polling engine: activity tier classification, per-repo scheduling, replacing fixed-interval ticker with activity-aware polling
 
 ## Progress
 
