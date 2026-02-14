@@ -26,6 +26,11 @@ Thumbs.db
 # Claude Code
 .claude/settings.local.json
 
+# Environment files (secrets)
+.env
+.env.local
+.env.production
+
 # SQLite databases
 *.db
 *.db-shm

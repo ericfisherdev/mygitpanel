@@ -1,0 +1,11 @@
+.git
+.gitignore
+.planning
+.claude
+*.md
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+CLAUDE.md
