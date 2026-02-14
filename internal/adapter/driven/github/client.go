@@ -36,7 +36,7 @@ type Client struct {
 //  3. go-github (GitHub REST API client with PAT auth)
 func NewClient(token, username string) *Client {
 	cacheTransport := httpcache.NewMemoryCacheTransport()
-	rateLimitClient := github_ratelimit.NewClient(cacheTransport, nil)
+	rateLimitClient := github_ratelimit.NewClient(cacheTransport)
 	client := gh.NewClient(rateLimitClient).WithAuthToken(token)
 
 	return &Client{
