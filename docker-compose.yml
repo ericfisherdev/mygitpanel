@@ -1,0 +1,18 @@
+services:
+  mygitpanel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - mygitpanel-data:/data
+    env_file:
+      - .env
+    environment:
+      MYGITPANEL_DB_PATH: /data/mygitpanel.db
+      MYGITPANEL_LISTEN_ADDR: "0.0.0.0:8080"
+    restart: unless-stopped
+
+volumes:
+  mygitpanel-data:
