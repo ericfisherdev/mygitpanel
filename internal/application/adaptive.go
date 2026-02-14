@@ -82,6 +82,21 @@ func classifyActivity(lastActivity time.Time) ActivityTier {
 	}
 }
 
+// repoSchedule tracks per-repository adaptive polling state.
+type repoSchedule struct {
+	tier       ActivityTier
+	nextPollAt time.Time
+	lastPolled time.Time
+}
+
+// ScheduleInfo is an exported view of a repo's adaptive polling schedule,
+// used for observability and testing.
+type ScheduleInfo struct {
+	Tier       ActivityTier
+	NextPollAt time.Time
+	LastPolled time.Time
+}
+
 // freshestActivity finds the most recent LastActivityAt across all PRs.
 // Returns the zero time if the slice is empty, which classifies as TierStale.
 func freshestActivity(prs []model.PullRequest) time.Time {

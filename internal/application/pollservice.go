@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
@@ -36,6 +37,13 @@ type PollService struct {
 	// so multiple PRs targeting the same base branch reuse a single API call.
 	// Cleared at the start of each poll cycle.
 	branchProtectionCache map[string][]string
+
+	// schedulesMu protects the schedules map from concurrent access.
+	// The Start goroutine writes schedules; Schedules() may read from another goroutine.
+	schedulesMu sync.RWMutex
+	// schedules holds per-repository adaptive polling state. Each repo is
+	// classified into an activity tier that determines its polling frequency.
+	schedules map[string]repoSchedule
 }
 
 // NewPollService creates a new PollService with all required dependencies.
@@ -59,18 +67,26 @@ func NewPollService(
 		teamSlugs:   teamSlugs,
 		interval:    interval,
 		refreshCh:   make(chan refreshRequest),
+		schedules:   make(map[string]repoSchedule),
 	}
 }
 
-// Start begins the polling loop. It runs an immediate poll, then polls on the
-// configured interval. It also listens for manual refresh requests. Start blocks
-// until the context is canceled.
+// Start begins the polling loop. It runs an immediate full poll to initialize
+// schedules, then uses a 1-minute resolution ticker with per-repo adaptive
+// scheduling. It also listens for manual refresh requests. Start blocks until
+// the context is canceled.
 func (s *PollService) Start(ctx context.Context) {
+	// Initial poll fetches all repos and initializes adaptive schedules.
 	if err := s.pollAll(ctx); err != nil {
 		slog.Error("initial poll failed", "error", err)
 	}
 
-	ticker := time.NewTicker(s.interval)
+	// Initialize schedules for all repos after the initial full poll.
+	s.initializeSchedules(ctx)
+
+	// Use 1-minute resolution ticker. Per-repo adaptive schedules determine
+	// which repos actually get polled on each tick.
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -79,13 +95,28 @@ func (s *PollService) Start(ctx context.Context) {
 			slog.Info("poll service stopped")
 			return
 		case <-ticker.C:
-			if err := s.pollAll(ctx); err != nil {
-				slog.Error("poll cycle failed", "error", err)
-			}
+			s.pollDueRepos(ctx)
 		case req := <-s.refreshCh:
 			req.done <- s.handleRefresh(ctx, req)
 		}
 	}
+}
+
+// Schedules returns a snapshot of the current adaptive polling schedules
+// for all tracked repos. Used for observability and testing.
+func (s *PollService) Schedules() map[string]ScheduleInfo {
+	s.schedulesMu.RLock()
+	defer s.schedulesMu.RUnlock()
+
+	result := make(map[string]ScheduleInfo, len(s.schedules))
+	for repo, sched := range s.schedules {
+		result[repo] = ScheduleInfo{
+			Tier:       sched.tier,
+			NextPollAt: sched.nextPollAt,
+			LastPolled: sched.lastPolled,
+		}
+	}
+	return result
 }
 
 // RefreshRepo triggers a manual refresh for a specific repository, bypassing
@@ -160,6 +191,8 @@ func (s *PollService) pollAll(ctx context.Context) error {
 		if err := s.pollRepo(ctx, repo.FullName); err != nil {
 			slog.Error("repo poll failed", "repo", repo.FullName, "error", err)
 			pollErrors++
+		} else {
+			s.updateSchedule(ctx, repo.FullName)
 		}
 	}
 
@@ -406,10 +439,96 @@ func (s *PollService) fetchHealthData(ctx context.Context, pr model.PullRequest)
 	)
 }
 
-// handleRefresh dispatches a manual refresh request.
+// initializeSchedules sets up adaptive schedules for all repos after the
+// initial full poll. This ensures every repo has a tier assignment before
+// the adaptive ticker starts.
+func (s *PollService) initializeSchedules(ctx context.Context) {
+	repos, err := s.repoStore.ListAll(ctx)
+	if err != nil {
+		slog.Error("failed to list repos for schedule init", "error", err)
+		return
+	}
+
+	for _, repo := range repos {
+		s.updateSchedule(ctx, repo.FullName)
+	}
+}
+
+// updateSchedule recalculates the activity tier and next poll time for a repo
+// based on its freshest PR activity.
+func (s *PollService) updateSchedule(ctx context.Context, repoFullName string) {
+	prs, err := s.prStore.GetByRepository(ctx, repoFullName)
+	if err != nil {
+		slog.Error("failed to get PRs for schedule update", "repo", repoFullName, "error", err)
+		return
+	}
+
+	latest := freshestActivity(prs)
+	tier := classifyActivity(latest)
+	nextPoll := time.Now().Add(tierInterval(tier))
+
+	s.schedulesMu.Lock()
+	s.schedules[repoFullName] = repoSchedule{
+		tier:       tier,
+		nextPollAt: nextPoll,
+		lastPolled: time.Now(),
+	}
+	s.schedulesMu.Unlock()
+
+	slog.Info("repo tier updated",
+		"repo", repoFullName,
+		"tier", tier.String(),
+		"next_poll", nextPoll.Format(time.RFC3339),
+	)
+}
+
+// pollDueRepos checks each repo's adaptive schedule and polls only those
+// that are due. New repos without a schedule are polled immediately.
+func (s *PollService) pollDueRepos(ctx context.Context) {
+	// Reset per-cycle branch protection cache.
+	s.branchProtectionCache = make(map[string][]string)
+
+	repos, err := s.repoStore.ListAll(ctx)
+	if err != nil {
+		slog.Error("failed to list repos for adaptive poll", "error", err)
+		return
+	}
+
+	var polled int
+	for _, repo := range repos {
+		if ctx.Err() != nil {
+			return
+		}
+
+		s.schedulesMu.RLock()
+		schedule, exists := s.schedules[repo.FullName]
+		s.schedulesMu.RUnlock()
+
+		if exists && time.Now().Before(schedule.nextPollAt) {
+			continue // Not due yet.
+		}
+
+		if err := s.pollRepo(ctx, repo.FullName); err != nil {
+			slog.Error("adaptive repo poll failed", "repo", repo.FullName, "error", err)
+		}
+		polled++
+
+		s.updateSchedule(ctx, repo.FullName)
+	}
+
+	slog.Info("adaptive poll cycle",
+		"repos_checked", len(repos),
+		"repos_polled", polled,
+	)
+}
+
+// handleRefresh dispatches a manual refresh request. After polling, the repo's
+// adaptive schedule is recalculated based on fresh activity data.
 func (s *PollService) handleRefresh(ctx context.Context, req refreshRequest) error {
 	if req.repoFullName != "" {
-		return s.pollRepo(ctx, req.repoFullName)
+		err := s.pollRepo(ctx, req.repoFullName)
+		s.updateSchedule(ctx, req.repoFullName)
+		return err
 	}
 	return s.pollAll(ctx)
 }
