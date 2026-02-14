@@ -664,3 +664,167 @@ func TestPollRepo_SkipsReviewDataForUnchangedPRs(t *testing.T) {
 	assert.False(t, fetchReviewsCalled, "FetchReviews should NOT be called for unchanged PR")
 	assert.Empty(t, reviewStore.upsertedReviews, "no reviews should be upserted for unchanged PR")
 }
+
+// TestAdaptiveScheduling verifies that after pollAll, schedules are populated
+// with correct tiers based on PR activity ages.
+func TestAdaptiveScheduling(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+
+	// Two repos: one with recent activity (hot), one with old activity (stale).
+	ghClient := &mockGitHubClient{
+		fetchPRs: func(_ context.Context, repoFullName string) ([]model.PullRequest, error) {
+			switch repoFullName {
+			case "org/hot-repo":
+				return []model.PullRequest{
+					{
+						Number:         1,
+						Author:         "testuser",
+						RepoFullName:   "org/hot-repo",
+						Status:         model.PRStatusOpen,
+						UpdatedAt:      now,
+						LastActivityAt: now.Add(-10 * time.Minute), // 10 min ago -> hot
+					},
+				}, nil
+			case "org/stale-repo":
+				return []model.PullRequest{
+					{
+						Number:         2,
+						Author:         "testuser",
+						RepoFullName:   "org/stale-repo",
+						Status:         model.PRStatusOpen,
+						UpdatedAt:      now,
+						LastActivityAt: now.Add(-10 * 24 * time.Hour), // 10 days ago -> stale
+					},
+				}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+
+	// mockPRStore that returns different PRs per repo for GetByRepository.
+	prStore := &adaptiveMockPRStore{
+		prsByRepo: map[string][]model.PullRequest{
+			"org/hot-repo": {
+				{
+					Number:         1,
+					Author:         "testuser",
+					RepoFullName:   "org/hot-repo",
+					Status:         model.PRStatusOpen,
+					UpdatedAt:      now,
+					LastActivityAt: now.Add(-10 * time.Minute),
+				},
+			},
+			"org/stale-repo": {
+				{
+					Number:         2,
+					Author:         "testuser",
+					RepoFullName:   "org/stale-repo",
+					Status:         model.PRStatusOpen,
+					UpdatedAt:      now,
+					LastActivityAt: now.Add(-10 * 24 * time.Hour),
+				},
+			},
+		},
+	}
+
+	repoStore := &mockRepoStore{
+		repos: []model.Repository{
+			{FullName: "org/hot-repo"},
+			{FullName: "org/stale-repo"},
+		},
+	}
+
+	svc := application.NewPollService(
+		ghClient, prStore, repoStore,
+		newMockReviewStore(), newMockCheckStore(),
+		"testuser", nil, 5*time.Minute,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		svc.Start(ctx)
+		close(done)
+	}()
+
+	// Let initial poll + schedule init complete.
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify schedules via the Schedules() accessor.
+	schedules := svc.Schedules()
+	require.Len(t, schedules, 2, "should have schedules for both repos")
+
+	hotSchedule, ok := schedules["org/hot-repo"]
+	require.True(t, ok, "hot-repo should have a schedule")
+	assert.Equal(t, application.TierHot, hotSchedule.Tier, "hot-repo should be TierHot")
+
+	staleSchedule, ok := schedules["org/stale-repo"]
+	require.True(t, ok, "stale-repo should have a schedule")
+	assert.Equal(t, application.TierStale, staleSchedule.Tier, "stale-repo should be TierStale")
+
+	cancel()
+	<-done
+}
+
+// adaptiveMockPRStore extends mockPRStore with per-repo PR lookup support.
+type adaptiveMockPRStore struct {
+	mu        sync.Mutex
+	prsByRepo map[string][]model.PullRequest
+	upserts   []upsertCall
+	deletes   []deleteCall
+}
+
+func (m *adaptiveMockPRStore) Upsert(_ context.Context, pr model.PullRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.upserts = append(m.upserts, upsertCall{PR: pr})
+	// Update the stored PRs so subsequent GetByRepository calls reflect changes.
+	prs := m.prsByRepo[pr.RepoFullName]
+	for i, stored := range prs {
+		if stored.Number == pr.Number {
+			prs[i] = pr
+			m.prsByRepo[pr.RepoFullName] = prs
+			return nil
+		}
+	}
+	m.prsByRepo[pr.RepoFullName] = append(m.prsByRepo[pr.RepoFullName], pr)
+	return nil
+}
+
+func (m *adaptiveMockPRStore) GetByRepository(_ context.Context, repoFullName string) ([]model.PullRequest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.prsByRepo[repoFullName], nil
+}
+
+func (m *adaptiveMockPRStore) GetByStatus(_ context.Context, _ model.PRStatus) ([]model.PullRequest, error) {
+	return nil, nil
+}
+
+func (m *adaptiveMockPRStore) GetByNumber(_ context.Context, repoFullName string, number int) (*model.PullRequest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, pr := range m.prsByRepo[repoFullName] {
+		if pr.Number == number {
+			return &pr, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *adaptiveMockPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
+
+func (m *adaptiveMockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
+
+func (m *adaptiveMockPRStore) Delete(_ context.Context, repoFullName string, number int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deletes = append(m.deletes, deleteCall{RepoFullName: repoFullName, Number: number})
+	return nil
+}
