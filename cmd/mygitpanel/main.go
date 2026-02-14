@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	_ "golang.org/x/crypto/x509roots/fallback" // Embed CA certs for scratch container
+
 	githubadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
 	sqliteadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/sqlite"
 	httphandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/http"
