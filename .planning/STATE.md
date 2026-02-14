@@ -102,7 +102,7 @@ Recent decisions affecting current work:
 - [05-02]: fetchHealthData returns early if FetchCheckRuns fails; continues independently on other failures
 - [05-02]: Health data upserts run after review data upserts in poll cycle
 - [05-03]: Health enrichment failure in GetPR is non-fatal -- same pattern as review enrichment
-- [05-03]: CIStatus on detail endpoint overwritten by HealthService computation (more accurate than stored value)
+- [05-03]: CIStatus on detail endpoint uses stored PR value computed during poll with both Checks API and Status API data -- GetPRHealthSummary returns pr.CIStatus rather than recomputing from check runs alone
 - [05-03]: List endpoints show health fields from PR model only -- no HealthService call for lightweight responses
 
 ### Pending Todos
