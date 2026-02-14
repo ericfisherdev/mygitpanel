@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Core value:** Review comments formatted with enough code context that an AI agent can understand and fix the code
-**Current focus:** Phase 5 complete - PR Health Signals; Phase 6 next
+**Current focus:** Phase 6 in progress - Docker Deployment
 
 ## Current Position
 
-Phase: 5 of 6 (PR Health Signals)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-02-13 - Completed 05-03-PLAN.md
+Phase: 6 of 6 (Docker Deployment)
+Plan: 1 of 2 in current phase
+Status: Plan 06-01 complete, executing 06-02
+Last activity: 2026-02-14 - Completed 06-01-PLAN.md
 
-Progress: [████████████████░] ~93%
+Progress: [█████████████████] ~96%
 
 ## Performance Metrics
 
@@ -104,6 +104,11 @@ Recent decisions affecting current work:
 - [05-03]: Health enrichment failure in GetPR is non-fatal -- same pattern as review enrichment
 - [05-03]: CIStatus on detail endpoint uses stored PR value computed during poll with both Checks API and Status API data -- GetPRHealthSummary returns pr.CIStatus rather than recomputing from check runs alone
 - [05-03]: List endpoints show health fields from PR model only -- no HealthService call for lightweight responses
+- [06-01]: x509roots/fallback blank import embeds CA certs in binary -- no COPY from build stage needed for scratch
+- [06-01]: Healthcheck is a separate Go binary (not shell script) since scratch has no shell
+- [06-01]: Container listens on 0.0.0.0:8080 inside, host restricts via 127.0.0.1:8080 port binding
+- [06-01]: Named Docker volume mygitpanel-data:/data for SQLite persistence across restarts
+- [06-01]: go-github-ratelimit v2 NewClient panics on explicit nil option -- removed nil from variadic call
 
 ### Pending Todos
 
@@ -116,6 +121,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-13T22:33:45Z
-Stopped at: Completed 05-03-PLAN.md (Phase 5 complete)
-Resume file: .planning/phases/06-docker-deployment/ (Phase 6 planning)
+Last session: 2026-02-14
+Stopped at: Completed 06-01-PLAN.md, executing 06-02
+Resume file: .planning/phases/06-docker-deployment/06-02-PLAN.md
