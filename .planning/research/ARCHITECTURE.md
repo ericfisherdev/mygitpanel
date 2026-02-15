@@ -413,7 +413,7 @@ func run() error {
 
     // JSON API routes (existing, unchanged)
     apiMux := httphandler.NewServeMux(h, slog.Default())
-    mux.Handle("/api/", apiMux)
+    mux.Handle("/api/v1/", apiMux)
 
     // Web GUI routes (new)
     webMux := webhandler.NewServeMux(wh, slog.Default())
@@ -628,7 +628,9 @@ include_ext = ["go", "templ"]
 | `github.com/a-h/templ` | Type-safe HTML templating | HIGH -- well-established, v0.3+ is stable |
 | `github.com/ctreminiom/go-atlassian` | Jira REST API client | MEDIUM -- well-maintained, cloud-focused |
 
-### Client-Side Libraries (CDN or vendored)
+### Client-Side Libraries (vendored and embedded)
+
+All client-side libraries are vendored under `static/vendor/` and embedded into the binary via `//go:embed`.
 
 | Library | Version | Size (gzipped) | Purpose |
 |---------|---------|----------------|---------|

@@ -31,7 +31,7 @@ The most significant technical finding is that **thread resolution status (`isRe
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
 | Raw HTTP for GraphQL | shurcooL/githubv4 | Full GraphQL client is overkill for a single query; adds dependency + oauth2 transitive dep. Raw HTTP is ~30 lines, easily testable |
-| GraphQL for thread resolution | Skip thread resolution entirely | Requirements REVW-04 explicitly requires resolved vs open threads -- cannot skip |
+| GraphQL for thread resolution | Skip thread resolution entirely | Requirement REVW-04 requires distinguishing resolved from open threads |
 | GraphQL for ALL review data | REST API + targeted GraphQL | REST is already integrated with ETag caching + rate limiting; GraphQL costs "points" differently. Only use GraphQL for data REST cannot provide |
 
 **No new `go get` commands needed** -- all new functionality uses existing dependencies plus stdlib `net/http` for the single GraphQL call.
