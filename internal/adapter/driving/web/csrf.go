@@ -24,7 +24,7 @@ func csrfToken(w http.ResponseWriter, r *http.Request) string {
 		Name:     csrfCookieName,
 		Value:    token,
 		Path:     "/",
-		HttpOnly: true,
+		HttpOnly: false, // readable by csrf.js to set X-CSRF-Token header on HTMX requests
 		SameSite: http.SameSiteStrictMode,
 		Secure:   false, // set true when served over HTTPS
 	})

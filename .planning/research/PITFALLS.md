@@ -213,6 +213,7 @@ Mistakes that cause delays, technical debt, or degraded experience.
 
 **Prevention:**
 1. **Re-initialize GSAP on `htmx:afterSettle` events.** Listen for HTMX lifecycle events and re-run GSAP animations on the newly swapped content:
+
    ```javascript
    document.addEventListener('htmx:afterSettle', function(event) {
      gsap.from(event.detail.target.querySelectorAll('.animate-in'), {
@@ -220,7 +221,9 @@ Mistakes that cause delays, technical debt, or degraded experience.
      });
    });
    ```
+
 2. **Kill existing GSAP instances before swap.** Listen to `htmx:beforeSwap` to kill animations on elements about to be removed:
+
    ```javascript
    document.addEventListener('htmx:beforeSwap', function(event) {
      gsap.killTweensOf(event.detail.target.querySelectorAll('*'));
@@ -229,6 +232,7 @@ Mistakes that cause delays, technical debt, or degraded experience.
      });
    });
    ```
+
 3. **Use CSS-based animations for simple transitions.** HTMX natively supports CSS transitions via `htmx-added`, `htmx-settling`, and `htmx-swapping` classes. Reserve GSAP for complex sequences (staggered lists, physics-based motion, timeline choreography) and use CSS for simple fade/slide transitions.
 4. **Scope GSAP to swap targets.** Do not apply GSAP to the entire page. Scope animations to the specific elements being swapped, making cleanup targeted and predictable.
 5. **Create a reusable animation initializer.** A function like `initAnimations(container)` that can be called on any DOM subtree, used both on page load and after HTMX swaps.

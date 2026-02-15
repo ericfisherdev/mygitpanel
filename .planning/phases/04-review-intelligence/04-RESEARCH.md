@@ -198,7 +198,7 @@ For individual inline review comments from CodeRabbit, nitpick detection require
 | Suggestion block parsing | Custom markdown parser | Regex on code fence pattern | Suggestion blocks are simple fenced code with known language tag |
 | Rate limiting | Manual 429 handling | Existing httpcache + go-github-ratelimit transport stack | Already configured and tested |
 | Review state aggregation | Custom state machine | Simple latest-review-per-reviewer query | GitHub already tracks this -- just read `state` from latest review per user |
-| Comment body sanitization | HTML stripping/XSS protection | None -- API serves JSON for machine consumption, not browser rendering | This is an API for AI agents, not a web UI |
+| Comment body sanitization | HTML stripping/XSS protection | bluemonday HTML sanitizer (see `internal/adapter/driving/web/markdown.go`) | Phase 7 introduced Markdown-to-HTML rendering for the web GUI; all comment bodies are sanitized via bluemonday before display. The JSON API still serves raw Markdown for AI agent consumption. |
 
 **Key insight:** Most complexity in this phase is data modeling and enrichment logic, not API integration. The go-github library already provides all the struct fields needed.
 

@@ -34,6 +34,9 @@ Thumbs.db
 # Generated CSS (Tailwind output)
 internal/adapter/driving/web/static/css/output.css
 
+# Generated templ files (produced by templ generate)
+*_templ.go
+
 # SQLite databases
 *.db
 *.db-shm

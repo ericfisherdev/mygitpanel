@@ -22,7 +22,7 @@
 - templ components satisfy `http.Handler` via `templ.Handler(component)`, so they plug directly into the existing `http.ServeMux`
 - A new `internal/adapter/driving/web/` package will hold templ-based handlers alongside the existing `internal/adapter/driving/http/` JSON API
 - templ components accept Go types as parameters -- pass domain model structs directly (or thin view-model wrappers) without JSON serialization
-- The `templ generate` command runs as a build step, producing `*_templ.go` files that are committed to the repo
+- The `templ generate` command runs as a build step, producing `*_templ.go` files that must NOT be committed to the repo (add `*_templ.go` to `.gitignore`). The Dockerfile and CI pipeline run `templ generate` during the build stage. Pin the templ CLI version to avoid generated code differences across environments.
 
 **CLI tool required:**
 ```bash
@@ -39,10 +39,11 @@ The `templ` CLI is needed for `templ generate` (compiles `.templ` -> `.go`) and 
 |------------|---------|---------|-----------------|
 | HTMX | 2.0.8 | Server-driven dynamic UI updates | Adds `hx-get`, `hx-post`, `hx-swap` attributes to HTML elements, enabling partial page updates without writing JavaScript. The server returns HTML fragments (templ components), not JSON. This keeps all rendering logic server-side in Go, which is consistent with the hexagonal architecture -- the web adapter renders HTML instead of JSON. |
 
-**Delivery:** CDN script tag in the base layout templ component. No npm, no bundler, no node_modules.
+**Delivery:** Vendored and embedded via `//go:embed` for production (offline/scratch-image compatible). CDN links are permitted only for development/testing. See `.planning/phases/07-gui-foundation/07-RESEARCH.md` which lists "CDN script tags in production" as an anti-pattern—vendored assets ensure the Docker scratch image works without internet access from the browser.
 
 ```html
-<script src="https://unpkg.com/htmx.org@2.0.8" integrity="sha384-..." crossorigin="anonymous"></script>
+<!-- Production: served from embedded static/vendor/ -->
+<script src="/static/vendor/htmx.min.js"></script>
 ```
 
 **Why HTMX 2.x, not 4.x:** HTMX 4.0 is expected early-to-mid 2026 but will not be marked "latest" until early 2027. Stick with the stable 2.0.x line. The upgrade path from 2.x to 4.x is straightforward (response code handling changes, improved event model).
