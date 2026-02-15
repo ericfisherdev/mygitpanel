@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -13,10 +14,7 @@ func main() {
 }
 
 func check() int {
-	addr := os.Getenv("MYGITPANEL_LISTEN_ADDR")
-	if addr == "" {
-		addr = "0.0.0.0:8080"
-	}
+	addr := normalizeAddr(os.Getenv("MYGITPANEL_LISTEN_ADDR"))
 
 	client := &http.Client{Timeout: 2 * time.Second}
 
@@ -39,4 +37,24 @@ func check() int {
 	}
 
 	return 0
+}
+
+// normalizeAddr ensures the healthcheck connects to loopback rather than the
+// bind-all address. Docker containers bind 0.0.0.0 but the healthcheck runs
+// inside the same container, so loopback is reachable and more correct.
+func normalizeAddr(raw string) string {
+	if raw == "" {
+		return "127.0.0.1:8080"
+	}
+
+	host, port, err := net.SplitHostPort(raw)
+	if err != nil {
+		return "127.0.0.1:8080"
+	}
+
+	if host == "" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+
+	return net.JoinHostPort(host, port)
 }
