@@ -12,6 +12,7 @@ import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmod
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
 
 // PRDetailContent renders the PR detail partial for HTMX swap into #pr-detail.
+// The outer div must retain id="pr-detail" so that subsequent morph swaps can find the target.
 func PRDetailContent(pr viewmodel.PRDetailViewModel) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -33,7 +34,15 @@ func PRDetailContent(pr viewmodel.PRDetailViewModel) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div id=\"pr-detail\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
 		templ_7745c5c3_Err = components.PRDetail(pr).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

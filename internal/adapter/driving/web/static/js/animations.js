@@ -1,6 +1,5 @@
 // GSAP animations triggered by HTMX swap events (GUI-06).
 // Uses htmx:afterSettle for morph swaps (alpine-morph extension settles after morphing).
-// Falls back to htmx:afterSwap for non-morph swaps.
 
 function animateSwapTarget(target) {
     if (target.id === 'pr-detail') {

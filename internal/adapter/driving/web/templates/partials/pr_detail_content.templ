@@ -4,6 +4,9 @@ import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmod
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
 
 // PRDetailContent renders the PR detail partial for HTMX swap into #pr-detail.
+// The outer div must retain id="pr-detail" so that subsequent morph swaps can find the target.
 templ PRDetailContent(pr viewmodel.PRDetailViewModel) {
-	@components.PRDetail(pr)
+	<div id="pr-detail">
+		@components.PRDetail(pr)
+	</div>
 }

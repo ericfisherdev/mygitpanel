@@ -50,7 +50,7 @@ patterns-established:
 
 # Metrics
 duration: 3min
-completed: 2026-02-14
+completed: 2026-02-15
 ---
 
 # Phase 7 Plan 01: Web GUI Scaffold Summary
@@ -88,7 +88,7 @@ Each task was committed atomically:
 - `internal/adapter/driving/web/templates/layout.templ` - Base HTML layout with script loading order and dark mode store
 - `internal/adapter/driving/web/templates/pages/dashboard.templ` - Placeholder dashboard with sidebar and main content areas
 - `internal/adapter/driving/web/static/css/input.css` - Tailwind input with @source directives for templ scanning
-- `internal/adapter/driving/web/static/js/animations.js` - GSAP animation listeners for htmx:afterSwap events
+- `internal/adapter/driving/web/static/js/animations.js` - GSAP animation listeners for htmx:afterSettle events
 - `internal/adapter/driving/web/static/vendor/*.js` - 6 vendored JS libraries
 - `cmd/mygitpanel/main.go` - Wired dual driving adapters (web + HTTP)
 - `internal/adapter/driving/http/handler.go` - Extracted RegisterAPIRoutes and ApplyMiddleware
@@ -142,4 +142,4 @@ None - no external service configuration required.
 
 ---
 *Phase: 07-gui-foundation*
-*Completed: 2026-02-14*
+*Completed: 2026-02-15*

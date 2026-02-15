@@ -4,6 +4,7 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
@@ -35,6 +36,9 @@ func (r *BotConfigRepo) Add(ctx context.Context, config model.BotConfig) (model.
 
 	result, err := r.db.Writer.ExecContext(ctx, query, config.Username, addedAt.UTC())
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return model.BotConfig{}, fmt.Errorf("add bot config %q: %w", config.Username, driven.ErrBotAlreadyExists)
+		}
 		return model.BotConfig{}, fmt.Errorf("add bot config %q: %w", config.Username, err)
 	}
 
@@ -66,7 +70,7 @@ func (r *BotConfigRepo) Remove(ctx context.Context, username string) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("bot config %q not found", username)
+		return fmt.Errorf("remove bot config %q: %w", username, driven.ErrBotNotFound)
 	}
 
 	return nil

@@ -1,294 +1,283 @@
 # Feature Landscape
 
-**Domain:** GitHub PR Tracking and Review Management API (machine-consumable, AI-agent-oriented)
-**Researched:** 2026-02-10
-**Confidence:** MEDIUM (based on training data knowledge of GitHub API, Graphite, PullApprove, ReviewBot, and similar tools; no live web verification available during this research session)
-
-## Methodology Note
-
-Web search and fetch tools were unavailable during this research session. All findings are based on training data knowledge of the GitHub PR tooling ecosystem, which is a mature and well-documented space. Features of GitHub's native PR interface, Graphite, PullApprove, ReviewBot, and similar tools are well-represented in training data through May 2025. The core GitHub API surface and PR data model have been stable for years, so confidence in table-stakes features is relatively high. Newer differentiating features from tools like Graphite may have evolved since training cutoff.
+**Domain:** Web GUI for PR Review Dashboard with Jira Integration
+**Researched:** 2026-02-14
+**Confidence:** HIGH (verified against GitHub REST API docs, Jira REST API v3 docs, Graphite/ReviewStack competitive analysis, and existing v1.0 codebase)
 
 ---
 
 ## Table Stakes
 
-Features that any PR tracking tool must have. If ReviewHub is missing these, users will consider it fundamentally broken for its stated purpose.
+Features users expect from any PR review dashboard with a web GUI. Missing these means the product feels broken.
 
-### PR Discovery and Listing
+### Unified PR Feed
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| List PRs authored by user | Core use case stated in PROJECT.md | Low | GitHub API `GET /search/issues?q=author:{user}+type:pr` or per-repo pulls endpoint |
-| List PRs where user is requested reviewer | Core use case stated in PROJECT.md | Low | GitHub API `GET /search/issues?q=review-requested:{user}+type:pr` |
-| Filter by repository | Users need scoped views | Low | Already planned via CRUD repo management |
-| Filter by PR state (open/closed/merged) | Fundamental triage need | Low | GitHub API `state` parameter; merged is a sub-state of closed |
-| Unique PR identification | Prevent duplicates across polls | Low | Use `{owner}/{repo}#{number}` or GitHub node ID |
+| Feature | Why Expected | Complexity | Depends On |
+|---------|--------------|------------|------------|
+| PR list across all watched repos | Core purpose of a dashboard; Graphite, GitHub all provide this | Low | Existing `GET /api/v1/prs` endpoint |
+| Filter by repo, status, author, draft | Every PR dashboard has filters; GitHub's native filters set the bar | Medium | Existing PR data in SQLite |
+| Search by PR title/branch name | Text search is basic expectation for any list view | Low | SQLite LIKE query on existing columns |
+| Sort by updated date, age, review status | Users need to triage; Graphite sorts by "needs attention" | Low | Existing fields (`updated_at`, `days_since_opened`) |
+| Visual status indicators (CI, merge, review) | GitHub shows green check/red X; users expect at-a-glance status | Low | Existing `ci_status`, `mergeable_status`, `review_status` fields |
+| PR count badges per repo | Orientation signal; how many PRs need attention per repo | Low | Aggregate query on existing data |
+| Responsive layout (desktop primary, tablet acceptable) | Single-user tool likely used on dev workstation | Medium | Tailwind CSS responsive utilities |
 
-### PR Status and Metadata
+### PR Detail View
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| PR title and description | Minimum context for identification | Low | Direct from GitHub API |
-| PR state: open, closed, merged | Every PR tool shows this | Low | `state` + `merged_at` presence distinguishes closed vs merged |
-| Author and assignees | Attribution is fundamental | Low | Direct from GitHub API |
-| Branch info (head/base) | Needed to understand what the PR targets | Low | `head.ref`, `base.ref` from API |
-| Created/updated timestamps | Temporal context is universal | Low | Direct from GitHub API |
-| PR URL / web link | Users need to jump to GitHub | Low | `html_url` from API |
-| Labels | Used for workflow categorization everywhere | Low | Direct from GitHub API |
+| Feature | Why Expected | Complexity | Depends On |
+|---------|--------------|------------|------------|
+| Full PR metadata display (title, author, branch, labels, diff stats) | Every PR tool shows this context | Low | Existing `GET /api/v1/repos/{owner}/{repo}/prs/{number}` |
+| Review thread display with code context | The existing API already formats this beautifully | Medium | Existing `threads`, `suggestions`, `reviews` response fields |
+| CI/CD check status with individual run details | Users need to see which check failed, not just pass/fail | Low | Existing `check_runs` response field |
+| Link to GitHub PR for full diff view | Users will want to jump to GitHub for the full diff | Low | Existing `url` field |
+| Reviewer status list (who approved, who requested changes) | Core review workflow signal | Low | Existing `reviews` data |
 
-### Review Status
+### Repo Management
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Review state per reviewer (approved/changes_requested/commented/pending) | Core review workflow signal | Medium | GitHub API `GET /repos/{owner}/{repo}/pulls/{number}/reviews`; must deduplicate to latest review per reviewer |
-| Overall review decision (approved/changes requested/no reviews) | Aggregate signal for PR readiness | Medium | Computed: latest review from each requested reviewer |
-| Requested reviewers list | Who still needs to review | Low | `requested_reviewers` field on PR object |
-| Review comment count | Signal of review activity/complexity | Low | `review_comments` field on PR object |
+| Feature | Why Expected | Complexity | Depends On |
+|---------|--------------|------------|------------|
+| Add/remove watched repos from UI | Currently API-only; GUI must surface this | Low | Existing `POST /api/v1/repos`, `DELETE /api/v1/repos/{owner}/{repo}` |
+| Bot configuration from UI | Currently API-only | Low | Existing `POST /api/v1/bots`, `DELETE /api/v1/bots/{username}` |
 
-### CI/CD Status
+### Theme and Appearance
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Combined commit status (success/failure/pending) | Universal merge-readiness signal | Medium | GitHub API `GET /repos/{owner}/{repo}/commits/{ref}/status` for legacy statuses + `GET /repos/{owner}/{repo}/commits/{ref}/check-runs` for GitHub Actions checks |
-| Individual check names and states | Users need to know WHICH check failed | Medium | Must combine both Status API and Checks API; they are separate systems |
-| Required checks passing/failing | Distinguishes blocking vs informational checks | High | Requires fetching branch protection rules via `GET /repos/{owner}/{repo}/branches/{branch}/protection` to know which checks are required |
-
-### Polling and Data Freshness
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Configurable poll interval | Users have different latency needs | Low | Already planned |
-| Rate limit awareness | GitHub API has strict limits (5000 req/hr for authenticated) | Medium | Must track `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers; back off when approaching limits |
-| Conditional requests (ETags/If-Modified-Since) | Avoid wasting rate limit on unchanged data | Medium | GitHub supports `ETag` and `304 Not Modified`; significant rate-limit savings |
-| Last polled timestamp | Users need to know data freshness | Low | Track per-repo or globally |
+| Feature | Why Expected | Complexity | Depends On |
+|---------|--------------|------------|------------|
+| Dark mode (default) | Developers overwhelmingly prefer dark mode; GitHub, VS Code default dark | Low | Tailwind CSS dark mode classes |
+| Light mode toggle | Accessibility and preference; some users work in bright environments | Low | Alpine.js state + localStorage persistence |
 
 ---
 
 ## Differentiators
 
-Features that go beyond what basic PR tracking tools offer. These create competitive advantage, especially for ReviewHub's AI-agent-oriented niche.
+Features that set MyGitPanel apart. Not universally expected, but create real value.
 
-### AI-Agent-Oriented Comment Formatting (Core Differentiator)
+### Review Workflow Actions (Core Differentiator)
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Review comments with targeted code snippets | THE core differentiator -- AI agent can read comment + code and generate fix | High | Must map `diff_hunk` and `position`/`line` from review comment API to actual file content; GitHub provides `diff_hunk` in comment payload but it may need enrichment |
-| Multi-line comment context (surrounding code) | Single-line snippets are often insufficient for AI understanding | High | Fetch file content at PR head SHA via `GET /repos/{owner}/{repo}/contents/{path}?ref={sha}`, extract lines around comment target |
-| Comment-to-file-path mapping | AI agent needs to know exactly which file and line range to edit | Medium | `path` and `line`/`original_line` fields from review comment API |
-| Suggested changes extraction | GitHub supports `suggestion` blocks in comments; extracting these gives AI a direct fix proposal | Medium | Parse markdown suggestion blocks from comment body: ````suggestion\n...\n```` |
-| Inline vs general comment distinction | General comments need different handling than line-specific ones | Low | Review comments have `path` field; its absence or PR-level comments indicate general discussion |
-| Conversation threading (reply chains) | AI needs full context of a discussion, not just individual comments | Medium | `in_reply_to_id` field links reply chains; must reconstruct thread tree |
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Approve PR from dashboard | Eliminates context switch to GitHub; one-click workflow | Medium | New: `POST /repos/{owner}/{repo}/pulls/{number}/reviews` with `event: "APPROVE"` via GitHub API |
+| Request changes with comment body | Submit structured feedback without leaving the dashboard | Medium | New: same endpoint, `event: "REQUEST_CHANGES"`, body required |
+| Comment-only review submission | Lightweight feedback path | Medium | New: same endpoint, `event: "COMMENT"`, body required |
+| Reply to review comments | Continue conversation threads inline | Medium | New: `POST /repos/{owner}/{repo}/pulls/{number}/comments/{comment_id}/replies` -- note: replies to replies not supported by GitHub API |
+| Post general PR comment | Issue-level discussion without line-specific context | Low | New: `POST /repos/{owner}/{repo}/issues/{number}/comments` |
 
-### Review Intelligence
+**API constraint:** GitHub requires `repo` scope (classic PAT) or `Pull requests: Write` (fine-grained) for review submission. The existing read-only token will need upgrading. This is a breaking configuration change for existing users.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Thread resolution tracking | Know which feedback is addressed vs outstanding | Medium | GitHub API provides `isResolved` on review threads (GraphQL API: `pullRequest.reviewThreads`); REST API does not expose this directly -- may need GraphQL |
-| Coderabbit detection and status | Distinguish AI-generated reviews from human reviews | Low | Check review author login against `coderabbitai` (or configurable bot usernames) |
-| Actionable vs informational comment classification | AI agent should prioritize actionable feedback | High | Heuristic or NLP-based; changes_requested reviews are more actionable than comment-only reviews |
-| Review freshness (outdated reviews) | Reviews on old commits may be stale after force-push | Medium | Compare review `commit_id` against current PR head SHA; GitHub marks reviews as "outdated" when code changes beneath them |
-| Pending reviews detection | Pending (draft) reviews are not yet submitted | Low | Review state `PENDING` in API; typically only visible to the review author |
+### Draft Toggle
 
-### PR Health and Readiness
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Convert PR to draft | Signal "not ready for review" without leaving dashboard | Low | `PATCH /repos/{owner}/{repo}/pulls/{number}` with `{"draft": true}` -- works via REST API |
+| Mark PR as ready for review | Resume review workflow | Medium | **GraphQL-only**: `markPullRequestReadyForReview` mutation. REST API does NOT support this. Requires adding `shurcooL/githubv4` or shelling out to `gh pr ready` |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Staleness tracking (days since open, days since last activity) | Highlight aging PRs that need attention | Low | Computed from `created_at` and `updated_at` |
-| Merge conflict detection | PRs with conflicts cannot be merged | Medium | `mergeable` and `mergeable_state` fields on PR; requires GitHub to compute -- may be null initially, need retry logic |
-| Diff stats (files changed, additions, deletions) | Quick complexity signal | Low | `changed_files`, `additions`, `deletions` on PR object |
-| Draft PR detection | Draft PRs have different workflow expectations | Low | `draft` boolean field on PR object |
-| Merge readiness score (composite) | Single signal combining reviews + checks + conflicts + staleness | Medium | Computed from multiple signals; opinionated but highly useful for triage |
+**Critical finding:** Draft-to-ready is GraphQL-only. This is asymmetric -- converting TO draft works via REST, but converting FROM draft requires GraphQL. The existing codebase uses only REST (`go-github`). This needs a new adapter or CLI wrapper.
 
-### Repository and Configuration Management
+### PR Ignore List
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Runtime repo CRUD | Add/remove repos without restart | Low | Already planned; store in SQLite |
-| Per-repo poll interval override | High-activity repos may need faster polling | Low | Optional override in repo config |
-| Bot user configuration | Different teams use different review bots (Coderabbit, Copilot, custom) | Low | Configurable list of bot usernames per repo or globally |
-| Repository health summary | Aggregate stats across all watched repos | Low | Computed from individual PR data |
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Ignore/hide specific PRs from feed | Reduce noise from PRs you do not care about (e.g., dependabot, long-lived feature branches) | Low | New: `ignored_prs` SQLite table with `(repo_full_name, number)` composite key |
+| Re-add ignored PRs (undo) | Users make mistakes; need recovery path | Low | Delete from `ignored_prs` table |
+| View ignored PRs list | Audit what is being hidden | Low | Filter query on `ignored_prs` table |
+| Bulk ignore by label or author | Power user feature for ignoring all dependabot PRs at once | Medium | Filter + batch insert |
 
-### Data Enrichment
+### Configurable Urgency Thresholds
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| File content at PR head SHA | AI agent can see the full file, not just diff hunks | Medium | `GET /repos/{owner}/{repo}/contents/{path}?ref={sha}`; cache aggressively per SHA (immutable) |
-| Diff between base and head | Full diff context beyond individual comments | Medium | `GET /repos/{owner}/{repo}/pulls/{number}/files` returns patch per file |
-| PR timeline events | Understand the full lifecycle (review requested, force pushed, etc.) | Medium | `GET /repos/{owner}/{repo}/issues/{number}/timeline` provides rich event history |
-| Commit list per PR | Useful for understanding PR evolution, especially after force pushes | Low | `GET /repos/{owner}/{repo}/pulls/{number}/commits` |
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Per-repo review count threshold (how many approvals needed) | Different repos have different policies (1 approval vs 2 vs 3) | Low | New: column on `repositories` table, default 1 |
+| Configurable age-based urgency levels | Graphite and DevDynamics use tiered thresholds: <1d, <3d, <7d, <14d, >30d | Medium | New: `urgency_config` table or JSON column with per-repo overrides |
+| Visual urgency indicators (color coding by age/status) | At-a-glance triage; red/yellow/green is universal dashboard pattern | Low | Computed in templ templates from existing `days_since_opened` |
+| Attention score (composite) | Single number combining: needs review + age + unresolved threads + CI failure | Medium | Computed from existing fields; new scoring algorithm |
+
+### Jira Integration
+
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Configure Jira connection (URL, email, API token) | Foundation for all Jira features; stored encrypted in SQLite | Medium | New: `jira_config` table, Jira REST API v3 basic auth (email + API token) |
+| View linked Jira issue details from PR | PRs typically reference Jira keys in title/branch (e.g., `PROJ-123`); auto-extract and show issue status, assignee, priority | High | New: regex extraction of Jira keys from PR title/branch, `GET /rest/api/3/issue/{issueKey}` |
+| Post comment on linked Jira issue | Update Jira from PR dashboard ("PR approved, ready to merge") | Medium | New: `POST /rest/api/3/issue/{issueKey}/comment` with ADF (Atlassian Document Format) body |
+| Jira issue status badge in PR list | At-a-glance project management context alongside PR status | Medium | Cached Jira issue data; poll or fetch-on-view |
+
+**Jira API notes:**
+- Authentication: Basic auth with email + API token (not password). Header: `Authorization: Basic base64(email:token)`
+- Cloud URL format: `https://{your-domain}.atlassian.net`
+- JQL search: `GET /rest/api/3/search/jql?jql=key IN (PROJ-123, PROJ-456)` for batch issue lookup
+- Comment body uses ADF (Atlassian Document Format), not plain markdown. Must construct JSON document nodes.
+- Rate limits: Jira Cloud has undocumented rate limits; implement exponential backoff
+
+### GitHub Credential Management
+
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Store GitHub PAT in SQLite (encrypted) | Currently requires env var; GUI needs persistent config | Medium | New: `credentials` table with AES-256-GCM encryption; derive key from machine-specific secret |
+| Token validation on save | Verify token works before persisting; test with `GET /user` | Low | GitHub API call on save |
+| Token scope display | Show what the token can do; warn if missing write scopes for review features | Low | Parse `X-OAuth-Scopes` response header |
+
+### GSAP Animations
+
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Page transition animations | Polish; smooth route changes feel professional | Low | GSAP `gsap.from()`/`gsap.to()` on HTMX `htmx:afterSwap` events |
+| PR card entrance animations (stagger) | Visual delight on feed load; Graphite does smooth list renders | Low | GSAP `stagger` on PR card elements |
+| Status change animations | Draw attention to CI pass/fail, review state changes | Low | GSAP color/scale tweens on status badges |
+| Reduced motion support | Accessibility requirement; respect `prefers-reduced-motion` | Low | `window.matchMedia('(prefers-reduced-motion: reduce)')` check |
 
 ---
 
 ## Anti-Features
 
-Features to explicitly NOT build. These are common in PR dashboard tools but wrong for ReviewHub's scope and audience.
+Features to explicitly NOT build. Common in PR dashboards but wrong for MyGitPanel's scope.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| Web dashboard / UI | PROJECT.md explicitly scopes this out; primary consumer is CLI agent, not humans. Building UI doubles complexity for zero audience value | Serve clean JSON API endpoints. Let consumers build their own views |
-| Review assignment / routing | Tools like PullApprove and CODEOWNERS handle this. Duplicating it adds complexity with no differentiation | Report who is assigned/requested; do not manage assignments |
-| Notification system (email, Slack, push) | Polling-based tool for machine consumption; notifications are a human-facing concern. PROJECT.md excludes this | Expose "needs attention" flags in API; let consumers decide alerting |
-| AI review summarization / generation | The downstream AI agent (Claude Code) handles this. ReviewHub provides data, not intelligence | Format data cleanly so the AI agent can summarize |
-| GitHub webhook receiver | Adds deployment complexity (public endpoint, secret management, delivery guarantees). Polling is simpler for v1 | Poll at configurable intervals; webhooks can be a v2 optimization |
-| Multi-user / multi-tenant support | Single-user, single-token design is explicitly scoped. Multi-tenant adds auth, isolation, and complexity | Single user config via env vars; if needed later, it is a v2 concern |
-| OAuth / SSO authentication | Localhost-only, no auth needed. Adding OAuth is massive scope creep | Accept PAT via environment variable |
-| PR creation or modification | ReviewHub is read-only tracking. Writing PRs is a different tool entirely | Only read operations against GitHub API |
-| Code analysis or linting | Out of scope; many dedicated tools exist (CodeClimate, SonarQube, etc.) | Report CI check status which includes linter results |
-| Merge automation | Tools like Mergify and GitHub's auto-merge handle this. Not ReviewHub's job | Report merge readiness; do not perform merges |
-| Custom review workflows / policies | PullApprove's territory. ReviewHub tracks state, not enforces policy | Report current state; let teams use CODEOWNERS and branch protection for policies |
-| Historical analytics / trends | Metrics dashboards (LinearB, Sleuth, etc.) own this space. Storage and query complexity is high | Track current state only; expire old data |
-| Comment reply / interaction | ReviewHub is read-only. Posting comments requires different auth scope and is out of purpose | Read and format comments; never post |
+| Full diff viewer in-app | Massive complexity (syntax highlighting, side-by-side, virtual scroll for large files); GitHub does this perfectly | Show diff stats and code snippets from review comments; link to GitHub for full diff |
+| PR creation | Out of scope; users create PRs from git CLI or IDE | Track existing PRs only |
+| Merge automation / merge button | Dangerous from a dashboard; GitHub's merge button has safety rails (branch protection, required checks) that are hard to replicate | Show merge readiness; link to GitHub for actual merge |
+| Review assignment / routing | PullApprove, CODEOWNERS handle this; duplicating it adds complexity with zero differentiation | Show who is assigned; do not manage assignments |
+| Multi-user / multi-tenant | Single-user tool; adding auth, user isolation, and role management is massive scope creep | Single user, single token, local access only |
+| Notification system (email, Slack, push) | Dashboard is the notification; polling + visual indicators suffice for single user | Urgency indicators and attention scores in the feed |
+| AI review summarization | The downstream AI agent (Claude Code) handles this; MyGitPanel provides data, not intelligence | Format review data cleanly for both human and AI consumption |
+| Jira issue creation | Write operations beyond comments add Jira project config complexity (issue types, custom fields, workflows) | View Jira issues and post comments only |
+| Webhook receiver (GitHub or Jira) | Adds deployment complexity (public endpoint, TLS, secret validation); polling works fine for single user | Poll GitHub on existing adaptive schedule; fetch Jira on-demand |
+| Historical analytics / trends | LinearB, Sleuth, Graphite Insights own this space; storage and charting complexity is high | Show current state only |
+| OAuth flow for GitHub/Jira | Localhost single-user tool; OAuth adds redirect URI handling, token refresh, PKCE for no audience benefit | Accept tokens directly via settings UI |
+| Real-time WebSocket updates | Polling-based backend; adding WebSocket layer adds bidirectional complexity for marginal latency improvement | HTMX polling (`hx-trigger="every 30s"`) for near-real-time feel |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Repository CRUD (foundation)
+GitHub Credential Management (foundation for write operations)
   |
-  +---> PR Discovery (requires repos to watch)
+  +---> Review Workflow Actions (approve, request changes, comment)
   |       |
-  |       +---> PR Status & Metadata (enriches discovered PRs)
-  |       |       |
-  |       |       +---> Diff Stats (per-PR enrichment)
-  |       |       +---> Draft Detection (per-PR enrichment)
-  |       |       +---> Staleness Tracking (per-PR enrichment)
-  |       |       +---> Merge Conflict Detection (per-PR enrichment)
-  |       |
-  |       +---> Review Status (requires PR list)
-  |       |       |
-  |       |       +---> Coderabbit Detection (specialized review filtering)
-  |       |       +---> Thread Resolution Tracking (per-review enrichment, may need GraphQL)
-  |       |       +---> Review Freshness / Outdated Detection (compare review SHA to head)
-  |       |
-  |       +---> CI/CD Check Status (requires PR head SHA)
-  |       |       |
-  |       |       +---> Required Checks (needs branch protection data)
-  |       |
-  |       +---> Review Comment Formatting (THE differentiator)
-  |               |
-  |               +---> Comment-to-file mapping (foundation for snippets)
-  |               +---> Diff hunk extraction (from comment payload)
-  |               +---> File content at SHA (enrichment for surrounding context)
-  |               +---> Suggested changes extraction (parse suggestion blocks)
-  |               +---> Conversation threading (reply chain reconstruction)
+  |       +---> Reply to Review Comments (extends review workflow)
+  |       +---> Post General PR Comment (extends review workflow)
   |
-  +---> Polling Engine (runs independently, feeds all above)
+  +---> Draft Toggle (requires write-scoped token)
           |
-          +---> Rate Limit Awareness (required for reliable polling)
-          +---> Conditional Requests / ETags (optimization, not blocking)
-          +---> Per-repo Poll Intervals (optional override)
+          +---> Mark Ready for Review (requires GraphQL adapter -- HIGH complexity spike)
 
-Merge Readiness Score (composite)
-  -- depends on: Review Status + CI/CD Status + Merge Conflict Detection + Staleness
+Jira Credential Management
+  |
+  +---> Jira Key Extraction (regex from PR title/branch)
+  |       |
+  |       +---> Jira Issue Detail Fetch (depends on valid keys)
+  |       |       |
+  |       |       +---> Jira Status Badge in PR List (cached issue data)
+  |       |
+  |       +---> Post Jira Comment (requires issue key + Jira connection)
+
+Existing v1.0 API (all read data is already available)
+  |
+  +---> Unified PR Feed (renders existing /api/v1/prs data)
+  |       |
+  |       +---> Search/Filter (client-side or server-side on existing data)
+  |       +---> Sort (on existing fields)
+  |       +---> Urgency Indicators (computed from existing days_since_*, ci_status, review_status)
+  |
+  +---> PR Detail View (renders existing /api/v1/repos/{o}/{r}/prs/{n} data)
+  |       |
+  |       +---> Review Thread Display (existing threads response)
+  |       +---> CI Check Display (existing check_runs response)
+  |
+  +---> PR Ignore List (new table, filters existing PR list)
+  |
+  +---> Configurable Urgency Thresholds (new config, applied to existing age/status data)
+
+Theme (independent, no API dependency)
+  |
+  +---> Dark/Light Toggle (Alpine.js + localStorage + Tailwind)
+  +---> GSAP Animations (progressive enhancement, no data dependency)
 ```
 
 ### Critical Path
 
-The shortest path to core value is:
+Shortest path to a usable dashboard:
 
-1. **Repository CRUD** + **Polling Engine** (no data without these)
-2. **PR Discovery** (find PRs to track)
-3. **PR Status & Metadata** (basic useful output)
-4. **Review Status** (review workflow awareness)
-5. **Review Comment Formatting with Code Snippets** (core differentiator)
+1. **Theme + Layout Shell** -- Tailwind dark/light, nav, empty states
+2. **Unified PR Feed** -- Renders existing API data; immediate value
+3. **PR Detail View** -- Shows reviews, threads, CI; leverages existing rich data
+4. **Search/Filter/Sort** -- Triage capability
+5. **Repo Management UI** -- Currently API-only; GUI must surface this
 
-Everything else is enrichment layered on top of this critical path.
+Everything else layers on after this critical path delivers a functional read-only dashboard.
 
 ---
 
 ## MVP Recommendation
 
-For MVP, prioritize the critical path plus essential enrichment:
+### Phase 1: Read-Only Dashboard (builds on entire v1.0 API)
 
-### Must Have (MVP)
+Prioritize:
+1. **Unified PR feed with search/filter/sort** -- immediate daily-driver value
+2. **PR detail view with review threads and CI status** -- leverages existing rich API
+3. **Repo and bot management UI** -- currently CLI/API only
+4. **Dark/light theme** -- developer expectation
+5. **Visual urgency indicators** -- color-coded age/status badges using existing data
+6. **GSAP entrance animations** -- polish, low effort
 
-1. **Repository CRUD** -- foundation; without repo config, nothing works
-2. **Polling engine with rate-limit awareness** -- data ingestion backbone
-3. **PR discovery (authored + review-requested)** -- core use case
-4. **PR status and metadata** -- title, state, author, timestamps, URL, labels, branch info
-5. **Review status per reviewer** -- approved/changes_requested/commented
-6. **Review comments with targeted code snippets** -- THE differentiator; without this, ReviewHub is just another PR list
-7. **CI/CD combined check status** -- merge readiness signal
-8. **Diff stats** -- trivially cheap, immediately useful
-9. **Staleness tracking** -- trivially cheap, immediately useful
-10. **Coderabbit detection** -- trivially cheap, explicitly planned
+### Phase 2: Review Workflows (requires token scope upgrade)
 
-### Defer to Post-MVP
+Prioritize:
+1. **GitHub credential management** (store PAT with write scope in SQLite)
+2. **Approve/Request Changes/Comment** submission
+3. **Reply to review comments** inline
+4. **Draft toggle** (convert to draft via REST; ready-for-review via GraphQL)
+5. **PR ignore list** with undo
 
-- **Thread resolution tracking**: May require GraphQL API (REST doesn't expose `isResolved` cleanly); adds API complexity. Worth investigating in a research spike before committing.
-- **Merge conflict detection**: `mergeable` field requires GitHub backend computation and may be `null` on first request; retry logic adds complexity.
-- **Required checks identification**: Needs branch protection API which requires admin-level token permissions; may not be available.
-- **Suggested changes extraction**: Useful but parsing markdown suggestion blocks is fiddly; comment body is already provided.
-- **File content at head SHA**: Valuable for richer AI context but significantly increases API calls and storage; optimize with caching.
-- **Review freshness/outdated detection**: Nice signal but not critical for initial value.
-- **Merge readiness composite score**: Depends on multiple inputs being stable first.
-- **Conditional requests (ETags)**: Optimization; poll naively first, optimize when rate limits become a real constraint.
-- **PR timeline events**: Rich but verbose; adds storage and API cost.
-- **Per-repo poll interval overrides**: YAGNI for single-user MVP.
+### Phase 3: Jira + Configuration
+
+Prioritize:
+1. **Jira credential management** (URL, email, API token)
+2. **Jira key extraction** from PR title/branch
+3. **Jira issue detail display** (status, assignee, priority)
+4. **Configurable urgency thresholds** per repo
+5. **Configurable review count requirements** per repo
+6. **Post Jira comments** from PR detail view
+
+### Defer Beyond MVP
+
+- **Attention score (composite)**: Useful but needs UX iteration to get the formula right; ship simple urgency colors first, evolve based on usage
+- **Bulk ignore by label/author**: Power user feature; ship single-PR ignore first
+- **Jira issue status badge in PR list**: Requires caching strategy; ship detail-view integration first
 
 ---
 
 ## Competitive Landscape Context
 
-### GitHub Native PR Interface
-
-GitHub's own interface provides rich PR browsing, review, and merge tooling. Table stakes for any external tool is matching the data GitHub already surfaces: PR state, reviews, checks, diffs, comments. ReviewHub's value is NOT replacing GitHub's UI -- it is reformatting GitHub's data for machine consumption, specifically for an AI coding agent that needs code context alongside review comments.
-
 ### Graphite
 
-Graphite focuses on stacked diffs (dependent PR chains), PR dashboard with review queue, and merge workflow automation. Its differentiators are stacked PR management and fast merge queues. ReviewHub does not compete with Graphite on workflow -- it competes on data formatting for AI agents, which Graphite does not address.
+Graphite's PR inbox is the closest competitor pattern. Key features to learn from:
+- **Five pre-made sections**: Needs your review, Approved, Changes requested, Your PRs, Watched. MyGitPanel should have similar categorized views, not just a flat list.
+- **Custom sections with filters**: Author, date, status filters saved as named views. Worth considering post-MVP.
+- **Keyboard shortcuts**: Power user feature that Graphite emphasizes. Worth noting for later.
+- **Live check status with re-run**: Re-running checks from dashboard is out of scope (anti-feature), but live status display is table stakes.
 
-### PullApprove
+### GitHub Native
 
-PullApprove handles review assignment policies: who needs to review what, based on file ownership rules. ReviewHub should not replicate this -- just report the state that PullApprove (or CODEOWNERS) has already established.
+GitHub's PR list page has a known UX problem: draft PR status is a tiny text label that blends with metadata (confirmed in GitHub community discussions). MyGitPanel should make draft status highly visible with distinct visual treatment.
 
-### ReviewBot / Other Bots
+### GitClear
 
-Various bots (Coderabbit, GitHub Copilot for PRs, ReviewBot) post automated reviews. ReviewHub's job is to identify these bot reviews, distinguish them from human reviews, and present them alongside human feedback. The bot detection feature (configurable bot username list) serves this need.
-
-### Key Insight
-
-None of these tools format review data for consumption by AI coding agents. ReviewHub's niche is the **AI-agent-as-consumer** paradigm: an API where every endpoint is designed so that an LLM can read the response and take action (generate code fixes, understand review feedback, prioritize work). This is genuinely unserved territory.
-
----
-
-## GitHub API Considerations
-
-### REST vs GraphQL
-
-GitHub offers both REST and GraphQL APIs. Key tradeoffs for ReviewHub:
-
-| Concern | REST API | GraphQL API |
-|---------|----------|-------------|
-| Simplicity | Simpler, well-documented endpoints | More complex query construction |
-| Data efficiency | Multiple requests for related data (N+1 patterns) | Single query for nested data (PR + reviews + comments) |
-| Thread resolution | `isResolved` NOT available in REST | `isResolved` available via `reviewThreads` |
-| Rate limiting | 5000 requests/hour | 5000 points/hour (different cost model) |
-| Go client libraries | `google/go-github` (mature, REST) | `shurcooL/githubv4` (GraphQL) |
-
-**Recommendation:** Start with REST API using `google/go-github` for simplicity. Add targeted GraphQL queries only for features that REST cannot serve (thread resolution). This hybrid approach is common in production GitHub integrations.
-
-### Pagination
-
-All GitHub list endpoints are paginated (default 30, max 100 per page). The polling engine must handle pagination correctly for repos with many PRs or many review comments.
-
-### Token Scopes
-
-ReviewHub needs a personal access token (classic) with at minimum:
-- `repo` scope (read access to private repos, PRs, reviews, checks)
-- Or fine-grained token with: `Pull requests: Read`, `Contents: Read`, `Checks: Read`
-
-Branch protection rules require `Administration: Read` which is a higher privilege -- another reason to defer required-checks detection to post-MVP.
+GitClear focuses on PR review analytics (time-to-review, review depth). MyGitPanel is not an analytics tool -- it is an operational dashboard. Do not chase metrics features.
 
 ---
 
 ## Sources
 
-- GitHub REST API documentation (training data, HIGH confidence for API surface stability)
-- GitHub GraphQL API documentation (training data, HIGH confidence for core schema)
-- `google/go-github` library (training data, MEDIUM confidence -- verify current version)
-- Graphite, PullApprove, Coderabbit product knowledge (training data, MEDIUM confidence -- features may have evolved)
-- GitHub PR data model has been stable since 2019+ (HIGH confidence for field names and structures)
-
-**Gaps:** Could not verify current versions of Go client libraries, latest Graphite/PullApprove features, or any tooling changes since May 2025. Recommend validating `google/go-github` version and API compatibility during stack research phase.
+- [GitHub REST API - Pull Request Reviews](https://docs.github.com/en/rest/pulls/reviews) -- verified endpoints for `POST /repos/{owner}/{repo}/pulls/{number}/reviews` (HIGH confidence)
+- [GitHub REST API - Review Comments](https://docs.github.com/en/rest/pulls/comments) -- verified reply endpoint (HIGH confidence)
+- [GitHub Community - Convert PR to Draft](https://github.com/orgs/community/discussions/45174) -- confirmed REST PATCH works for draft=true (HIGH confidence)
+- [GitHub Community - Ready for Review](https://github.com/orgs/community/discussions/70061) -- confirmed GraphQL-only for markReadyForReview (HIGH confidence)
+- [Jira REST API v3 - Issue Search](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/) -- JQL search endpoint (MEDIUM confidence, did not verify exact response schema)
+- [Jira REST API - Add Comment](https://developer.atlassian.com/server/jira/platform/jira-rest-api-example-add-comment-8946422/) -- comment endpoint structure (MEDIUM confidence)
+- [Jira Basic Auth](https://developer.atlassian.com/cloud/jira/software/basic-auth-for-rest-apis/) -- email + API token authentication (HIGH confidence)
+- [Graphite Features](https://graphite.dev/features) -- inbox sections and dashboard patterns (MEDIUM confidence)
+- [GitHub Community - Draft PR Visibility](https://github.com/orgs/community/discussions/165497) -- draft label UX problem (MEDIUM confidence)
+- [DevDynamics - Open PR Age](https://docs.devdynamics.ai/features/metrics/git-dashboard/open-pr-age) -- age threshold tiers: <1d, <3d, <7d, <14d, <1mo, >1mo (MEDIUM confidence)
+- [HTMX + Alpine.js + Go patterns](https://ntorga.com/full-stack-go-app-with-htmx-and-alpinejs/) -- integration patterns for the chosen stack (MEDIUM confidence)
+- Existing MyGitPanel v1.0 codebase: `internal/adapter/driving/http/handler.go`, `response.go`, domain models (HIGH confidence, direct inspection)

@@ -2,6 +2,7 @@ package web
 
 import (
 	"io/fs"
+	"log"
 	"net/http"
 )
 
@@ -10,7 +11,10 @@ import (
 // Static assets are served from the embedded filesystem at /static/*.
 func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	// Static assets (embedded via go:embed).
-	staticFS, _ := fs.Sub(StaticFS, "static")
+	staticFS, err := fs.Sub(StaticFS, "static")
+	if err != nil {
+		log.Fatalf("failed to create static sub-filesystem: %v", err)
+	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticFS)))
 
 	// Page routes.

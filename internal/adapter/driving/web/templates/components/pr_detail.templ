@@ -1,7 +1,20 @@
 package components
 
-import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
-import "fmt"
+import (
+	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+	"fmt"
+)
+
+func formatDaysAgo(days int) string {
+	switch {
+	case days == 0:
+		return "today"
+	case days == 1:
+		return "1 day ago"
+	default:
+		return fmt.Sprintf("%d days ago", days)
+	}
+}
 
 // PRDetail renders the full PR detail panel with tabbed content.
 templ PRDetail(pr viewmodel.PRDetailViewModel) {
@@ -70,7 +83,7 @@ templ PRDetail(pr viewmodel.PRDetailViewModel) {
 				</div>
 				<div>
 					<span class="text-gray-500 dark:text-gray-400">Opened</span>
-					<p class="text-gray-900 dark:text-gray-100">{ fmt.Sprintf("%d days ago", pr.DaysSinceOpened) }</p>
+					<p class="text-gray-900 dark:text-gray-100">{ formatDaysAgo(pr.DaysSinceOpened) }</p>
 				</div>
 			</div>
 			<div class="flex items-center gap-6 mt-4 text-sm">
@@ -199,7 +212,7 @@ templ ReviewCard(review viewmodel.ReviewViewModel) {
 templ ThreadCard(thread viewmodel.ThreadViewModel) {
 	<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-3 overflow-hidden">
 		<!-- Thread header -->
-		<div class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-750 border-b border-gray-200 dark:border-gray-700">
+		<div class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
 			if thread.IsResolved {
 				<span class="text-green-500" title="Resolved">&#10003;</span>
 			} else {
