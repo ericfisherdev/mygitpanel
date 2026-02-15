@@ -1,0 +1,75 @@
+package components
+
+import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+import "fmt"
+
+// PRCard renders a clickable card for one PR in the sidebar list.
+templ PRCard(card viewmodel.PRCardViewModel) {
+	<div
+		class="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700 transition-colors"
+		hx-get={ card.DetailPath }
+		hx-target="#pr-detail"
+		hx-swap="morph"
+		hx-ext="alpine-morph"
+	>
+		<div class="flex items-start justify-between gap-2">
+			<div class="min-w-0 flex-1">
+				<p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title={ card.Title }>
+					{ truncateTitle(card.Title) }
+				</p>
+				<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+					{ card.Repository } #{ fmt.Sprint(card.Number) }
+				</p>
+			</div>
+			<div class="flex items-center gap-1.5 shrink-0">
+				<!-- CI status dot -->
+				if card.CIStatus == "passing" {
+					<span class="w-2.5 h-2.5 rounded-full bg-green-500" title="CI passing"></span>
+				} else if card.CIStatus == "failing" {
+					<span class="w-2.5 h-2.5 rounded-full bg-red-500" title="CI failing"></span>
+				} else if card.CIStatus == "pending" {
+					<span class="w-2.5 h-2.5 rounded-full bg-yellow-500" title="CI pending"></span>
+				} else {
+					<span class="w-2.5 h-2.5 rounded-full bg-gray-400" title="CI unknown"></span>
+				}
+			</div>
+		</div>
+		<div class="flex items-center gap-2 mt-1.5 flex-wrap">
+			<span class="text-xs text-gray-500 dark:text-gray-400">{ card.Author }</span>
+			if card.IsDraft {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">
+					Draft
+				</span>
+			}
+			if card.NeedsReview {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300">
+					Review Requested
+				</span>
+			}
+			if card.MergeableStatus == "conflicted" {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
+					Conflicts
+				</span>
+			}
+			if card.Status == "merged" {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
+					Merged
+				</span>
+			} else if card.Status == "closed" {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
+					Closed
+				</span>
+			}
+		</div>
+	</div>
+}
+
+// truncateTitle truncates a title to roughly 50 characters with an ellipsis.
+func truncateTitle(title string) string {
+	const maxLength = 50
+	runes := []rune(title)
+	if len(runes) <= maxLength {
+		return title
+	}
+	return string(runes[:maxLength]) + "..."
+}

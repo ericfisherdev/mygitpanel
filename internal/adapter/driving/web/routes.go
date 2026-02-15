@@ -15,4 +15,7 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 
 	// Page routes.
 	mux.HandleFunc("GET /{$}", h.Dashboard)
+
+	// HTMX partial routes.
+	mux.HandleFunc("GET /app/prs/{owner}/{repo}/{number}", h.GetPRDetail)
 }

@@ -1,0 +1,14 @@
+package partials
+
+import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
+
+// PRList renders the PR card list partial for HTMX swap into #pr-list.
+templ PRList(cards []viewmodel.PRCardViewModel) {
+	for _, card := range cards {
+		@components.PRCard(card)
+	}
+	if len(cards) == 0 {
+		<p class="p-4 text-sm text-gray-400 dark:text-gray-500">No pull requests found</p>
+	}
+}
