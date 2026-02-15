@@ -31,6 +31,9 @@ Thumbs.db
 .env.local
 .env.production
 
+# Generated CSS (Tailwind output)
+internal/adapter/driving/web/static/css/output.css
+
 # SQLite databases
 *.db
 *.db-shm
