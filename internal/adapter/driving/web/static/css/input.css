@@ -1,4 +1,51 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 @source "../../templates/**/*.templ";
 @source "../../templates/**/*_templ.go";
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Diff hunk line coloring */
+.diff-add {
+  background-color: var(--color-green-50);
+  color: var(--color-green-800);
+}
+.diff-del {
+  background-color: var(--color-red-50);
+  color: var(--color-red-800);
+}
+.diff-header {
+  color: var(--color-purple-600);
+}
+.diff-ctx {
+  color: var(--color-gray-700);
+}
+
+:where(.dark, .dark *) .diff-add {
+  background-color: var(--color-green-950);
+  color: var(--color-green-300);
+}
+:where(.dark, .dark *) .diff-del {
+  background-color: var(--color-red-950);
+  color: var(--color-red-300);
+}
+:where(.dark, .dark *) .diff-header {
+  color: var(--color-purple-400);
+}
+:where(.dark, .dark *) .diff-ctx {
+  color: var(--color-gray-300);
+}
+
+/* Prose overrides for compact comment rendering */
+.prose pre {
+  font-size: var(--text-xs);
+}
+.prose code {
+  font-size: var(--text-xs);
+  padding-inline: calc(var(--spacing) * 1);
+  padding-block: calc(var(--spacing) * 0.5);
+  background-color: var(--color-gray-100);
+  border-radius: 0.25rem;
+}
+:where(.dark, .dark *) .prose code {
+  background-color: var(--color-gray-800);
+}

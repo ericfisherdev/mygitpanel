@@ -187,8 +187,10 @@ templ ReviewCard(review viewmodel.ReviewViewModel) {
 			}
 			<span class="text-xs text-gray-400 dark:text-gray-500 ml-auto">{ review.SubmittedAt }</span>
 		</div>
-		if review.Body != "" {
-			<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ review.Body }</p>
+		if review.BodyHTML != "" {
+			<div class="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
+				@templ.Raw(review.BodyHTML)
+			</div>
 		}
 	</div>
 }
@@ -210,8 +212,8 @@ templ ThreadCard(thread viewmodel.ThreadViewModel) {
 			<span class="text-xs text-gray-400 dark:text-gray-500 ml-auto">{ fmt.Sprint(thread.CommentCount) } comments</span>
 		</div>
 		<!-- Diff hunk -->
-		if thread.RootComment.DiffHunk != "" {
-			<pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 p-3 overflow-x-auto border-b border-gray-200 dark:border-gray-700">{ thread.RootComment.DiffHunk }</pre>
+		if thread.RootComment.DiffHunkHTML != "" {
+			<pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 p-3 overflow-x-auto border-b border-gray-200 dark:border-gray-700">@templ.Raw(thread.RootComment.DiffHunkHTML)</pre>
 		}
 		<!-- Root comment -->
 		<div class="p-4">
@@ -222,7 +224,9 @@ templ ThreadCard(thread viewmodel.ThreadViewModel) {
 					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300">Outdated</span>
 				}
 			</div>
-			<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ thread.RootComment.Body }</p>
+			<div class="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
+				@templ.Raw(thread.RootComment.BodyHTML)
+			</div>
 		</div>
 		<!-- Replies -->
 		for _, reply := range thread.Replies {
@@ -231,7 +235,9 @@ templ ThreadCard(thread viewmodel.ThreadViewModel) {
 					<span class="font-medium text-sm text-gray-900 dark:text-gray-100">{ reply.Author }</span>
 					<span class="text-xs text-gray-400 dark:text-gray-500">{ reply.CreatedAt }</span>
 				</div>
-				<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ reply.Body }</p>
+				<div class="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
+					@templ.Raw(reply.BodyHTML)
+				</div>
 			</div>
 		}
 	</div>
@@ -247,7 +253,9 @@ templ IssueCommentCard(comment viewmodel.IssueCommentViewModel) {
 			}
 			<span class="text-xs text-gray-400 dark:text-gray-500 ml-auto">{ comment.CreatedAt }</span>
 		</div>
-		<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ comment.Body }</p>
+		<div class="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
+			@templ.Raw(comment.BodyHTML)
+		</div>
 	</div>
 }
 

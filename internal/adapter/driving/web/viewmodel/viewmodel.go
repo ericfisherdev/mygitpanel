@@ -51,6 +51,7 @@ type ReviewViewModel struct {
 	Reviewer    string
 	State       string
 	Body        string
+	BodyHTML    string
 	CommitID    string
 	SubmittedAt string
 	IsBot       bool
@@ -68,16 +69,18 @@ type ThreadViewModel struct {
 
 // ReviewCommentViewModel holds presentation-ready data for a single review comment.
 type ReviewCommentViewModel struct {
-	ID         int64
-	Author     string
-	Body       string
-	FilePath   string
-	Line       int
-	StartLine  int
-	DiffHunk   string
-	CommitID   string
-	IsOutdated bool
-	CreatedAt  string
+	ID           int64
+	Author       string
+	Body         string
+	BodyHTML     string
+	FilePath     string
+	Line         int
+	StartLine    int
+	DiffHunk     string
+	DiffHunkHTML string
+	CommitID     string
+	IsOutdated   bool
+	CreatedAt    string
 }
 
 // IssueCommentViewModel holds presentation-ready data for a PR-level general comment.
@@ -85,6 +88,7 @@ type IssueCommentViewModel struct {
 	ID        int64
 	Author    string
 	Body      string
+	BodyHTML  string
 	IsBot     bool
 	CreatedAt string
 }

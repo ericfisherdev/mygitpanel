@@ -108,6 +108,7 @@ func toReviewViewModels(reviews []model.Review, headSHA string, botUsernames []s
 			Reviewer:    r.ReviewerLogin,
 			State:       string(r.State),
 			Body:        r.Body,
+			BodyHTML:    RenderMarkdown(r.Body),
 			CommitID:    r.CommitID,
 			SubmittedAt: r.SubmittedAt.UTC().Format(time.RFC3339),
 			IsBot:       r.IsBot,
@@ -140,16 +141,18 @@ func toThreadViewModels(threads []application.CommentThread) []vm.ThreadViewMode
 // toReviewCommentViewModel converts a domain ReviewComment to a ReviewCommentViewModel.
 func toReviewCommentViewModel(c model.ReviewComment) vm.ReviewCommentViewModel {
 	return vm.ReviewCommentViewModel{
-		ID:         c.ID,
-		Author:     c.Author,
-		Body:       c.Body,
-		FilePath:   c.Path,
-		Line:       c.Line,
-		StartLine:  c.StartLine,
-		DiffHunk:   c.DiffHunk,
-		CommitID:   c.CommitID,
-		IsOutdated: c.IsOutdated,
-		CreatedAt:  c.CreatedAt.UTC().Format(time.RFC3339),
+		ID:           c.ID,
+		Author:       c.Author,
+		Body:         c.Body,
+		BodyHTML:     RenderMarkdown(c.Body),
+		FilePath:     c.Path,
+		Line:         c.Line,
+		StartLine:    c.StartLine,
+		DiffHunk:     c.DiffHunk,
+		DiffHunkHTML: RenderDiffHunk(c.DiffHunk),
+		CommitID:     c.CommitID,
+		IsOutdated:   c.IsOutdated,
+		CreatedAt:    c.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -161,6 +164,7 @@ func toIssueCommentViewModels(comments []model.IssueComment) []vm.IssueCommentVi
 			ID:        c.ID,
 			Author:    c.Author,
 			Body:      c.Body,
+			BodyHTML:  RenderMarkdown(c.Body),
 			IsBot:     c.IsBot,
 			CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339),
 		})
