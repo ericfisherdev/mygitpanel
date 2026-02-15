@@ -50,11 +50,8 @@ func NewHandler(
 	}
 }
 
-// NewServeMux creates an http.Handler with all routes registered and wrapped
-// with logging and recovery middleware.
-func NewServeMux(h *Handler, logger *slog.Logger) http.Handler {
-	mux := http.NewServeMux()
-
+// RegisterAPIRoutes registers all JSON API routes on the provided mux.
+func RegisterAPIRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("GET /api/v1/prs", h.ListPRs)
 	mux.HandleFunc("GET /api/v1/prs/attention", h.ListPRsNeedingAttention)
 	mux.HandleFunc("GET /api/v1/repos/{owner}/{repo}/prs/{number}", h.GetPR)
@@ -65,12 +62,25 @@ func NewServeMux(h *Handler, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/v1/bots", h.ListBots)
 	mux.HandleFunc("POST /api/v1/bots", h.AddBot)
 	mux.HandleFunc("DELETE /api/v1/bots/{username}", h.RemoveBot)
+}
 
+// ApplyMiddleware wraps an http.Handler with logging and recovery middleware.
+func ApplyMiddleware(handler http.Handler, logger *slog.Logger) http.Handler {
 	// Recovery innermost so panics are caught before logging.
-	wrapped := recoveryMiddleware(logger, mux)
+	wrapped := recoveryMiddleware(logger, handler)
 	wrapped = loggingMiddleware(logger, wrapped)
 
 	return wrapped
+}
+
+// NewServeMux creates an http.Handler with all routes registered and wrapped
+// with logging and recovery middleware. This is a convenience function that
+// combines RegisterAPIRoutes and ApplyMiddleware.
+func NewServeMux(h *Handler, logger *slog.Logger) http.Handler {
+	mux := http.NewServeMux()
+	RegisterAPIRoutes(mux, h)
+
+	return ApplyMiddleware(mux, logger)
 }
 
 // ListPRs returns all tracked pull requests.
