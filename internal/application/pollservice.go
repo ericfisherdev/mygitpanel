@@ -510,10 +510,10 @@ func (s *PollService) pollDueRepos(ctx context.Context) {
 
 		if err := s.pollRepo(ctx, repo.FullName); err != nil {
 			slog.Error("adaptive repo poll failed", "repo", repo.FullName, "error", err)
+		} else {
+			s.updateSchedule(ctx, repo.FullName)
 		}
 		polled++
-
-		s.updateSchedule(ctx, repo.FullName)
 	}
 
 	slog.Info("adaptive poll cycle",
@@ -527,7 +527,9 @@ func (s *PollService) pollDueRepos(ctx context.Context) {
 func (s *PollService) handleRefresh(ctx context.Context, req refreshRequest) error {
 	if req.repoFullName != "" {
 		err := s.pollRepo(ctx, req.repoFullName)
-		s.updateSchedule(ctx, req.repoFullName)
+		if err == nil {
+			s.updateSchedule(ctx, req.repoFullName)
+		}
 		return err
 	}
 	return s.pollAll(ctx)
