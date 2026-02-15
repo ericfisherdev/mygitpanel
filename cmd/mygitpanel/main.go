@@ -15,6 +15,7 @@ import (
 	githubadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
 	sqliteadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/sqlite"
 	httphandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/http"
+	webhandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web"
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/config"
 )
@@ -90,13 +91,21 @@ func run() error {
 	// 7c. Create health service.
 	healthSvc := application.NewHealthService(checkStore, prStore)
 
-	// 7.5. Create HTTP handler and server.
-	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
-	mux := httphandler.NewServeMux(h, slog.Default())
+	// 7.5. Create HTTP handler and register API routes.
+	apiHandler := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
+	mux := http.NewServeMux()
+	httphandler.RegisterAPIRoutes(mux, apiHandler)
+
+	// 7.6. Create web handler and register GUI routes.
+	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
+	webhandler.RegisterRoutes(mux, webHandler)
+
+	// Apply middleware.
+	handler := httphandler.ApplyMiddleware(mux, slog.Default())
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
