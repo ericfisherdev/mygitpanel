@@ -8,7 +8,7 @@
 
 ## Current Architecture (v1.0 Baseline)
 
-```
+```text
 cmd/mygitpanel/main.go                    <-- Composition root
 internal/
   domain/model/                            <-- Pure entities (no external deps)
@@ -28,7 +28,7 @@ The existing architecture is hexagonal with strict dependency flow inward. The H
 
 ### High-Level Diagram
 
-```
+```text
                     +-----------------------------------------+
                     |          Web GUI (templ + HTMX)          |  <-- NEW Driving Adapter
                     |  internal/adapter/driving/web/           |
@@ -93,7 +93,7 @@ The existing architecture is hexagonal with strict dependency flow inward. The H
 
 This is the core new driving adapter. It follows the same pattern as the existing HTTP handler but renders templ components instead of JSON.
 
-```
+```text
 internal/adapter/driving/web/
   handler.go              <-- Handler struct, constructor, route handlers
   routes.go               <-- Route registration (RegisterRoutes)
@@ -177,7 +177,7 @@ func (h *WebHandler) PRList(w http.ResponseWriter, r *http.Request) {
 
 HTMX routes live under a separate prefix to avoid collision with the JSON API:
 
-```
+```text
 GET  /{$}                                       -> Dashboard (full page)
 GET  /app/prs/{owner}/{repo}/{number}            -> PR detail (HTMX partial)
 GET  /app/prs/search                             -> Search PRs (HTMX partial)
@@ -335,7 +335,7 @@ func (s *JiraService) AddComment(ctx context.Context, issueKey string, body stri
 
 ### Flow 1: Dashboard Page Load (Full Page)
 
-```
+```text
 Browser GET /{$}
   -> WebHandler.Dashboard()
     -> prStore.ListAll()         // existing port
@@ -347,7 +347,7 @@ Browser GET /{$}
 
 ### Flow 2: PR List Refresh (HTMX Partial)
 
-```
+```text
 HTMX GET /app/prs/search (HX-Request: true)
   -> WebHandler.SearchPRs()
     -> prStore.ListAll()
@@ -359,7 +359,7 @@ HTMX GET /app/prs/search (HX-Request: true)
 
 ### Flow 3: Submit Review (HTMX POST)
 
-```
+```text
 HTMX POST /app/prs/owner/repo/123/review
   Body: event=APPROVE&body=LGTM
   -> WebHandler.SubmitReview()
@@ -373,7 +373,7 @@ HTMX POST /app/prs/owner/repo/123/review
 
 ### Flow 4: Jira Sidebar Load (HTMX Partial)
 
-```
+```text
 HTMX GET /app/prs/owner/repo/123/jira (lazy loaded)
   -> WebHandler.JiraSidebar()
     -> Get PR from prStore to get branch name and URL
