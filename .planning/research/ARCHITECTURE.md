@@ -208,7 +208,7 @@ Alpine.js state does NOT survive HTMX swaps by default. Use the `alpine-morph` H
     </nav>
     <!-- HTMX swaps happen INSIDE this target -->
     <div id="pr-detail-content"
-         hx-get="/prs/owner/repo/123/threads"
+         hx-get="/app/prs/owner/repo/123/threads"
          hx-trigger="load">
     </div>
 </div>
