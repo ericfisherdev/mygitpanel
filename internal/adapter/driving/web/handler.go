@@ -3,6 +3,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -67,6 +68,9 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	// Ensure CSRF cookie is set for mutating requests.
+	csrfToken(w, r)
 
 	data := buildDashboardViewModel(prs, repos)
 	component := pages.Dashboard(data)
@@ -170,6 +174,11 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	fullName := strings.TrimSpace(r.FormValue("full_name"))
 
 	if !isValidRepoName(fullName) {
@@ -186,7 +195,7 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repoStore.Add(r.Context(), repo); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
+		if errors.Is(err, driven.ErrRepoAlreadyExists) {
 			http.Error(w, "repository already exists", http.StatusConflict)
 			return
 		}
@@ -209,12 +218,17 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 
 // RemoveRepo removes a repo from the watch list via the GUI and returns updated partials.
 func (h *Handler) RemoveRepo(w http.ResponseWriter, r *http.Request) {
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	owner := r.PathValue("owner")
 	repo := r.PathValue("repo")
 	fullName := owner + "/" + repo
 
 	if err := h.repoStore.Remove(r.Context(), fullName); err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, driven.ErrRepoNotFound) {
 			http.Error(w, "repository not found", http.StatusNotFound)
 			return
 		}

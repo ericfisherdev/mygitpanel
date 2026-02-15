@@ -1,369 +1,511 @@
-# Architecture Patterns
+# Architecture Patterns: v2.0 Web GUI Integration
 
-**Domain:** Go API with GitHub integration, hexagonal architecture, background polling
-**Researched:** 2026-02-10
-**Confidence note:** Web research tools were unavailable. All recommendations below are based on training knowledge of well-established Go patterns (hexagonal architecture, standard project layout, Go concurrency primitives). These patterns are mature and stable, making training-based knowledge reliable here. Individual library version claims should be verified at implementation time.
+**Domain:** Web GUI with templ/HTMX/Alpine.js, Jira integration, GitHub review submission
+**Researched:** 2026-02-14
+**Overall confidence:** HIGH (existing hexagonal architecture is well-suited; new components follow established patterns)
 
 ---
 
-## Recommended Architecture
-
-ReviewHub follows **hexagonal architecture** (ports and adapters), placing the domain model at the center with all infrastructure concerns pushed to the boundary. In Go, this maps naturally to interfaces (ports) defined in the domain layer and concrete implementations (adapters) in separate packages.
+## Current Architecture (v1.0 Baseline)
 
 ```
-                    +---------------------------+
-                    |      REST API (chi)       |  <-- Primary/Driving Adapter
-                    +------------+--------------+
-                                 |
-                    +------------v--------------+
-                    |     Application Layer     |  <-- Use cases / orchestration
-                    |  (PRService, RepoService, |
-                    |   PollingService)          |
-                    +---+-----------+-----------+
-                        |           |           |
-           +------------+    +------+------+    +------------+
-           |  Domain    |    |  Domain     |    |  Domain    |
-           |  Ports     |    |  Model      |    |  Ports     |
-           | (driven)   |    | (entities,  |    | (driving)  |
-           |            |    |  value objs)|    |            |
-           +-----+------+    +-------------+    +-----+------+
-                 |                                    |
-        +--------+--------+                  +--------+--------+
-        | SQLite Adapter  |                  | GitHub Adapter  |
-        | (persistence)   |                  | (API client)    |
-        +-----------------+                  +-----------------+
+cmd/mygitpanel/main.go                    <-- Composition root
+internal/
+  domain/model/                            <-- Pure entities (no external deps)
+  domain/port/driven/                      <-- Secondary ports (GitHubClient, PRStore, RepoStore, etc.)
+  application/                             <-- Use cases (PollService, ReviewService, HealthService)
+  adapter/driven/github/                   <-- GitHub REST+GraphQL adapter (go-github v82)
+  adapter/driven/sqlite/                   <-- SQLite adapter (modernc.org/sqlite, WAL mode)
+  adapter/driving/http/                    <-- HTTP REST adapter (stdlib net/http, Go 1.22+ routing)
+  config/                                  <-- Env var loading, fail-fast validation
 ```
 
-### Directory Structure
+The existing architecture is hexagonal with strict dependency flow inward. The HTTP handler (`adapter/driving/http/`) is thin: it parses requests, calls port interfaces/application services, and writes JSON responses. This is the perfect seam for adding HTML rendering alongside JSON.
+
+---
+
+## Recommended Architecture (v2.0)
+
+### High-Level Diagram
 
 ```
-reviewhub/
-|-- cmd/
-|   +-- reviewhub/
-|       +-- main.go                 # Entry point, wiring, DI
-|
-|-- internal/
-|   |-- domain/
-|   |   |-- model/
-|   |   |   |-- pullrequest.go      # PR entity
-|   |   |   |-- repository.go       # Watched repository entity
-|   |   |   |-- review.go           # Review/comment entity
-|   |   |   |-- reviewcomment.go    # Review comment with code snippet
-|   |   |   +-- checkstatus.go      # CI/CD check status value object
-|   |   |
-|   |   +-- port/
-|   |       |-- driven/
-|   |       |   |-- prstore.go      # PRStore interface (persistence port)
-|   |       |   |-- repostore.go    # RepoStore interface (persistence port)
-|   |       |   +-- githubclient.go # GitHubClient interface (external API port)
-|   |       |
-|   |       +-- driving/
-|   |           |-- prservice.go    # PRService interface (use case port)
-|   |           |-- reposervice.go  # RepoService interface (use case port)
-|   |           +-- pollservice.go  # PollService interface (use case port)
-|   |
-|   |-- application/
-|   |   |-- prservice.go            # PRService implementation
-|   |   |-- reposervice.go          # RepoService implementation
-|   |   |-- pollservice.go          # PollService / scheduling orchestration
-|   |   +-- commentenricher.go      # Review comment enrichment logic
-|   |
-|   |-- adapter/
-|   |   |-- driven/
-|   |   |   |-- sqlite/
-|   |   |   |   |-- prrepo.go       # SQLite PRStore adapter
-|   |   |   |   |-- reporepo.go     # SQLite RepoStore adapter
-|   |   |   |   |-- migrations.go   # Schema migrations
-|   |   |   |   +-- db.go           # Connection management
-|   |   |   |
-|   |   |   +-- github/
-|   |   |       |-- client.go       # GitHub API client adapter
-|   |   |       |-- mapper.go       # GitHub API response -> domain model
-|   |   |       +-- ratelimit.go    # Rate limit tracking
-|   |   |
-|   |   +-- driving/
-|   |       +-- http/
-|   |           |-- server.go       # HTTP server setup
-|   |           |-- router.go       # Route definitions
-|   |           |-- prhandler.go    # PR endpoint handlers
-|   |           |-- repohandler.go  # Repository CRUD handlers
-|   |           |-- statushandler.go # Health/status endpoints
-|   |           +-- response.go     # JSON response helpers
-|   |
-|   +-- config/
-|       +-- config.go               # Configuration loading (env vars)
-|
-|-- Dockerfile
-|-- docker-compose.yml
-|-- go.mod
-+-- go.sum
+                    +-----------------------------------------+
+                    |          Web GUI (templ + HTMX)          |  <-- NEW Driving Adapter
+                    |  internal/adapter/driving/web/           |
+                    +-----------+-----------------------------+
+                                |
+                    +-----------v-----------------------------+
+                    |          REST API (JSON)                 |  <-- EXISTING Driving Adapter
+                    |  internal/adapter/driving/http/          |  (unchanged)
+                    +-----------+-----------------------------+
+                                |
+                    +-----------v-----------------------------+
+                    |        Application Layer                 |
+                    |  PollService | ReviewService |           |
+                    |  HealthService | ReviewSubmitService*    |  <-- *NEW service
+                    |  JiraService*                            |  <-- *NEW service
+                    +---+--------+---------+------+-----------+
+                        |        |         |      |
+           +------------+  +----+----+  +--+---+  +----------+
+           | GitHubClient|  | PRStore |  | Repo |  | JiraClient|  <-- *NEW port
+           | (extended*) |  |         |  | Store|  |           |
+           +------+------+  +---+----+  +--+---+  +-----+----+
+                  |              |          |             |
+           +------+------+  +---+----+  +--+---+  +-----+----+
+           | github/     |  | sqlite/|  |sqlite/|  | jira/    |  <-- *NEW adapter
+           | client.go   |  |        |  |       |  | client.go|
+           +-------------+  +--------+  +-------+  +----------+
 ```
 
-### Why This Structure
+### New Components (Files to Create)
 
-**`cmd/`** -- Standard Go convention. The `main.go` here is the composition root where all dependencies are wired together. This is the only place that knows about all concrete types.
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Web driving adapter** | `internal/adapter/driving/web/` | templ handlers that render HTML partials |
+| **templ components** | `internal/adapter/driving/web/components/` | Reusable templ UI components |
+| **templ layouts** | `internal/adapter/driving/web/layouts/` | Base layout, page shells |
+| **templ pages** | `internal/adapter/driving/web/pages/` | Full page compositions |
+| **Jira port** | `internal/domain/port/driven/jiraclient.go` | Interface for Jira API operations |
+| **Jira adapter** | `internal/adapter/driven/jira/` | Concrete Jira REST API client |
+| **Jira domain model** | `internal/domain/model/jira.go` | JiraIssue, JiraComment entities |
+| **ReviewSubmitService** | `internal/application/reviewsubmitservice.go` | Orchestrates GitHub review submission |
+| **JiraService** | `internal/application/jiraservice.go` | Orchestrates Jira read + comment |
+| **Static assets** | `static/` or `web/static/` | CSS (Tailwind output), JS (Alpine, HTMX, GSAP) |
+| **Config additions** | `internal/config/config.go` | New env vars for Jira credentials |
 
-**`internal/`** -- Go's enforced encapsulation. Nothing outside the module can import these packages. This is critical for hexagonal architecture because it prevents leaking implementation details.
+### Existing Components to Modify
 
-**`domain/model/`** -- Pure domain types with zero external dependencies. No imports from `adapter/`, `application/`, or any third-party library. These are plain Go structs and methods.
+| Component | File | Change |
+|-----------|------|--------|
+| **GitHubClient port** | `internal/domain/port/driven/githubclient.go` | Add `SubmitReview`, `CreateReviewComment`, `ReplyToComment` methods |
+| **GitHub adapter** | `internal/adapter/driven/github/client.go` | Implement new write methods using `PullRequests.CreateReview` etc. |
+| **Composition root** | `cmd/mygitpanel/main.go` | Wire new services, register web routes, serve static assets |
+| **Config** | `internal/config/config.go` | Add Jira URL, Jira token, Jira email env vars |
+| **HTTP ServeMux** | `internal/adapter/driving/http/handler.go` | Mount web adapter routes alongside `/api/v1/` routes |
 
-**`domain/port/`** -- Interfaces split into `driving` (primary, things that call into the domain) and `driven` (secondary, things the domain calls out to). The split makes dependency direction unambiguous.
-
-**`application/`** -- Use case orchestration. These types implement the driving port interfaces and depend on the driven port interfaces. This is where business logic composition happens.
-
-**`adapter/driven/`** -- Concrete implementations of driven ports. SQLite for persistence, GitHub API client for external data. These depend on the port interfaces and the domain model.
-
-**`adapter/driving/http/`** -- HTTP handlers that translate HTTP requests into application service calls. Depends on driving port interfaces.
+**Critical rule:** The existing JSON API (`/api/v1/*`) remains completely untouched. The web GUI is an additional driving adapter that calls the same ports and application services.
 
 ---
 
 ## Component Boundaries
 
-| Component | Package | Responsibility | Depends On | Depended On By |
-|-----------|---------|---------------|------------|----------------|
-| **Domain Model** | `internal/domain/model` | PR, Repository, Review entities and value objects | Nothing (zero deps) | Everything |
-| **Driven Ports** | `internal/domain/port/driven` | Interfaces for persistence and external APIs | `domain/model` | `application`, adapters |
-| **Driving Ports** | `internal/domain/port/driving` | Interfaces for use cases | `domain/model` | HTTP adapter, `cmd/` |
-| **Application Services** | `internal/application` | Use case orchestration, comment enrichment | `domain/model`, `domain/port/driven` | Driving adapters via interfaces |
-| **SQLite Adapter** | `internal/adapter/driven/sqlite` | PR and repository persistence | `domain/model`, `domain/port/driven` | `cmd/` (wiring only) |
-| **GitHub Adapter** | `internal/adapter/driven/github` | GitHub API communication, response mapping | `domain/model`, `domain/port/driven` | `cmd/` (wiring only) |
-| **HTTP Adapter** | `internal/adapter/driving/http` | REST API, request/response handling | `domain/model`, `domain/port/driving` | `cmd/` (wiring only) |
-| **Polling Scheduler** | `internal/application/pollservice.go` | Periodic GitHub polling, coordination | `domain/port/driven` (GitHubClient, stores) | `cmd/` starts it |
-| **Config** | `internal/config` | Environment variable loading | Nothing external | `cmd/` |
-| **Composition Root** | `cmd/reviewhub/main.go` | Wiring all components together | Everything (only place) | Nothing |
+### 1. Web Driving Adapter (`internal/adapter/driving/web/`)
 
-### Dependency Rule (STRICT)
+This is the core new driving adapter. It follows the same pattern as the existing HTTP handler but renders templ components instead of JSON.
 
 ```
-Domain Model  <--  Domain Ports  <--  Application  <--  Adapters  <--  main.go
-    (0 deps)      (model only)      (ports only)     (ports+model)   (everything)
+internal/adapter/driving/web/
+  handler.go              <-- WebHandler struct, constructor, route registration
+  handler_dashboard.go    <-- Dashboard page handler
+  handler_pr.go           <-- PR detail page, HTMX partials
+  handler_repos.go        <-- Repo management handlers
+  handler_review.go       <-- Review submission handlers (POST)
+  handler_jira.go         <-- Jira-related handlers
+  handler_settings.go     <-- Bot config, Jira config UI
+  components/
+    pr_card.templ          <-- PR card component
+    pr_list.templ          <-- PR list (HTMX partial target)
+    review_thread.templ    <-- Review thread display
+    review_form.templ      <-- Review submission form
+    check_runs.templ       <-- CI status display
+    jira_sidebar.templ     <-- Jira issue panel
+    badge.templ            <-- Status badges
+    nav.templ              <-- Navigation bar
+    toast.templ            <-- Notification toasts
+  layouts/
+    base.templ             <-- HTML skeleton (head, body, scripts)
+    app.templ              <-- App shell with nav, sidebar
+  pages/
+    dashboard.templ        <-- Dashboard page composition
+    pr_detail.templ        <-- PR detail page composition
+    settings.templ         <-- Settings page composition
 ```
 
-Dependencies point INWARD only. The domain model never imports from application or adapter packages. Application services never import from adapter packages. Adapters know about ports and models but never about other adapters. Only `main.go` sees concrete types.
+**Key design decisions:**
+
+1. **WebHandler depends on the same ports and services as Handler.** No duplication of business logic.
+2. **Each handler method decides:** render a full page (initial load) or an HTMX partial (subsequent interactions), based on the `HX-Request` header.
+3. **templ components are the "view" layer.** They receive plain Go structs (view models), not domain models directly. This prevents templ files from depending on the domain package.
+
+```go
+// internal/adapter/driving/web/handler.go
+type WebHandler struct {
+    prStore        driven.PRStore
+    repoStore      driven.RepoStore
+    botConfigStore driven.BotConfigStore
+    reviewSvc      *application.ReviewService
+    healthSvc      *application.HealthService
+    pollSvc        *application.PollService
+    reviewSubmitSvc *application.ReviewSubmitService  // NEW
+    jiraSvc        *application.JiraService           // NEW
+    username       string
+    logger         *slog.Logger
+}
+```
+
+### 2. HTMX Endpoint Pattern
+
+HTMX endpoints return HTML fragments, not full pages. The pattern:
+
+```go
+// handler_pr.go
+func (h *WebHandler) PRList(w http.ResponseWriter, r *http.Request) {
+    prs, err := h.prStore.ListAll(r.Context())
+    if err != nil {
+        // Render error partial
+        components.ErrorBanner("Failed to load PRs").Render(r.Context(), w)
+        return
+    }
+
+    viewModels := toViewModels(prs) // Convert domain -> view models
+
+    if r.Header.Get("HX-Request") == "true" {
+        // HTMX partial: just the PR list fragment
+        components.PRList(viewModels).Render(r.Context(), w)
+        return
+    }
+
+    // Full page load: wrap in layout
+    pages.Dashboard(viewModels).Render(r.Context(), w)
+}
+```
+
+HTMX routes live under a separate prefix to avoid collision with the JSON API:
+
+```
+GET  /                              -> Dashboard (full page)
+GET  /prs                           -> PR list (HTMX partial or full page)
+GET  /prs/{owner}/{repo}/{number}   -> PR detail page
+GET  /prs/{owner}/{repo}/{number}/threads  -> Review threads (HTMX partial)
+GET  /prs/{owner}/{repo}/{number}/checks   -> Check runs (HTMX partial)
+GET  /prs/{owner}/{repo}/{number}/jira     -> Jira sidebar (HTMX partial)
+POST /prs/{owner}/{repo}/{number}/review   -> Submit review
+POST /prs/{owner}/{repo}/{number}/reply    -> Reply to comment
+GET  /repos                         -> Repo management page
+POST /repos                         -> Add repo (HTMX form)
+DELETE /repos/{owner}/{repo}        -> Remove repo (HTMX)
+GET  /settings                      -> Settings page
+POST /settings/bots                 -> Add bot (HTMX form)
+DELETE /settings/bots/{username}    -> Remove bot (HTMX)
+POST /refresh/{owner}/{repo}        -> Trigger manual refresh (HTMX)
+```
+
+### 3. Alpine.js Integration (Client-Side State)
+
+Alpine.js handles **local UI state only** -- no data fetching (that is HTMX's job):
+
+- **Theme toggle:** `x-data="{ dark: false }"` with localStorage persistence
+- **Modal state:** `x-data="{ showReviewForm: false }"` for review submission dialog
+- **Tab state:** `x-data="{ activeTab: 'threads' }"` for PR detail tabs
+- **Dropdown menus:** `x-data="{ open: false }"` for filter dropdowns
+- **Toast notifications:** `x-data="{ toasts: [] }"` with HTMX `afterSwap` events
+- **Client-side filtering:** `x-data="{ filter: '' }"` on already-loaded lists
+
+Alpine.js state does NOT survive HTMX swaps by default. Use the `alpine-morph` HTMX extension when replacing content that contains Alpine state. For most cases, keep Alpine state on **parent elements** that are outside HTMX swap targets.
+
+```html
+<!-- Alpine state lives OUTSIDE the HTMX swap target -->
+<div x-data="{ activeTab: 'threads' }">
+    <nav>
+        <button @click="activeTab = 'threads'" :class="activeTab === 'threads' && 'active'">Threads</button>
+        <button @click="activeTab = 'checks'" :class="activeTab === 'checks' && 'active'">Checks</button>
+    </nav>
+    <!-- HTMX swaps happen INSIDE this target -->
+    <div id="pr-detail-content"
+         hx-get="/prs/owner/repo/123/threads"
+         hx-trigger="load">
+    </div>
+</div>
+```
+
+### 4. GitHubClient Port Extension (Review Submission)
+
+Add write methods to the existing `driven.GitHubClient` interface:
+
+```go
+// internal/domain/port/driven/githubclient.go -- additions
+type GitHubClient interface {
+    // ... existing read methods ...
+
+    // SubmitReview creates and submits a review on a pull request.
+    // event must be one of: "APPROVE", "REQUEST_CHANGES", "COMMENT".
+    SubmitReview(ctx context.Context, repoFullName string, prNumber int, body string, event string) error
+
+    // CreateReviewComment creates a new inline comment on a PR diff.
+    CreateReviewComment(ctx context.Context, repoFullName string, prNumber int, comment model.NewReviewComment) error
+
+    // ReplyToComment creates a reply to an existing review comment thread.
+    ReplyToComment(ctx context.Context, repoFullName string, prNumber int, commentID int64, body string) error
+}
+```
+
+The adapter implementation uses `go-github`'s existing methods:
+
+- `PullRequests.CreateReview(ctx, owner, repo, number, &PullRequestReviewRequest{...})` -- for full review submission
+- `PullRequests.CreateComment(ctx, owner, repo, number, &PullRequestComment{...})` -- for inline comments
+- `PullRequests.CreateCommentInReplyTo(ctx, owner, repo, number, body, replyToID)` -- for thread replies
+
+These methods already exist in go-github v82. No new dependencies needed.
+
+### 5. Jira Port and Adapter
+
+**New driven port:**
+
+```go
+// internal/domain/port/driven/jiraclient.go
+type JiraClient interface {
+    // GetIssue retrieves a Jira issue by key (e.g., "PROJ-123").
+    GetIssue(ctx context.Context, issueKey string) (*model.JiraIssue, error)
+
+    // SearchIssuesByPR finds Jira issues linked to a PR (by branch name or PR URL).
+    SearchIssuesByPR(ctx context.Context, prURL string, branchName string) ([]model.JiraIssue, error)
+
+    // AddComment adds a comment to a Jira issue.
+    AddComment(ctx context.Context, issueKey string, body string) error
+}
+```
+
+**New domain model:**
+
+```go
+// internal/domain/model/jira.go
+type JiraIssue struct {
+    Key         string     // e.g., "PROJ-123"
+    Summary     string
+    Status      string     // e.g., "In Progress"
+    Assignee    string
+    IssueType   string     // e.g., "Story", "Bug"
+    Priority    string     // e.g., "High"
+    URL         string     // Link to Jira web UI
+    Labels      []string
+    UpdatedAt   time.Time
+}
+```
+
+**Adapter recommendation:** Use `ctreminiom/go-atlassian` because:
+1. Actively maintained, cloud-first design matching modern Jira deployments
+2. Interface-driven architecture (aligns with hexagonal style)
+3. Supports Jira v2/v3 REST APIs
+4. Built-in OAuth 2.0 support
+5. Inspired by go-github's service pattern (familiar to this codebase)
+
+Alternative: `andygrunwald/go-jira` if self-hosted Jira is required (also actively maintained).
+
+### 6. New Application Services
+
+**ReviewSubmitService** -- Orchestrates review submission with validation:
+
+```go
+// internal/application/reviewsubmitservice.go
+type ReviewSubmitService struct {
+    ghClient driven.GitHubClient
+    prStore  driven.PRStore
+}
+
+func (s *ReviewSubmitService) SubmitReview(ctx context.Context, repoFullName string, prNumber int, body string, event string) error {
+    // 1. Validate PR exists in our store
+    // 2. Validate event is one of APPROVE/REQUEST_CHANGES/COMMENT
+    // 3. Delegate to ghClient.SubmitReview
+    // 4. Optionally trigger a refresh to pick up the new review
+}
+
+func (s *ReviewSubmitService) ReplyToComment(ctx context.Context, repoFullName string, prNumber int, commentID int64, body string) error {
+    // 1. Delegate to ghClient.ReplyToComment
+    // 2. Trigger refresh
+}
+```
+
+**JiraService** -- Orchestrates Jira lookups with caching:
+
+```go
+// internal/application/jiraservice.go
+type JiraService struct {
+    jiraClient driven.JiraClient
+}
+
+func (s *JiraService) GetLinkedIssues(ctx context.Context, prURL string, branchName string) ([]model.JiraIssue, error) {
+    // Search by PR URL first, fall back to branch name pattern
+    // Branch pattern: extract "PROJ-123" from "feat/PROJ-123-description"
+}
+
+func (s *JiraService) AddComment(ctx context.Context, issueKey string, body string) error {
+    return s.jiraClient.AddComment(ctx, issueKey, body)
+}
+```
 
 ---
 
 ## Data Flow
 
-### Flow 1: HTTP Request for PR Data
+### Flow 1: Dashboard Page Load (Full Page)
 
 ```
-1. HTTP Request arrives at driving/http handler
-2. Handler deserializes request, calls driving port interface method
-3. Application service (implements driving port) executes use case:
-   a. Queries PRStore (driven port) for stored PR data
-   b. Returns domain model objects
-4. Handler serializes domain model to JSON response
-5. HTTP Response returned
+Browser GET /
+  -> WebHandler.Dashboard()
+    -> prStore.ListAll()         // existing port
+    -> prStore.ListNeedingReview() // existing port
+    -> Convert to view models
+    -> pages.Dashboard(viewModels).Render(ctx, w)
+  <- Full HTML page with head/scripts/nav/content
 ```
 
-### Flow 2: Background Polling Cycle
+### Flow 2: PR List Refresh (HTMX Partial)
 
 ```
-1. Polling scheduler tick fires (Go ticker)
-2. PollService calls RepoStore to get list of watched repositories
-3. For each repository:
-   a. Calls GitHubClient (driven port) to fetch PRs
-   b. GitHubClient adapter calls GitHub REST API v3
-   c. Adapter maps GitHub API response to domain model
-   d. PollService compares fetched PRs with stored PRs
-   e. For new/changed PRs: fetches review comments via GitHubClient
-   f. CommentEnricher formats comments with code snippets
-   g. PollService calls PRStore to upsert PR data
-4. Scheduler waits for next tick
+HTMX GET /prs (HX-Request: true)
+  -> WebHandler.PRList()
+    -> prStore.ListAll()
+    -> Convert to view models
+    -> components.PRList(viewModels).Render(ctx, w)
+  <- HTML fragment (just the <div id="pr-list"> content)
+  -> HTMX swaps into #pr-list target
 ```
 
-### Flow 3: Repository CRUD
+### Flow 3: Submit Review (HTMX POST)
 
 ```
-1. HTTP Request (POST/PUT/DELETE /repos)
-2. Handler calls RepoService (driving port)
-3. RepoService validates input (domain rules)
-4. RepoService calls RepoStore (driven port) to persist
-5. If adding new repo: triggers immediate poll for that repo
-6. Response returned
+HTMX POST /prs/owner/repo/123/review
+  Body: event=APPROVE&body=LGTM
+  -> WebHandler.SubmitReview()
+    -> reviewSubmitSvc.SubmitReview(ctx, "owner/repo", 123, "LGTM", "APPROVE")
+      -> ghClient.SubmitReview(ctx, ...)  // calls GitHub API
+      -> pollSvc.RefreshPR(ctx, ...)      // trigger re-poll to pick up new review
+    -> components.ReviewSubmitSuccess().Render(ctx, w)
+  <- HTML fragment with success toast
+  -> HTMX triggers refresh of review threads via HX-Trigger header
 ```
 
-### Flow 4: Comment Enrichment (Core Domain Logic)
+### Flow 4: Jira Sidebar Load (HTMX Partial)
 
 ```
-1. GitHub adapter fetches raw review comment (includes file path, line, body)
-2. GitHub adapter fetches the PR diff/patch
-3. CommentEnricher (application layer):
-   a. Locates the relevant file in the diff
-   b. Extracts the hunk containing the commented line
-   c. Builds a CodeSnippet with surrounding context lines
-   d. Attaches snippet to ReviewComment domain object
-4. Enriched ReviewComment stored via PRStore
+HTMX GET /prs/owner/repo/123/jira (lazy loaded)
+  -> WebHandler.JiraSidebar()
+    -> Get PR from prStore to get branch name and URL
+    -> jiraSvc.GetLinkedIssues(ctx, prURL, branchName)
+    -> components.JiraSidebar(issues).Render(ctx, w)
+  <- HTML fragment with linked Jira issues
 ```
 
-This is the core value proposition of the system: transforming raw GitHub review data into AI-consumable context.
+---
+
+## Route Architecture
+
+The composition root mounts both adapters on the same `http.ServeMux`:
+
+```go
+// cmd/mygitpanel/main.go -- additions
+func run() error {
+    // ... existing setup ...
+
+    // NEW: Create review submit service
+    reviewSubmitSvc := application.NewReviewSubmitService(ghClient, prStore, pollSvc)
+
+    // NEW: Create Jira client and service (optional, nil if not configured)
+    var jiraSvc *application.JiraService
+    if cfg.JiraURL != "" {
+        jiraClient := jiraadapter.NewClient(cfg.JiraURL, cfg.JiraEmail, cfg.JiraToken)
+        jiraSvc = application.NewJiraService(jiraClient)
+    }
+
+    // Existing JSON API handler (unchanged)
+    h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
+
+    // NEW: Web GUI handler
+    wh := webhandler.NewWebHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, reviewSubmitSvc, jiraSvc, cfg.GitHubUsername, slog.Default())
+
+    mux := http.NewServeMux()
+
+    // JSON API routes (existing, unchanged)
+    apiMux := httphandler.NewServeMux(h, slog.Default())
+    mux.Handle("/api/", apiMux)
+
+    // Web GUI routes (new)
+    webMux := webhandler.NewServeMux(wh, slog.Default())
+    mux.Handle("/", webMux)
+
+    // Static assets
+    mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+    // ... rest unchanged ...
+}
+```
+
+**Route separation strategy:** `/api/v1/*` routes hit the JSON adapter. All other routes hit the web adapter. No ambiguity.
 
 ---
 
 ## Patterns to Follow
 
-### Pattern 1: Interface-Based Dependency Injection via Constructor
+### Pattern 1: View Models (Decouple templ from Domain)
 
-**What:** Define interfaces in the domain/port packages. Application services accept these interfaces via constructor parameters. Wire concrete implementations in `main.go`.
+**What:** Create lightweight structs in the web adapter package that templ components accept. Map domain models to view models in the handler before rendering.
 
-**Why:** This is the standard Go approach to hexagonal architecture. Go interfaces are implicitly satisfied (no `implements` keyword), so adapters satisfy port interfaces without importing the port package -- though explicit imports for documentation clarity are acceptable.
+**When:** Always. templ files must never import `domain/model/`.
 
-**Confidence:** HIGH -- this is idiomatic Go, well-established.
+**Why:** Prevents the view layer from dictating domain model shape. Allows adding display-only fields (formatted dates, color classes, computed labels) without polluting domain models.
 
 ```go
-// internal/domain/port/driven/prstore.go
-package driven
-
-import "reviewhub/internal/domain/model"
-
-type PRStore interface {
-    GetByRepository(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
-    Upsert(ctx context.Context, pr model.PullRequest) error
-    GetByStatus(ctx context.Context, status model.PRStatus) ([]model.PullRequest, error)
+// internal/adapter/driving/web/viewmodel.go
+type PRViewModel struct {
+    Number         int
+    Repository     string
+    Title          string
+    Author         string
+    Status         string
+    StatusColor    string   // "green", "red", "yellow" -- display concern
+    NeedsReview    bool
+    URL            string
+    Labels         []string
+    OpenedAgo      string   // "3 days ago" -- display concern
+    UpdatedAgo     string
+    ReviewStatus   string
+    CIStatusIcon   string   // "check-circle", "x-circle" -- display concern
 }
 ```
 
-```go
-// internal/application/prservice.go
-package application
+### Pattern 2: HTMX Partial vs Full Page (HX-Request Header)
 
-type PRService struct {
-    prStore  driven.PRStore
-    ghClient driven.GitHubClient
-}
+**What:** Every page handler checks for `HX-Request: true` header. If present, render just the content partial. If absent, render the full page with layout.
 
-func NewPRService(store driven.PRStore, gh driven.GitHubClient) *PRService {
-    return &PRService{prStore: store, ghClient: gh}
-}
-```
+**When:** On every GET handler that serves a page.
 
 ```go
-// cmd/reviewhub/main.go
-func main() {
-    db := sqlite.NewDB(cfg.DatabasePath)
-    prStore := sqlite.NewPRRepo(db)
-    ghClient := github.NewClient(cfg.GitHubToken)
-    prService := application.NewPRService(prStore, ghClient)
-    // ... wire HTTP handlers with prService
-}
-```
-
-### Pattern 2: Context-Based Cancellation for Polling
-
-**What:** Use `context.Context` throughout, with a cancellable context for the background polling goroutine. On shutdown, cancel the context to cleanly stop polling.
-
-**Why:** Go's context package is the standard mechanism for lifecycle management. The polling scheduler runs as a goroutine; context cancellation ensures clean shutdown without leaked goroutines.
-
-**Confidence:** HIGH -- standard Go concurrency pattern.
-
-```go
-// internal/application/pollservice.go
-type PollService struct {
-    interval time.Duration
-    ghClient driven.GitHubClient
-    prStore  driven.PRStore
-    repoStore driven.RepoStore
-    enricher *CommentEnricher
-}
-
-func (s *PollService) Start(ctx context.Context) {
-    ticker := time.NewTicker(s.interval)
-    defer ticker.Stop()
-
-    // Poll immediately on start
-    s.pollAll(ctx)
-
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case <-ticker.C:
-            s.pollAll(ctx)
-        }
+func (h *WebHandler) renderPage(w http.ResponseWriter, r *http.Request, page, partial templ.Component) {
+    if r.Header.Get("HX-Request") == "true" {
+        partial.Render(r.Context(), w)
+        return
     }
+    page.Render(r.Context(), w)
 }
 ```
 
-### Pattern 3: Graceful Shutdown Orchestration
+### Pattern 3: HTMX Response Headers for Cascading Updates
 
-**What:** Use `signal.NotifyContext` to create a context that cancels on SIGINT/SIGTERM. Pass this to both the HTTP server and the polling goroutine.
+**What:** After a mutation (submit review, add repo), set `HX-Trigger` response headers to tell other HTMX elements on the page to refresh.
 
-**Why:** Docker sends SIGTERM on container stop. The application must drain in-flight requests and stop polling cleanly. This is critical for SQLite (avoid corrupted writes).
-
-**Confidence:** HIGH -- standard Go server pattern.
+**When:** On every POST/DELETE handler.
 
 ```go
-func main() {
-    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-    defer stop()
+func (h *WebHandler) SubmitReview(w http.ResponseWriter, r *http.Request) {
+    // ... submit review ...
 
-    // Start polling in background
-    go pollService.Start(ctx)
-
-    // Start HTTP server (blocks)
-    server.ListenAndServe(ctx)
+    // Tell the page to refresh the review threads and PR status
+    w.Header().Set("HX-Trigger", "refreshThreads, refreshPRStatus")
+    components.ReviewSubmitSuccess().Render(r.Context(), w)
 }
 ```
 
-### Pattern 4: Domain Model as Plain Structs with Methods
+### Pattern 4: Jira Branch Name Extraction
 
-**What:** Domain entities are plain Go structs with behavior methods. No ORM tags, no JSON tags, no database annotations on domain types.
+**What:** Extract Jira issue keys from PR branch names using regex pattern `[A-Z]+-\d+`.
 
-**Why:** Domain model purity is the core of hexagonal architecture. Serialization concerns belong in adapters. The domain model should be testable without any infrastructure.
-
-**Confidence:** HIGH -- fundamental hexagonal architecture principle.
+**When:** When loading Jira sidebar for a PR.
 
 ```go
-// internal/domain/model/pullrequest.go
-package model
+var jiraKeyPattern = regexp.MustCompile(`[A-Z]+-\d+`)
 
-type PullRequest struct {
-    ID            int64
-    Number        int
-    RepoFullName  string
-    Title         string
-    Author        string
-    Status        PRStatus
-    ReviewStatus  ReviewStatus
-    CIStatus      CIStatus
-    CoderabbitReviewed bool
-    DiffStats     DiffStats
-    OpenedAt      time.Time
-    LastActivityAt time.Time
-    Comments      []ReviewComment
-}
-
-func (pr *PullRequest) DaysSinceOpened() int {
-    return int(time.Since(pr.OpenedAt).Hours() / 24)
-}
-
-func (pr *PullRequest) IsStale(thresholdDays int) bool {
-    return pr.DaysSinceLastActivity() > thresholdDays
-}
-```
-
-### Pattern 5: Adapter-Layer Mapping (Separate from Domain)
-
-**What:** Each adapter defines its own data structures for serialization and maps to/from domain types. GitHub API responses map to domain model in the GitHub adapter. SQLite rows map to domain model in the SQLite adapter. HTTP responses map from domain model in the HTTP adapter.
-
-**Why:** Prevents domain model contamination. GitHub API response shape, SQLite column names, and JSON API response format can all change independently without touching the domain.
-
-**Confidence:** HIGH -- core hexagonal architecture principle.
-
-```go
-// internal/adapter/driven/github/mapper.go
-package github
-
-func toDomainPR(ghPR *ghPullRequest, repoFullName string) model.PullRequest {
-    return model.PullRequest{
-        Number:       ghPR.Number,
-        RepoFullName: repoFullName,
-        Title:        ghPR.Title,
-        Author:       ghPR.User.Login,
-        Status:       mapStatus(ghPR),
-        // ...
-    }
+func extractJiraKeys(branchName string) []string {
+    return jiraKeyPattern.FindAllString(branchName, -1)
 }
 ```
 
@@ -371,250 +513,151 @@ func toDomainPR(ghPR *ghPullRequest, repoFullName string) model.PullRequest {
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Leaking GitHub Types into the Domain
+### Anti-Pattern 1: Sharing Handler Struct Between JSON and HTML
 
-**What:** Importing `github.com/google/go-github` types directly in domain or application packages.
+**What:** Putting both JSON and HTML rendering methods on the same Handler struct.
+**Why bad:** Violates SRP. The JSON handler and web handler have different dependencies (web needs ReviewSubmitService, JiraService). Mixing them creates a god struct.
+**Instead:** Separate `Handler` (JSON) and `WebHandler` (HTML) structs, each in their own package.
 
-**Why bad:** Couples the domain to a third-party API client library. If the GitHub library changes (or you want to swap it for raw HTTP calls), changes cascade through the entire codebase.
+### Anti-Pattern 2: templ Components Calling Ports Directly
 
-**Instead:** The GitHub adapter translates API responses to domain model types. The domain never sees a `github.PullRequest`; it only sees `model.PullRequest`.
+**What:** Passing port interfaces (e.g., `PRStore`) into templ components and having them fetch data.
+**Why bad:** Breaks the hexagonal boundary. templ components are part of the driving adapter layer -- they should only receive pre-fetched data.
+**Instead:** Handler fetches data via ports/services, maps to view models, passes view models to templ components.
 
-### Anti-Pattern 2: "Hexagonal" with Shared Database Models
+### Anti-Pattern 3: Duplicating Business Logic in Web Handlers
 
-**What:** Using the same struct for domain entity and database row (e.g., adding `db:"column_name"` tags to domain types).
+**What:** Re-implementing review enrichment, status aggregation, or attention signal logic in the web handler.
+**Why bad:** The logic already exists in `ReviewService`, `HealthService`, etc. Duplicating it creates drift.
+**Instead:** Call the existing application services. If a new use case is needed, add it to the application layer.
 
-**Why bad:** Couples domain evolution to database schema. Adding a computed domain field forces a schema migration. Renaming a domain field breaks queries.
+### Anti-Pattern 4: HTMX Swapping Alpine.js State Containers
 
-**Instead:** SQLite adapter defines its own row structs and maps to/from domain model. The mapping code is explicit and lives in the adapter.
+**What:** Using `hx-swap` targets that contain `x-data` attributes.
+**Why bad:** HTMX replaces the DOM element, destroying Alpine's reactive state.
+**Instead:** Keep `x-data` on elements **outside** HTMX swap targets. Or use the `alpine-morph` HTMX extension for cases where this is unavoidable.
 
-### Anti-Pattern 3: Fat Handlers (Business Logic in HTTP Layer)
+### Anti-Pattern 5: Storing Jira Credentials in SQLite
 
-**What:** Putting polling logic, comment enrichment, or status computation directly in HTTP handlers.
-
-**Why bad:** Makes logic untestable without HTTP. Violates separation of concerns. Handlers should be thin -- deserialize, delegate, serialize.
-
-**Instead:** Handlers call application service methods. All logic lives in the application layer or domain model.
-
-### Anti-Pattern 4: Global Database Connection
-
-**What:** Using a package-level `var db *sql.DB` that all code imports.
-
-**Why bad:** Untestable (can't inject a test database), violates dependency inversion, creates hidden coupling.
-
-**Instead:** Pass `*sql.DB` (or a wrapper) to adapter constructors. The adapter owns its database interactions.
-
-### Anti-Pattern 5: Polling in the HTTP Handler Goroutine
-
-**What:** Running the polling loop inside the HTTP server's goroutine pool or triggered by HTTP requests.
-
-**Why bad:** Polling should be independent of HTTP traffic. If no one calls the API, polling still needs to happen. Mixing concerns makes shutdown complex.
-
-**Instead:** Polling runs in its own goroutine, started from `main.go`, with its own context for lifecycle management.
-
-### Anti-Pattern 6: Enormous Port Interfaces
-
-**What:** A single `Repository` interface with 20+ methods covering PRs, repos, comments, checks, and diff stats.
-
-**Why bad:** Violates Interface Segregation Principle. Mocking becomes painful. Changes to one area affect unrelated consumers.
-
-**Instead:** Small, focused interfaces: `PRStore`, `RepoStore`, `ReviewStore`. Each has 3-5 methods max. Consumers depend only on the interface they need.
+**What:** Adding a settings table for Jira URL/token and managing them through the UI.
+**Why bad:** Secrets in the database create a security surface. The app already uses env vars for GitHub credentials.
+**Instead:** Jira credentials come from env vars, same as GitHub. The UI shows connection status, not credential management.
 
 ---
 
-## Key Architecture Decisions
+## Build Tool Integration
 
-### Decision 1: GitHub REST API v3, Not GraphQL v4
+### templ Code Generation
 
-**Recommendation:** Use GitHub REST API v3 with the `google/go-github` library.
+templ files (`.templ`) compile to Go code (`.go` files with `_templ.go` suffix). This is a build-time step:
 
-**Rationale:**
-- REST API is simpler to implement and debug
-- `go-github` is the mature, well-maintained Go client (HIGH confidence)
-- For the data we need (PRs, reviews, comments, checks), REST endpoints are straightforward
-- GraphQL would reduce API calls but adds query complexity that is not justified for v1
-- Rate limits are generous for authenticated REST (5,000 requests/hour)
+```bash
+# Install templ CLI
+go install github.com/a-h/templ/cmd/templ@latest
 
-**Confidence:** MEDIUM -- library recommendation based on training data; verify current version at implementation time.
+# Generate Go code from .templ files
+templ generate
 
-### Decision 2: chi Router over Standard Library
-
-**Recommendation:** Use `go-chi/chi` for HTTP routing.
-
-**Rationale:**
-- Lightweight, idiomatic Go router
-- Middleware ecosystem (logging, recovery, request ID)
-- Go 1.22+ improved `net/http` routing, so standard library is also viable
-- chi adds route grouping and middleware chaining that simplify the handler organization
-- If the team prefers zero dependencies, `net/http` with Go 1.22+ patterns is acceptable
-
-**Alternative:** Standard library `net/http` with Go 1.22+ method routing. This is a valid choice that reduces dependencies.
-
-**Confidence:** MEDIUM -- chi is well-established but Go's standard library routing has improved significantly. Verify Go version constraints.
-
-### Decision 3: modernc.org/sqlite over mattn/go-sqlite3
-
-**Recommendation:** Use `modernc.org/sqlite` (pure Go SQLite) rather than `mattn/go-sqlite3` (CGo wrapper).
-
-**Rationale:**
-- Pure Go: no CGo required, dramatically simpler cross-compilation and Docker builds
-- Docker multi-stage builds become trivial (no need for gcc in build stage)
-- Slightly slower than CGo version but ReviewHub's query volume is trivially small
-- Removes entire class of build issues on different platforms
-
-**Confidence:** MEDIUM -- based on training data. Verify current version and API compatibility at implementation time.
-
-### Decision 4: Embedded Migrations, Not External Tool
-
-**Recommendation:** Use Go 1.16+ `embed` package to embed SQL migration files, with a simple migration runner at startup.
-
-**Rationale:**
-- Single binary deployment (migrations are in the binary)
-- No external migration tool needed in Docker image
-- SQLite schema is simple enough that a lightweight approach works
-- Run migrations in `main.go` before starting services
-
-**Confidence:** HIGH -- `embed` is standard library, well-established pattern.
-
----
-
-## Component Interaction Diagram
-
+# Watch mode for development
+templ generate --watch
 ```
-main.go (composition root)
-  |
-  |-- Creates: config.Load()
-  |-- Creates: sqlite.NewDB(path)
-  |-- Creates: sqlite.NewPRRepo(db)       --> implements driven.PRStore
-  |-- Creates: sqlite.NewRepoRepo(db)     --> implements driven.RepoStore
-  |-- Creates: github.NewClient(token)    --> implements driven.GitHubClient
-  |-- Creates: application.NewCommentEnricher()
-  |-- Creates: application.NewPRService(prRepo, ghClient, enricher)
-  |-- Creates: application.NewRepoService(repoRepo)
-  |-- Creates: application.NewPollService(interval, ghClient, prRepo, repoRepo, enricher)
-  |-- Creates: http.NewServer(prService, repoService)
-  |
-  |-- Starts:  go pollService.Start(ctx)  // background goroutine
-  |-- Starts:  server.ListenAndServe(ctx) // blocks until shutdown
-  |
-  +-- On SIGTERM: ctx cancels -> polling stops, server drains, DB closes
+
+Generated `_templ.go` files **should be committed** to the repository. This ensures `go build` works without the templ CLI installed.
+
+### Tailwind CSS Build
+
+```bash
+# Install Tailwind CLI (standalone binary, no Node.js)
+curl -sLO https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64
+chmod +x tailwindcss-linux-x64
+
+# Build CSS
+./tailwindcss-linux-x64 -i static/css/input.css -o static/css/output.css --minify
+
+# Watch mode for development
+./tailwindcss-linux-x64 -i static/css/input.css -o static/css/output.css --watch
+```
+
+Tailwind scans templ files for class names. Configure `tailwind.config.js`:
+
+```js
+module.exports = {
+  content: ["./internal/adapter/driving/web/**/*.templ"],
+  // ...
+}
+```
+
+### Static Asset Embedding
+
+For Docker deployment, embed static assets and serve them from the binary:
+
+```go
+//go:embed static
+var staticFS embed.FS
+```
+
+### Development Workflow
+
+Use `air` for hot reload that orchestrates templ generate + go build:
+
+```toml
+# .air.toml
+[build]
+cmd = "templ generate && go build -o ./tmp/main ./cmd/mygitpanel"
+include_ext = ["go", "templ"]
 ```
 
 ---
 
 ## Scalability Considerations
 
-| Concern | Current (single user) | If Multi-User Later | Notes |
-|---------|----------------------|---------------------|-------|
-| GitHub rate limits | 5,000 req/hr, plenty for one user | Would need per-token tracking | Polling interval tuning is sufficient for v1 |
-| SQLite concurrency | Single writer fine for polling + API reads | Would need Postgres or WAL tuning | WAL mode recommended from day 1 for concurrent reads |
-| Polling frequency | Every 2-5 min is reasonable | Would need per-repo scheduling | Simple ticker is fine for v1 |
-| Memory usage | Trivial for dozens of PRs | Pagination needed for 1000s of PRs | Go-github handles pagination; store only open PRs by default |
-
-### SQLite Configuration (Important)
-
-Enable WAL mode on database open. This allows concurrent reads while a write is in progress, which matters because the HTTP server reads while the poller writes.
-
-```go
-db.Exec("PRAGMA journal_mode=WAL")
-db.Exec("PRAGMA busy_timeout=5000")
-db.Exec("PRAGMA foreign_keys=ON")
-```
-
-**Confidence:** HIGH -- SQLite WAL mode is well-documented and critical for this use case.
+| Concern | Current (v1.0) | With GUI (v2.0) | Notes |
+|---------|----------------|------------------|-------|
+| Concurrent requests | Low (API only) | Medium (browser users) | stdlib net/http handles concurrency well |
+| Response size | Small (JSON) | Medium (HTML fragments) | HTMX partials keep responses small |
+| Build complexity | `go build` only | templ generate + Tailwind + go build | Use `air` for dev, Makefile for CI |
+| Static assets | None | CSS + JS (~50KB total) | Embed in binary for Docker |
+| GitHub API calls | Read only | Read + Write (reviews) | Same rate limits; writes are user-triggered (infrequent) |
+| Jira API calls | None | Read + Write (comments) | Lazy-loaded per PR detail view |
+| Database queries | Per API request | Per page load + HTMX partials | Same queries, same connection pool |
 
 ---
 
-## Suggested Build Order
+## Dependency Summary
 
-The dependency graph dictates a natural build order. Each phase can be tested independently because hexagonal architecture enforces clean boundaries.
+### New Dependencies to Add
 
-### Phase 1: Domain Model + Ports (Foundation)
+| Package | Purpose | Confidence |
+|---------|---------|-----------|
+| `github.com/a-h/templ` | Type-safe HTML templating | HIGH -- well-established, v0.3+ is stable |
+| `github.com/ctreminiom/go-atlassian` | Jira REST API client | MEDIUM -- well-maintained, cloud-focused |
 
-Build first because everything else depends on these types.
+### Client-Side Libraries (CDN or vendored)
 
-- `internal/domain/model/` -- All entities and value objects
-- `internal/domain/port/driven/` -- PRStore, RepoStore, GitHubClient interfaces
-- `internal/domain/port/driving/` -- PRService, RepoService, PollService interfaces
+| Library | Version | Size (gzipped) | Purpose |
+|---------|---------|----------------|---------|
+| HTMX | 2.x | ~14KB | Partial page updates |
+| Alpine.js | 3.x | ~15KB | Client-side UI state |
+| GSAP | 3.x | ~25KB | Animations |
+| Tailwind CSS | 4.x | Output varies | Utility-first CSS |
 
-**Zero external dependencies.** Can be written and tested with unit tests immediately.
+### No New Go Dependencies Needed For
 
-### Phase 2: SQLite Adapter (Persistence)
-
-Build second because the application layer needs a working store to integrate.
-
-- `internal/adapter/driven/sqlite/` -- DB setup, migrations, PRRepo, RepoRepo
-- Implements driven port interfaces
-- Can be tested with an in-memory SQLite database
-
-**Depends on:** Phase 1 (domain model and port interfaces)
-
-### Phase 3: GitHub Adapter (External Integration)
-
-Can be built in parallel with Phase 2 if desired.
-
-- `internal/adapter/driven/github/` -- Client, mapper, rate limit tracking
-- Implements GitHubClient driven port interface
-- Testable with recorded HTTP responses
-
-**Depends on:** Phase 1 (domain model and port interfaces)
-
-### Phase 4: Application Services + Comment Enrichment
-
-Build after adapters exist so integration testing is possible.
-
-- `internal/application/` -- PRService, RepoService, CommentEnricher
-- Implements driving port interfaces
-- Core business logic: comment enrichment, status computation, staleness tracking
-- Testable with mock driven ports
-
-**Depends on:** Phase 1 (ports), testable without Phase 2/3 via mocks
-
-### Phase 5: HTTP Adapter (API Layer)
-
-Build after application services exist.
-
-- `internal/adapter/driving/http/` -- Server, router, handlers, response formatting
-- Thin layer: deserialize, delegate to application service, serialize
-- Testable with `httptest` and mock driving ports
-
-**Depends on:** Phase 4 (application services via driving port interfaces)
-
-### Phase 6: Polling Scheduler + Wiring
-
-Build last because it orchestrates all components.
-
-- `internal/application/pollservice.go` -- Background polling loop
-- `cmd/reviewhub/main.go` -- Composition root, graceful shutdown
-- `Dockerfile`, `docker-compose.yml` -- Containerization
-
-**Depends on:** All previous phases
-
-### Build Order Rationale
-
-This ordering follows the **dependency rule**: build the innermost ring first (domain), then work outward. Each phase is independently testable. Phases 2 and 3 can be parallelized because they both depend only on Phase 1 and don't depend on each other. The composition root (Phase 6) is last because it needs all concrete types to wire together.
-
----
-
-## Testing Strategy by Layer
-
-| Layer | Test Type | Approach |
-|-------|-----------|----------|
-| Domain Model | Unit tests | Pure logic, no mocks needed |
-| Application Services | Unit tests with mocks | Mock driven ports, verify orchestration |
-| SQLite Adapter | Integration tests | In-memory SQLite, verify queries |
-| GitHub Adapter | Integration tests | Recorded HTTP responses (httptest or go-vcr) |
-| HTTP Adapter | Integration tests | `httptest.NewServer`, mock application services |
-| Full System | End-to-end | Docker container, mocked GitHub API |
-
-The hexagonal structure means each layer can be tested in isolation. Domain and application tests run in milliseconds with no I/O. Adapter tests use lightweight fakes (in-memory SQLite, recorded HTTP). This makes the test suite fast and reliable.
+- GitHub review submission: already covered by `go-github v82` (existing dependency)
+- Static file serving: stdlib `net/http.FileServer` + `embed`
+- Route handling: stdlib `net/http.ServeMux` with Go 1.22+ method routing (existing pattern)
 
 ---
 
 ## Sources
 
-- Go hexagonal architecture patterns: Based on established community conventions (Alistair Cockburn's hexagonal architecture applied to Go; Three Dots Labs' "Wild Workouts" example; Go standard project layout conventions). MEDIUM confidence -- training data, not live-verified.
-- `google/go-github` library: Well-known Go GitHub client. MEDIUM confidence -- verify current version.
-- `modernc.org/sqlite`: Pure Go SQLite driver. MEDIUM confidence -- verify current API.
-- `go-chi/chi`: Lightweight Go router. MEDIUM confidence -- verify vs Go 1.22+ stdlib routing.
-- Go standard library (`context`, `signal`, `embed`, `net/http`): HIGH confidence -- stable standard library.
-- SQLite WAL mode, PRAGMA settings: HIGH confidence -- stable SQLite behavior.
+- [templ Project Structure](https://templ.guide/project-structure/project-structure/) -- Official templ docs on component organization
+- [templ Template Composition](https://templ.guide/syntax-and-usage/template-composition/) -- Component passing and children patterns
+- [go-github pulls_reviews.go](https://github.com/google/go-github/blob/master/github/pulls_reviews.go) -- CreateReview, SubmitReview, CreateCommentInReplyTo methods
+- [GitHub REST API: Pull Request Reviews](https://docs.github.com/en/rest/pulls/reviews) -- Official API reference
+- [ctreminiom/go-atlassian](https://github.com/ctreminiom/go-atlassian) -- Jira Go client library
+- [andygrunwald/go-jira](https://github.com/andygrunwald/go-jira) -- Alternative Jira client
+- [hexaGO](https://github.com/edlingao/hexaGO) -- Hexagonal architecture template with Go/templ/HTMX/SQLite
+- [HTMX and Alpine.js Integration](https://www.infoworld.com/article/3856520/htmx-and-alpine-js-how-to-combine-two-great-lean-front-ends.html) -- Combining HTMX and Alpine.js patterns
+- [Full-Stack Go App with HTMX and Alpine.js](https://ntorga.com/full-stack-go-app-with-htmx-and-alpinejs/) -- Go-specific integration guide
+- [Using Alpine.js In HTMX](https://www.bennadel.com/blog/4787-using-alpine-js-in-htmx.htm) -- Alpine state preservation with HTMX swaps

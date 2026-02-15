@@ -38,3 +38,6 @@ internal/adapter/driving/web/static/css/output.css
 *.db
 *.db-shm
 *.db-wal
+/.playwright-cli
+/.claude/skills
+/node_modules

@@ -4,6 +4,7 @@ package httphandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -252,7 +253,7 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repoStore.Add(r.Context(), repo); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
+		if errors.Is(err, driven.ErrRepoAlreadyExists) {
 			writeError(w, http.StatusConflict, "repository already exists")
 			return
 		}
@@ -281,7 +282,7 @@ func (h *Handler) RemoveRepo(w http.ResponseWriter, r *http.Request) {
 	fullName := owner + "/" + repo
 
 	if err := h.repoStore.Remove(r.Context(), fullName); err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, driven.ErrRepoNotFound) {
 			writeError(w, http.StatusNotFound, "repository not found")
 			return
 		}

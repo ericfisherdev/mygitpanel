@@ -31,6 +31,7 @@ RUN mkdir -p /data /tmp
 # Runtime stage
 FROM scratch
 
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /bin/mygitpanel /bin/mygitpanel
 COPY --from=build /bin/healthcheck /bin/healthcheck
 COPY --from=build /data /data

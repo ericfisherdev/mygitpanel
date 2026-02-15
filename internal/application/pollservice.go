@@ -206,8 +206,10 @@ func (s *PollService) pollAll(ctx context.Context) error {
 }
 
 // pollRepo is the core PR discovery logic for a single repository.
+// It fetches all PRs (open, closed, merged) and stores them unconditionally.
+// NeedsReview is still computed to flag PRs where the user is a requested reviewer.
 func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
-	prs, err := s.ghClient.FetchPullRequests(ctx, repoFullName)
+	prs, err := s.ghClient.FetchPullRequests(ctx, repoFullName, "all")
 	if err != nil {
 		return err
 	}
@@ -223,20 +225,12 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 	}
 
 	fetchedNumbers := make(map[int]bool, len(prs))
-	var relevant, skippedUnchanged int
+	var skippedUnchanged int
 
 	for _, pr := range prs {
 		fetchedNumbers[pr.Number] = true
 
-		isAuthored := strings.EqualFold(pr.Author, s.username)
-		isReviewRequested := IsReviewRequestedFrom(pr, s.username, s.teamSlugs)
-
-		if !isAuthored && !isReviewRequested {
-			continue
-		}
-
-		relevant++
-		pr.NeedsReview = isReviewRequested
+		pr.NeedsReview = IsReviewRequestedFrom(pr, s.username, s.teamSlugs)
 
 		if stored, ok := storedByNumber[pr.Number]; ok {
 			if stored.UpdatedAt.Equal(pr.UpdatedAt) && stored.NeedsReview == pr.NeedsReview {
@@ -261,6 +255,9 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 		}
 	}
 
+	// Clean up stored open PRs that no longer appear in the API response.
+	// Closed/merged PRs are terminal states and should not be deleted even if
+	// absent from the fetch (they may be beyond the API's pagination window).
 	var cleanedUp int
 	for _, stored := range storedPRs {
 		if !fetchedNumbers[stored.Number] && stored.Status == model.PRStatusOpen {
@@ -276,7 +273,6 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 	slog.Info("repo polled",
 		"repo", repoFullName,
 		"fetched", len(prs),
-		"relevant", relevant,
 		"skipped_unchanged", skippedUnchanged,
 		"cleaned_up", cleanedUp,
 	)

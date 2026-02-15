@@ -1,398 +1,335 @@
 # Project Research Summary
 
-**Project:** ReviewHub
-**Domain:** GitHub PR Tracking and Review Management API (machine-consumable, AI-agent-oriented)
-**Researched:** 2026-02-10
-**Confidence:** MEDIUM to HIGH (based on training data for well-established domains)
+**Project:** MyGitPanel 2026.2.0 Milestone - Web GUI + Jira Integration + Review Submission
+**Domain:** Web-based PR review dashboard with external API integrations
+**Researched:** 2026-02-14
+**Confidence:** HIGH
 
 ## Executive Summary
 
-ReviewHub is a localhost API for tracking GitHub pull requests and formatting review feedback for AI agent consumption. The project's core value proposition is transforming raw GitHub review data into AI-consumable context with code snippets and comment threading, enabling AI coding agents to understand and act on review feedback. This is genuinely unserved territory in the PR tooling landscape.
+MyGitPanel v2.0 adds a web GUI to the existing v1.0 Go API using a modern stack that aligns perfectly with the project's hexagonal architecture: templ for type-safe HTML templating, HTMX for server-driven partial updates, Alpine.js for client-side UI state, and Tailwind CSS for styling. This approach keeps all business logic server-side in Go, avoiding the complexity of SPA frameworks while delivering a rich, interactive dashboard experience. The existing v1.0 foundation (Go 1.25, modernc.org/sqlite, go-github v82, hexagonal architecture) requires no changes—the web GUI is a new driving adapter that shares domain ports with the existing JSON API.
 
-The recommended approach is **hexagonal architecture with Go, stdlib-first dependencies, and pure-Go SQLite**. Use `net/http` (Go 1.22+ offers method routing), `google/go-github` for GitHub API client, and `modernc.org/sqlite` (no CGO) for persistence. Background polling runs in a goroutine with context-based lifecycle management. The HTTP layer is a thin adapter; domain logic stays pure with zero external dependencies. Docker deployment uses Alpine-based multi-stage builds with WAL-mode SQLite on a volume.
+The recommended path forward is to build the web GUI in three distinct phases: (1) read-only dashboard foundation with templ/HTMX/Alpine.js integration, (2) write operations (GitHub review submission) and credential management, (3) Jira integration with issue linking and commenting. This phasing isolates the critical architectural decisions (route separation, Alpine+HTMX state management, static asset embedding) in Phase 1, where mistakes would require the most rework. The research surfaced several critical pitfalls—particularly around Alpine.js state preservation during HTMX swaps, templ code generation in the build pipeline, and credential encryption—that must be addressed in foundational work before feature development begins.
 
-The primary risk is **GitHub API rate limit exhaustion from naive polling**. With 10 repos and multiple endpoints per repo, a 60-second interval can burn 3x the 5,000 requests/hour authenticated limit. Mitigation requires conditional requests (ETags), rate-aware budgeting, and staggered polling. The second critical risk is **review comment position mapping complexity** — GitHub's multiple overlapping position fields (`position`, `line`, `side`, `diff_hunk`) require careful handling; use `diff_hunk` as the primary context source to avoid reconstruction errors.
+The stack research confirms that no heavyweight dependencies are needed: templ and go-atlassian are the only new Go modules, while HTMX, Alpine.js, and GSAP are served via CDN or embedded as static files. The hexagonal architecture's strict port boundaries make adding Jira integration straightforward: define a JiraClient port, implement with go-atlassian, never let Jira types leak into the domain. The biggest risk is not technical complexity but rather the "two frameworks fighting over the DOM" problem where HTMX, Alpine.js, and GSAP all manipulate the DOM with different models—this requires clear boundaries and the alpine-morph HTMX extension to prevent state destruction.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Go 1.22+ with stdlib-first dependencies minimizes supply chain risk and build complexity. Pure-Go SQLite eliminates CGO, simplifying Docker builds dramatically. The complete direct dependency list is five libraries: `go-github`, `oauth2`, `modernc.org/sqlite`, `golang-migrate`, and `testify` (test only).
+The web GUI stack adds type-safe templating, server-driven dynamic updates, and minimal client-side JavaScript to the existing Go foundation. All additions align with the project's zero-npm, minimal-dependency philosophy.
 
 **Core technologies:**
-- **Go 1.22+**: Method-based routing in stdlib eliminates need for third-party routers like chi or gin
-- **`net/http` stdlib**: HTTP server and routing — since Go 1.22, stdlib supports `GET /path/{param}` patterns, making frameworks unnecessary for localhost API
-- **`google/go-github/v68`**: Dominant Go client for GitHub REST API — provides typed structs, pagination, rate-limit awareness
-- **`modernc.org/sqlite`**: Pure Go SQLite driver (no CGO) — critical for simple Docker builds; performance within 10-20% of CGO version, negligible for single-user workload
-- **`log/slog` stdlib**: Structured logging (Go 1.21+) — zero dependencies, standard for new Go projects
-- **`golang-migrate/migrate`**: Schema migrations with embedded SQL files via `embed` package
-- **`testify`**: Assertion and mocking library — reduces test boilerplate, most widely adopted Go test helper
+- **templ (v0.3.977)**: Type-safe HTML templating that compiles to Go code at build time. Templates are Go functions returning components, with full compile-time type checking. No reflection, no runtime parsing. Integrates directly with net/http.
+- **HTMX (2.0.8 CDN)**: Server-driven partial page updates via HTML attributes. The server returns HTML fragments (templ components), not JSON. Keeps rendering logic server-side in Go, consistent with hexagonal architecture.
+- **Alpine.js (3.15.x CDN)**: Lightweight client-side state for UI interactions that don't need server round-trips (dropdowns, tabs, modals). Declared inline with x-data attributes—no build step, no components, no virtual DOM.
+- **Tailwind CSS (v4.1.x standalone CLI)**: Utility-first CSS compiled via standalone binary—no Node.js, no npm, no package.json. Scans .templ files for class usage and produces optimized CSS.
+- **GSAP (3.14.x CDN)**: Performant animations for PR card transitions, attention signals, and status updates. Free for all uses (Webflow acquisition, April 2025). Works with HTMX lifecycle events.
+- **go-atlassian (v2.10.0)**: Jira Cloud REST API client. Supports Jira v2/v3 APIs with typed structs, pagination, and multiple auth methods. Mirrors go-github's service-based design (familiar pattern).
+- **go-github v82 (existing)**: Already includes PullRequests.CreateReview() for review submission. No new dependency needed—just extend the existing GitHubClient port with write methods.
 
-**Key architectural choices:**
-- No framework (gin/echo/fiber) — they couple handlers to framework types, violating hexagonal architecture's port independence
-- No ORM (gorm/ent) — explicit SQL keeps persistence transparent and decouples domain from database schema
-- No config library (viper/koanf) — five environment variables do not justify dependencies
-- Alpine Docker images with WAL-mode SQLite — allows concurrent reads during polling writes
+**Build tools (not runtime dependencies):**
+- templ CLI (v0.3.977): Compiles .templ → .go before go build
+- Tailwind standalone CLI: Compiles utility CSS from templ class usage
+- air (optional): Hot reload during development
+
+**Critical version notes:**
+- HTMX 2.x (not 4.x): v4.0 expected mid-2026 but won't be marked "latest" until 2027. Stick with stable 2.0.x line.
+- Tailwind v4: Uses CSS-first configuration (no tailwind.config.js). Standalone CLI bundles popular plugins automatically.
 
 ### Expected Features
 
-The feature landscape divides into table stakes (any PR tool must have), differentiators (ReviewHub's niche), and explicit anti-features (common but wrong for this scope).
+Research identified clear tiers of features based on competitive analysis (Graphite, GitHub native, DevDynamics) and existing v1.0 API capabilities.
 
 **Must have (table stakes):**
-- PR discovery by author and review-requested status — core use case from PROJECT.md
-- PR metadata (title, state, author, timestamps, labels, branch info)
-- Review status per reviewer (approved/changes_requested/commented/pending) with deduplication to latest review
-- CI/CD combined check status (success/failure/pending) aggregating Status API + Checks API
-- Polling with configurable interval and rate-limit awareness
-- Repository CRUD — add/remove watched repos without restart
-- Draft PR detection and state tracking
+- **Unified PR feed** across all watched repos with filter/search/sort—every PR dashboard has this; Graphite sets the bar with pre-made sections
+- **PR detail view** with full metadata, review threads with code context, CI check status, reviewer status list—the existing v1.0 API already provides rich data for this
+- **Repo and bot management UI**—currently API-only; GUI must surface these to be self-contained
+- **Dark mode (default) with light mode toggle**—developers overwhelmingly prefer dark mode; accessibility requires toggle
+- **Visual status indicators** (CI, merge, review) at-a-glance—GitHub's green check/red X pattern is universal
 
 **Should have (competitive differentiators):**
-- **Review comments with targeted code snippets** — THE core differentiator; AI agent needs comment + code context to generate fixes
-- **Multi-line comment context** — surrounding code lines enrich AI understanding
-- **Comment-to-file-path mapping** — AI needs exact file and line range to edit
-- **Suggested changes extraction** — parse GitHub's ````suggestion```` markdown blocks for direct fix proposals
-- **Conversation threading** — reconstruct reply chains so AI sees full discussion context
-- **Coderabbit detection** — distinguish AI-generated reviews from human reviews via configurable bot username list
-- **Staleness tracking** — days since open/last activity highlights aging PRs
-- **Diff stats** — files changed, additions, deletions provide quick complexity signal
+- **Review workflow actions from dashboard**: Approve, request changes, comment-only, reply to review comments—eliminates context switch to GitHub, core value prop
+- **Draft PR toggle**: Convert to draft (REST API), mark ready for review (GraphQL-only, requires new adapter)
+- **PR ignore list**: Hide specific PRs to reduce noise (dependabot, long-lived branches) with undo/re-add capability
+- **Configurable urgency thresholds**: Per-repo review count requirements, age-based urgency levels (color-coded), attention score composite
+- **Jira integration**: Auto-extract Jira keys from PR title/branch, view linked issue details (status, assignee, priority), post comments on Jira issues from PR view
+- **GitHub credential management**: Store PAT in SQLite (encrypted), token validation on save, scope display to warn if missing write permissions
 
-**Defer (v2+ or never):**
-- Web dashboard/UI — explicitly scoped out; primary consumer is CLI agent
-- Webhook receiver — adds deployment complexity; polling is simpler for v1
-- PR creation/modification — ReviewHub is read-only tracking
-- Notification system (email/Slack) — polling tool for machine consumption, not human alerting
-- Multi-user/multi-tenant — single-user, single-token design
-- Merge automation — report readiness, don't perform merges
-- Historical analytics/trends — track current state only
-- Custom review workflows/policies — PullApprove's territory
-- GitHub OAuth — PAT via environment variable sufficient for localhost
+**Defer (v2+):**
+- **Attention score (composite)**—needs UX iteration to get the formula right; ship simple urgency colors first
+- **Bulk ignore by label/author**—power user feature; ship single-PR ignore first
+- **Jira status badge in PR list**—requires caching strategy; ship detail-view integration first
+- **Full diff viewer in-app**—massive complexity (syntax highlighting, side-by-side); GitHub does this perfectly, just link to it
+- **Historical analytics/trends**—LinearB, Sleuth own this space; storage and charting complexity is high
+
+**Anti-features (explicitly do NOT build):**
+- Merge button from dashboard—GitHub's merge safety rails are hard to replicate
+- PR creation—out of scope, users create from CLI/IDE
+- Multi-user/multi-tenant—single-user tool, adding auth is massive scope creep
+- Notification system (email/Slack)—dashboard is the notification
+- AI review summarization—Claude Code handles this, MyGitPanel provides data
+- Real-time WebSocket updates—polling works fine for single user
 
 ### Architecture Approach
 
-Hexagonal architecture (ports and adapters) with domain model at center, all infrastructure pushed to boundaries. In Go, this maps to interfaces (ports) defined in domain layer, concrete implementations (adapters) in separate packages.
+The existing v1.0 hexagonal architecture requires no changes—the web GUI is a new driving adapter that coexists with the JSON API. Both adapters share the same domain ports and application services.
 
 **Major components:**
 
-1. **Domain Model** (`internal/domain/model`) — Pure Go entities (PullRequest, Repository, Review, ReviewComment, CheckStatus) with zero external dependencies; behavioral methods for staleness, status computation
+1. **WebHandler (new driving adapter)** — `internal/adapter/driving/web/` contains templ-based handlers that render HTML partials. Depends on the same ports (PRStore, RepoStore, GitHubClient) as the existing Handler. Checks `HX-Request` header to decide between full page (initial load) or HTMX partial (subsequent interactions).
 
-2. **Domain Ports** (`internal/domain/port`) — Split into driving (primary: PRService, RepoService, PollService) and driven (secondary: PRStore, RepoStore, GitHubClient) interfaces; define contracts without implementation
+2. **templ components/layouts/pages** — `internal/adapter/driving/web/components/`, `/layouts/`, `/pages/`. Reusable UI components (pr_card.templ, review_thread.templ), base layout with head/scripts, and full page compositions. templ components accept view models (presentation-ready structs), not domain models directly.
 
-3. **Application Services** (`internal/application`) — Use case orchestration implementing driving ports; depends on driven ports via interfaces; contains core business logic (CommentEnricher, status computation, change detection)
+3. **Jira port and adapter (new driven components)** — `internal/domain/port/driven/jiraclient.go` defines the interface (GetIssue, SearchIssuesByPR, AddComment). `internal/adapter/driven/jira/` implements with go-atlassian. Domain model `internal/domain/model/jira.go` has JiraIssue entity. No Jira types leak into domain.
 
-4. **Adapters** — Concrete implementations live at boundaries:
-   - **SQLite adapter** (`internal/adapter/driven/sqlite`) — implements PRStore, RepoStore; maps domain model to/from SQL rows
-   - **GitHub adapter** (`internal/adapter/driven/github`) — implements GitHubClient; translates API responses to domain model
-   - **HTTP adapter** (`internal/adapter/driving/http`) — thin handlers deserialize requests, call application services, serialize responses
+4. **GitHubClient port extension** — Add write methods to existing driven.GitHubClient interface: `SubmitReview`, `CreateReviewComment`, `ReplyToComment`. Implemented using go-github v82's existing CreateReview/CreateComment methods. No new dependency.
 
-5. **Polling Scheduler** (`internal/application/pollservice.go`) — Background goroutine with `time.Ticker` and `context.Context` for lifecycle; coordinates GitHub fetches, change detection, and persistence
+5. **New application services** — `ReviewSubmitService` orchestrates review submission with validation and triggers refresh. `JiraService` orchestrates Jira lookups with branch-name key extraction. Both depend only on ports, never on concrete adapters.
 
-6. **Composition Root** (`cmd/reviewhub/main.go`) — Only place that knows concrete types; wires all dependencies; handles graceful shutdown on SIGTERM
+6. **Route separation** — `/api/v1/*` routes hit the JSON adapter (existing, stable, untouched). `/` and `/app/*` routes hit the web adapter. Both mount on the same http.ServeMux with Go 1.22+ method+path routing. No content negotiation, no shared handlers.
 
-**Key patterns:**
-- Constructor-based dependency injection with interfaces
-- Context-based cancellation throughout (polling, HTTP, database)
-- Adapter-layer mapping (separate structs for serialization in each adapter)
-- Domain model as plain structs with methods (no ORM tags, no JSON tags)
-- WAL-mode SQLite with `busy_timeout` for concurrent reads during polling writes
+7. **Static asset embedding** — Use `//go:embed static` to embed Tailwind CSS output, HTMX/Alpine.js/GSAP scripts, and any vendored assets. Serves from the binary in the Docker scratch image. Tailwind standalone CLI runs in Docker build stage before go build.
 
-**Build order:** Domain model + ports (foundation) → SQLite adapter → GitHub adapter (parallel) → Application services → HTTP adapter → Polling scheduler + wiring
+**Key architectural patterns:**
+- **View models decouple templ from domain**: WebHandler maps domain models to presentation-ready structs before passing to templ components. templ files never import domain/model/.
+- **HTMX partial vs full page**: Every GET handler checks `HX-Request: true` header. If present, render just the content partial. If absent, render full page with layout.
+- **HTMX response headers for cascading updates**: After mutations (submit review, add repo), set `HX-Trigger` headers to tell other HTMX elements on the page to refresh.
+- **Alpine.js state scoping**: Keep `x-data` on elements outside HTMX swap targets. Use alpine-morph HTMX extension when swapping content that contains Alpine state.
+- **Jira branch name extraction**: Extract Jira issue keys from PR branch names using regex pattern `[A-Z]+-\d+` when loading Jira sidebar.
 
 ### Critical Pitfalls
 
-The research identified five critical pitfalls that cause rewrites, outages, or fundamental architecture problems:
+Research identified five critical pitfalls that require architectural decisions in foundational work.
 
-1. **GitHub API Rate Limit Exhaustion from Naive Polling** — With 10 repos and 4 API calls per repo at 60-second intervals, burns 14,400 requests/hour (3x the 5,000/hr limit). **Prevention:** Use conditional requests (ETags — 304s don't count against limit), budget requests explicitly, stagger polling across repos, implement exponential backoff on 403/429. Must be addressed in Phase 1; not something to add later.
+1. **Content negotiation trap (sharing handlers between JSON and HTML)** — Attempting to serve both JSON and HTML from the same handler by checking Accept or HX-Request headers creates tightly coupled handlers that violate SRP. HTMX creator explicitly warns against this. Prevention: Separate route namespaces entirely (/api/v1/* for JSON, /app/* for HTML), create dedicated WebHandler struct in new package, share domain logic through ports not handlers.
 
-2. **SQLite "database is locked" Errors from Concurrent Access** — Background polling writes while HTTP serves reads; default SQLite file-level locking blocks all readers during writes. **Prevention:** Enable WAL mode (`PRAGMA journal_mode=WAL`), set busy timeout (`PRAGMA busy_timeout=5000`), use single `*sql.DB` instance, set `MaxOpenConns(1)` for writes. Must be addressed in Phase 1 database setup.
+2. **templ code generation not in build pipeline** — Developer writes .templ files but Docker/CI runs go build without first running templ generate, producing images with stale/missing templates. Prevention: Add templ generate to Dockerfile build stage, do NOT commit generated *_templ.go files (add to .gitignore), pin templ version in Docker/CI to avoid version mismatch.
 
-3. **Review Comment Position Mapping Complexity** — GitHub has multiple overlapping position fields (`position`, `line`, `side`, `start_line`, `diff_hunk`); naive line-number assumptions break on outdated comments, multi-line comments, and renamed files. **Prevention:** Use `diff_hunk` as primary context source (GitHub already provides relevant context), handle all position field combinations, explicitly handle `null` positions after PR updates, handle file-level comments (no line reference). Core differentiator requiring dedicated phase with explicit test cases.
+3. **Alpine.js state destruction on HTMX DOM swaps** — HTMX replaces DOM elements, destroying Alpine's reactive state (dropdowns close, accordions collapse, form values lost). Prevention: Use `hx-swap="morph:outerHTML"` with alpine-morph extension, scope HTMX swap targets carefully (do not swap x-data containers), remove id attributes from Alpine-managed elements inside swap targets.
 
-4. **Polling Interval Tuning Tradeoffs** — Uniform interval is either too aggressive (wastes rate limit) or too lax (stale data during active review). **Prevention:** Implement adaptive polling (increase frequency for recently-active PRs), provide manual refresh endpoint, use conditional requests to make frequent polling cheap, expose `last_polled_at` in API responses. Basic uniform polling in Phase 1; adaptive as Phase 2 enhancement.
+4. **Storing Jira/GitHub credentials in SQLite without encryption** — Plaintext tokens in the database expose credentials to anyone with read access to the database file (Docker volume, backup, container escape). Prevention: Encrypt credentials at rest using AES-256-GCM with key from env var (MYGITPANEL_CREDENTIAL_KEY), or keep credentials as env vars only (no GUI storage). Never log credential values.
 
-5. **GitHub Token Exposure in Logs/Errors/Docker** — PAT leaking in logs, error messages, or Docker image layers gives full repo access to anyone who finds it. **Prevention:** Pass token via environment at runtime (never build-time), scrub authorization headers from errors, never use query parameter tokens, validate token on startup with clear error, use minimal scopes.
+5. **Static assets missing from Docker scratch image** — Developer serves static assets from filesystem during development, but Docker scratch image has no filesystem—only the binary. Production container serves 404 for all CSS/JS files. Prevention: Use `//go:embed` to embed all static assets into the binary, build Tailwind CSS in Docker build stage, vendor HTMX/Alpine.js/GSAP or use CDN links (acceptable for single-user tool).
+
+**Moderate pitfalls to address during feature development:**
+- **GSAP animations breaking on HTMX swaps** — Re-initialize GSAP on htmx:afterSettle events, kill existing instances on htmx:beforeSwap
+- **Jira REST API rate limiting is opaque** — Use webhooks instead of polling, implement exponential backoff with jitter on 429, cache Jira responses aggressively
+- **Jira auth model mismatch (Cloud vs Data Center)** — Pick Jira Cloud-only (email + API token), validate credentials on save, provide clear configuration guidance
+- **GitHub review submission triggering secondary rate limits** — Separate read/write tokens, rate-limit write operations client-side, queue write operations with controlled pacing
+- **Tailwind CSS build complexity** — Use Tailwind standalone CLI (no Node.js), configure to scan .templ files, order Dockerfile stages correctly (Tailwind after templ files copied, before go build)
 
 ## Implications for Roadmap
 
-Based on research findings, dependency analysis, and pitfall avoidance, the recommended phase structure follows the dependency rule (build innermost ring first, work outward) while frontloading critical pitfall mitigation.
+Based on research, the 2026.2.0 milestone should be structured into three phases that isolate architectural risks early and defer complexity until foundational patterns are proven.
 
-### Phase 1: Foundation — Domain, Persistence, Configuration
+### Phase 1: Read-Only Dashboard Foundation
 
-**Rationale:** Everything depends on clean domain model and working persistence. SQLite configuration (WAL mode, busy timeout) must be correct from day one — cannot be bolted on later. Token handling security is foundational.
+**Rationale:** Establishes the critical architectural patterns (route separation, templ code generation, Alpine+HTMX integration, static asset embedding) that all subsequent work depends on. Mistakes here require the most rework. Building the foundation with read-only features uses existing v1.0 API data (zero new backend work), allowing focus on the new presentation layer.
 
-**Delivers:**
-- Domain model entities (PullRequest, Repository, Review, ReviewComment, CheckStatus) with zero external dependencies
-- Domain port interfaces (PRStore, RepoStore, GitHubClient, driving service interfaces)
-- SQLite adapter with WAL mode, migrations via `embed`, PRRepo/RepoRepo implementations
-- Configuration loading (env vars) with token validation on startup
-- Project skeleton with proper directory structure (`internal/domain`, `internal/adapter`, `cmd/`)
+**Delivers:** Functional web GUI that displays all existing v1.0 data with modern, interactive UX. Users can browse PRs, filter/search/sort, view PR details with review threads and CI status, manage watched repos and bots—all without leaving the dashboard.
 
-**Addresses:**
-- Pitfall 2 (SQLite locking) via WAL mode configuration
-- Pitfall 5 (token exposure) via secure env-var handling
-- Pitfall 13 (schema migrations) via versioned migration framework
-- Table stakes: unique PR identification, repository CRUD foundation
+**Addresses features:**
+- Unified PR feed with search/filter/sort (table stakes)
+- PR detail view with review threads and CI status (table stakes, leverages existing rich API)
+- Repo and bot management UI (currently CLI/API only)
+- Dark/light theme toggle (table stakes)
+- Visual urgency indicators (color-coded age/status badges using existing data)
+- GSAP entrance animations (polish, low effort)
 
-**Avoids:**
-- No external dependencies in domain layer (hexagonal architecture violation)
-- No shared database models (anti-pattern 2)
-- No token in Dockerfile ENV or logs
+**Avoids pitfalls:**
+- Content negotiation trap: Separate /api/v1/* and / route namespaces from day one
+- templ build pipeline: Dockerfile runs templ generate before go build, *_templ.go in .gitignore
+- Alpine+HTMX state: alpine-morph extension, swap targets scoped below x-data containers
+- Static assets: //go:embed pattern, Tailwind standalone CLI in Docker build stage
 
-**Research needed:** None — standard patterns, well-documented
+**Research flag:** Standard patterns—templ/HTMX/Alpine.js integration is well-documented. No additional research needed during planning.
 
----
+### Phase 2: Review Workflows + Credential Management
 
-### Phase 2: GitHub Integration — Polling and Data Ingestion
+**Rationale:** Adds write operations after the presentation layer is stable. Requires token scope upgrade (breaking config change for existing users) and credential storage (encryption decision affects both GitHub and Jira). Isolating this in Phase 2 means Phase 1 can ship to users without breaking existing read-only deployments.
 
-**Rationale:** Cannot show PR data without fetching it from GitHub. Polling architecture must be rate-aware from the start (Pitfall 1). This phase establishes the data flow backbone.
+**Delivers:** Dashboard becomes a full review tool—users can approve PRs, request changes, post comments, reply to review threads, and toggle draft status without leaving the UI. Credentials stored securely in encrypted form (or env vars only, TBD during planning).
 
-**Delivers:**
-- GitHub adapter implementing GitHubClient port (`google/go-github` integration)
-- Response mapping (GitHub API types → domain model)
-- Background polling service (goroutine with `time.Ticker`, context-based lifecycle)
-- Rate limit tracking (`X-RateLimit-Remaining` header awareness, exponential backoff)
-- Conditional requests (ETag caching, `If-None-Match` headers)
-- Pagination handling (always use `per_page=100`, follow `Link` headers)
-- Change detection (`updated_at` timestamp comparison, only process changed PRs)
-- Basic uniform polling interval (configurable via env var)
+**Uses stack elements:**
+- go-github v82 existing methods (PullRequests.CreateReview, CreateComment, CreateCommentInReplyTo)
+- Extends GitHubClient port with write methods (SubmitReview, CreateReviewComment, ReplyToComment)
+- New ReviewSubmitService orchestrates submission with validation
 
-**Addresses:**
-- Pitfall 1 (rate limit exhaustion) via conditional requests, rate budgeting, staggered polling
-- Pitfall 6 (pagination ignored) via proper `Link` header parsing
-- Pitfall 9 (redundant processing) via change detection
-- Pitfall 10 (conflating author/review-requested) via separate API calls
-- Table stakes: PR discovery by author and review-requested, polling with rate-limit awareness
+**Implements architecture components:**
+- GitHubClient port extension with write methods
+- ReviewSubmitService in application layer
+- CredentialStore port and SQLite adapter with AES-256-GCM encryption (or env-var-only pattern)
+- Review submission handlers in WebHandler (POST endpoints)
 
-**Avoids:**
-- Uniform polling for all repos (refined in Phase 4 with adaptive polling)
-- No ETag implementation (must be in v1 for rate limit survival)
-- No pagination (breaks with >30 open PRs)
+**Addresses features:**
+- Approve/Request Changes/Comment submission (differentiator)
+- Reply to review comments inline (differentiator)
+- Post general PR comment (differentiator)
+- Draft toggle: convert to draft (REST), mark ready for review (GraphQL—requires shurcooL/githubv4 or gh CLI wrapper)
+- GitHub credential management (store PAT with write scope, encrypted)
+- PR ignore list with undo (differentiator)
 
-**Research needed:**
-- Verify current `go-github` version and struct field availability
-- Confirm GitHub API pagination behavior hasn't changed
-- Validate rate limit header names
+**Avoids pitfalls:**
+- Credential encryption: AES-256-GCM with env-var key or env-vars only (no plaintext in DB)
+- Secondary rate limits from writes: Separate read/write tokens, client-side rate limiting on write operations
+- GSAP animations breaking on swaps: Re-initialize on htmx:afterSettle, kill on htmx:beforeSwap (PR list animations)
 
----
+**Research flag:** Draft-to-ready is GraphQL-only—needs spike to decide: add shurcooL/githubv4, shell out to gh CLI, or defer feature. Plan this decision during phase planning.
 
-### Phase 3: Core API — PR Listing and Status
+### Phase 3: Jira Integration
 
-**Rationale:** Data is being polled and stored; now expose it via HTTP. This phase delivers minimum viable API output. Keep handlers thin (no business logic).
+**Rationale:** Jira is fully independent of GitHub workflows and GUI foundation. Deferring to Phase 3 means Phases 1-2 deliver a complete PR review dashboard without Jira complexity. Jira integration follows the same hexagonal pattern as GitHub (port → adapter → service), so architectural risk is low.
 
-**Delivers:**
-- HTTP adapter with `net/http` stdlib router (Go 1.22+ method routing)
-- Application services implementing driving ports (PRService, RepoService)
-- Endpoints:
-  - `GET /api/prs` — list PRs (filterable by repo, state, review status)
-  - `GET /api/prs/{id}` — single PR with metadata
-  - `POST /api/repos` — add watched repository
-  - `DELETE /api/repos/{id}` — remove repository
-  - `GET /api/repos` — list watched repositories
-  - `GET /api/health` — health check
-  - `POST /api/repos/{owner}/{repo}/refresh` — manual refresh trigger
-- JSON response formatting (domain model → HTTP response DTOs in adapter)
-- Graceful shutdown (signal handling, context cancellation, drain HTTP server, close DB)
+**Delivers:** Jira issue context displayed alongside PRs. Users see linked Jira tickets (auto-extracted from branch names), view issue status/assignee/priority, and post PR status updates to Jira—all from the PR detail view.
 
-**Addresses:**
-- Table stakes: PR listing, repository CRUD, PR metadata (title, state, author, timestamps, labels)
-- Pitfall 4 (polling interval tradeoffs) via manual refresh endpoint
-- Pitfall 8 (ungraceful shutdown) via signal handling and context
-- Anti-pattern 3 (fat handlers) — handlers are thin, logic in application layer
+**Uses stack elements:**
+- go-atlassian v2.10.0 (Jira Cloud REST API client)
+- New JiraClient port interface (GetIssue, SearchIssuesByPR, AddComment)
+- Jira adapter in internal/adapter/driven/jira/
 
-**Avoids:**
-- Business logic in handlers (hexagonal violation)
-- Framework coupling (gin/echo would leak into domain)
-- No manual refresh option (UX gap)
+**Implements architecture components:**
+- JiraClient port in domain/port/driven/
+- Jira adapter using go-atlassian
+- JiraIssue domain model in domain/model/jira.go
+- JiraService in application layer
+- Jira sidebar handlers in WebHandler (HTMX lazy-loaded partials)
 
-**Research needed:** None — standard Go HTTP patterns
+**Addresses features:**
+- Jira credential management (URL, email, API token—encrypted or env vars)
+- Jira key extraction from PR title/branch (regex [A-Z]+-\d+)
+- Jira issue detail display (status, assignee, priority)
+- Post Jira comments from PR detail view
+- Configurable urgency thresholds per repo (new config table)
+- Configurable review count requirements per repo (new column on repositories table)
 
----
+**Avoids pitfalls:**
+- Jira auth model mismatch: Pick Cloud-only (email + API token), validate creds on save, provide clear UI guidance
+- Jira rate limiting opaque: Use JQL with `updated >= -5m` filter, exponential backoff on 429, cache responses aggressively, consider webhooks instead of polling
+- Credential storage: Same encryption pattern as Phase 2 GitHub credentials
 
-### Phase 4: Review Intelligence — Comment Formatting with Code Context
-
-**Rationale:** This is THE core differentiator. Review comments with targeted code snippets enable AI agents to generate fixes. Most complex feature; deserves dedicated phase with extensive testing.
-
-**Delivers:**
-- CommentEnricher in application layer (formats comments with code snippets)
-- Review comment fetching via GitHub API (per-PR review comments endpoint)
-- Position mapping logic (handles `position`, `line`, `side`, `start_line`, `diff_hunk` fields)
-- `diff_hunk` parsing as primary context source (avoids file reconstruction complexity)
-- Handling of:
-  - Null positions (outdated comments after PR updates)
-  - Multi-line comments (`start_line` / `start_side` ranges)
-  - File-level comments (no line position)
-  - Renamed files (path changes between commits)
-- Conversation threading (reconstruct reply chains via `in_reply_to_id`)
-- Suggested changes extraction (parse ````suggestion```` markdown blocks)
-- Comment-to-file-path mapping for AI consumption
-- Review status computation (per-reviewer latest review, overall decision)
-- Coderabbit detection (configurable bot username list)
-
-**Addresses:**
-- Pitfall 3 (position mapping complexity) — THE critical differentiator risk
-- Pitfall 11 (User-Agent header) — set descriptive header in GitHub client
-- Pitfall 12 (API error bodies) — parse GitHub error JSON
-- Differentiators: Review comments with code snippets, multi-line context, threading, suggested changes
-- Table stakes: Review status per reviewer, comment count
-
-**Avoids:**
-- File content reconstruction (use `diff_hunk` instead)
-- Simple line-number assumptions (breaks on outdated comments)
-- Single-line-only comment handling (multi-line comments lose context)
-
-**Research needed:**
-- **HIGH PRIORITY:** Verify `go-github` struct fields for review comments (Line, Side, StartLine, DiffHunk, SubjectType)
-- Test all position field combinations with real GitHub data
-- Validate thread resolution status availability (REST vs GraphQL API)
-
----
-
-### Phase 5: PR Health Signals — CI Status and Enrichment
-
-**Rationale:** CI/CD status is table stakes for merge readiness. Layered on after comment formatting because it's independent enrichment.
-
-**Delivers:**
-- CI/CD check status aggregation (Status API + Checks API)
-- Combined status computation (success/failure/pending across both legacy statuses and GitHub Actions checks)
-- Individual check names and states
-- Diff stats (files changed, additions, deletions) — trivially cheap from PR object
-- Draft PR detection — `draft` boolean field
-- Staleness tracking — days since open, days since last activity (computed from timestamps)
-- Merge conflict detection — `mergeable` and `mergeable_state` fields (with retry logic for null initial values)
-
-**Addresses:**
-- Table stakes: CI/CD combined status, individual checks, diff stats, draft detection
-- Differentiators: Staleness tracking, merge conflict awareness
-- Pitfall 14 (comment thread resolution) — model threads, not individual comments
-
-**Avoids:**
-- Required checks identification (needs admin-level token, defer to post-MVP)
-- AI review summarization (downstream AI agent's job, not ReviewHub's)
-
-**Research needed:**
-- Verify Checks API vs Status API integration (both needed for full coverage)
-- Test retry logic for `mergeable` computation (GitHub backend delay)
-
----
-
-### Phase 6: Docker Deployment and Adaptive Optimizations
-
-**Rationale:** Containerization and performance tuning come after core features work. Adaptive polling refines Phase 2's uniform approach.
-
-**Delivers:**
-- Dockerfile with multi-stage Alpine build (Go 1.23-alpine builder, Alpine 3.20 runtime)
-- `CGO_ENABLED=0` for static binary (pure-Go SQLite enables this)
-- Docker Compose with volume for SQLite persistence
-- Adaptive polling (increase frequency for recently-active PRs, decrease for stale)
-- Per-repo poll interval overrides (optional)
-- Merge readiness composite score (combines reviews + checks + conflicts + staleness)
-- Repository health summary (aggregate stats across watched repos)
-
-**Addresses:**
-- Pitfall 4 (polling interval tuning) — adaptive polling based on activity
-- Pitfall 7 (go-github version) — document pinned version and rationale
-- Pitfall 15 (over-engineering) — keep hexagonal structure thin, no layer explosion
-- Anti-features: No web UI, no webhooks, no multi-user (explicitly scoped out)
-
-**Avoids:**
-- CGO requirement (would need gcc in Docker build)
-- Token in Docker image layers (runtime env var only)
-- Uniform polling waste (adaptive handles bursty activity)
-
-**Research needed:** None — deployment is standard practice
-
----
+**Research flag:** Jira integration has multiple unknowns—webhook setup, JQL query optimization, ADF (Atlassian Document Format) for comments, rate limit behavior post-March 2026 quota changes. Plan for research-phase during Phase 3 planning.
 
 ### Phase Ordering Rationale
 
-1. **Domain + Persistence first** — Everything depends on these; SQLite configuration cannot be fixed later
-2. **GitHub integration before HTTP** — Cannot serve data without fetching it; polling architecture dictates API structure
-3. **Basic API before comment formatting** — Validate polling and storage work with simple data before tackling complex differentiator
-4. **Comment formatting isolated** — Most complex feature with most edge cases; deserves dedicated phase with extensive testing
-5. **CI status layered on** — Independent enrichment; doesn't block comment formatting progress
-6. **Docker and optimizations last** — Deployment after features work; adaptive polling refines uniform approach
+- **Phase 1 first** because the architectural patterns (route separation, templ/HTMX/Alpine.js integration, asset embedding) are foundational. Getting these wrong means rewriting all downstream features. Building Phase 1 with read-only features uses existing v1.0 data, allowing pure focus on the presentation layer.
 
-This ordering follows hexagonal dependency rule (innermost first), frontloads critical pitfall mitigation (WAL mode, rate limits, token security), and isolates the highest-risk differentiator (position mapping) for focused validation.
+- **Phase 2 before Phase 3** because credential management affects both GitHub write operations and Jira integration. Solving encryption in Phase 2 means Phase 3 reuses the pattern. Also, review submission (GitHub write) is higher value than Jira integration for the core use case (PR review dashboard).
+
+- **Jira deferred to Phase 3** because it is fully independent of the dashboard foundation and GitHub workflows. Phases 1-2 deliver a complete PR review dashboard without Jira. Jira adds project management context but is not essential for the core review workflow.
+
+- **Pitfall avoidance drives ordering**: Content negotiation trap, templ build pipeline, Alpine+HTMX state management, and static asset embedding must all be resolved in Phase 1. Deferring these to later phases would mean rebuilding earlier features.
 
 ### Research Flags
 
 **Phases needing deeper research during planning:**
-
-- **Phase 4 (Review Intelligence):** HIGH PRIORITY — Review comment position mapping is fundamentally complex with multiple overlapping fields. Needs verification of:
-  - Current `go-github` library version and struct field availability (Line, Side, StartLine, DiffHunk, SubjectType)
-  - REST API vs GraphQL for thread resolution status (`isResolved` not in REST)
-  - Edge case behavior (null positions after PR updates, file renames, multi-line ranges)
-  - Recommend `/gsd:research-phase "review comment formatting"` before Phase 4 planning
-
-- **Phase 5 (CI Status):** MEDIUM — Checks API vs Status API integration needs validation; GitHub has two separate systems for check reporting. Verify coverage and aggregation approach.
+- **Phase 2 (Review Workflows)**: Draft-to-ready is GraphQL-only—spike needed to decide between adding shurcooL/githubv4, shelling out to gh CLI, or deferring the feature entirely.
+- **Phase 3 (Jira Integration)**: Multiple unknowns—webhook setup, JQL query optimization for rate limit efficiency, ADF (Atlassian Document Format) for comment formatting, rate limit behavior post-March 2026 quota changes. Plan for /gsd:research-phase during Phase 3 planning.
 
 **Phases with standard patterns (skip research-phase):**
-
-- **Phase 1 (Foundation):** Well-documented Go patterns — domain modeling, SQLite WAL mode, configuration loading
-- **Phase 2 (Polling):** Standard GitHub API pagination and rate limiting — mature, stable patterns
-- **Phase 3 (HTTP API):** Idiomatic Go HTTP handlers — stdlib routing is well-established since Go 1.22
-- **Phase 6 (Docker):** Standard multi-stage Alpine builds — no CGO simplifies dramatically
+- **Phase 1 (GUI Foundation)**: templ/HTMX/Alpine.js integration is well-documented with community examples. Asset embedding via //go:embed is standard Go. Tailwind standalone CLI is documented by Tailwind Labs.
+- **Phase 2 (Review Workflows, partial)**: go-github v82 review submission methods (CreateReview, CreateComment) are well-documented in GitHub's REST API docs. Credential encryption with AES-256-GCM is standard Go crypto.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Go stdlib, SQLite WAL mode, `google/go-github` are mature with stable APIs; specific version numbers need verification at project init |
-| Features | MEDIUM to HIGH | GitHub PR data model is stable; table stakes are clear; differentiator complexity (position mapping) is well-known but needs hands-on validation |
-| Architecture | HIGH | Hexagonal architecture in Go is well-established; directory structure and patterns are community standard; build order follows clear dependency graph |
-| Pitfalls | HIGH | Rate limiting (5,000/hr), SQLite concurrency (WAL mode), token security, and polling patterns are well-documented; position mapping complexity is known domain trap |
+| Stack | HIGH | All versions verified against pkg.go.dev, GitHub releases, CDN registries. templ v0.3.977 confirmed, go-atlassian v2.10.0 confirmed, HTMX 2.0.8 confirmed, Alpine.js 3.15.8 confirmed, Tailwind v4.1.18 confirmed, GSAP 3.14.2 confirmed. htmx-go v0.5.0 is MEDIUM (published 2024-02-05, may have newer). |
+| Features | HIGH | Verified against GitHub REST API docs, Jira REST API v3 docs, Graphite/ReviewStack competitive analysis, and existing v1.0 codebase. Draft-to-ready GraphQL-only confirmed in GitHub community discussions. |
+| Architecture | HIGH | Existing hexagonal architecture is well-suited. templ/HTMX/Alpine.js integration patterns documented in community examples (hexaGO, full-stack Go guides). Port/adapter pattern for Jira mirrors existing GitHub adapter. |
+| Pitfalls | MEDIUM-HIGH | Critical pitfalls verified via official docs (HTMX content negotiation essay, templ Docker hosting guide, GitHub rate limits). Alpine+HTMX state destruction documented in GitHub issues with confirmed alpine-morph solution. GSAP+HTMX integration is community-sourced (MEDIUM). Jira rate limit behavior has high-level docs but per-endpoint costs not published. |
 
-**Overall confidence:** MEDIUM to HIGH
+**Overall confidence:** HIGH
 
-The stack, architecture, and major pitfalls are based on well-established, stable domains with extensive training data coverage. GitHub's API surface, SQLite behavior, and Go concurrency patterns have been stable for years. Confidence is HIGH for foundational decisions.
-
-Confidence is MEDIUM for specific details requiring verification:
-- Exact `go-github` version and struct field names (library evolves frequently)
-- Thread resolution status API availability (REST vs GraphQL question)
-- Current GitHub secondary rate limit thresholds (undocumented)
+The stack is well-established, the architecture fits the existing hexagonal pattern, and the critical pitfalls have documented solutions. The main areas of uncertainty are: (1) htmx-go may have a newer version than v0.5.0, (2) GSAP+HTMX integration patterns are community-sourced not officially documented, (3) Jira rate limit per-endpoint costs are not published (requires trial and error).
 
 ### Gaps to Address
 
-Areas where research was inconclusive or needs validation during implementation:
+**During Phase 1 planning:**
+- **Verify htmx-go latest version**: Run `go get github.com/angelofallars/htmx-go@latest` to check if v0.5.0 is still latest. If newer version exists, verify API compatibility.
+- **Spike alpine-morph extension**: Confirm alpine-morph HTMX extension works with HTMX 2.0.8 and Alpine.js 3.15.x. Build a minimal test case before committing to it.
+- **Decide on static asset delivery**: CDN links vs vendoring. For single-user tool, CDN links are acceptable (no build complexity), but requires internet access from browser. Vendoring + //go:embed keeps deployment offline-capable but adds build steps.
 
-- **Review comment position fields:** Training data indicates `position` (deprecated), `line`/`side` (modern), `start_line`/`start_side` (multi-line), and `diff_hunk` (context). Exact current state of field availability in `go-github` should be verified during Phase 4 planning. Recommend `/gsd:research-phase` spike before implementation.
+**During Phase 2 planning:**
+- **Spike draft-to-ready GraphQL requirement**: Test whether adding shurcooL/githubv4 is worth it for this single feature. Alternative: shell out to `gh pr ready`, which uses GitHub's CLI. Or defer the feature and only support draft conversion (REST API covers this).
+- **Credential encryption vs env vars only**: Decide whether the complexity of AES-256-GCM encryption is justified. For a single-user tool, env-var-only config (MYGITPANEL_GITHUB_PAT_WRITE, MYGITPANEL_JIRA_TOKEN) may be simpler. GUI can display "configured via environment" without needing storage. Validate this decision during planning.
 
-- **Thread resolution status:** Whether `is_resolved` is available via REST API or requires GraphQL should be verified. If GraphQL-only, decide whether to add `shurcooL/githubv4` dependency or defer thread resolution to post-MVP.
-
-- **Secondary rate limits:** GitHub's abuse detection has undocumented thresholds. May trigger even below 5,000/hr if requests are too bursty. Monitor in production; adjust staggering if needed.
-
-- **Required checks identification:** Needs branch protection API with admin-level token permissions. Verify token scope requirements before committing to this feature; may need to remain post-MVP.
-
-- **File content at head SHA:** Valuable for richer AI context (full file, not just diff hunk) but significantly increases API calls and storage. Defer until comment formatting with `diff_hunk` is validated; optimize with SHA-based caching if added.
+**During Phase 3 planning:**
+- **Jira webhook feasibility**: Research whether Jira Cloud webhooks can POST to localhost (likely not without ngrok/tunneling). If webhooks require public endpoint, polling is mandatory. This affects the Jira adapter design.
+- **JQL query optimization for rate limits**: Research which JQL patterns consume fewer rate limit points. Test with `updated >= -5m` filter vs broader queries. Document findings for the Jira adapter implementation.
+- **ADF (Atlassian Document Format) for comments**: Research minimum viable ADF structure for plain text comments. Jira's comment API requires ADF JSON, not plain markdown. go-atlassian may have helpers for this.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- **GitHub REST API documentation:** Rate limiting (5,000 req/hr authenticated), pagination (Link header), conditional requests (ETags), PR data model, review comment fields — training data through May 2025, stable API surface for years
-- **SQLite documentation:** WAL mode, busy timeout, file-level locking behavior, PRAGMA settings — stable since SQLite 3.7.0 (2010)
-- **Go standard library:** `net/http` method routing (Go 1.22+), `context` package, `signal` handling, `embed` package, `log/slog` (Go 1.21+) — well-documented, stable APIs
-- **Go hexagonal architecture patterns:** Community conventions (Alistair Cockburn's ports and adapters applied to Go, Three Dots Labs examples, standard project layout)
+**Stack research:**
+- [a-h/templ pkg.go.dev](https://pkg.go.dev/github.com/a-h/templ) — v0.3.977 verified
+- [a-h/templ GitHub releases](https://github.com/a-h/templ/releases) — release history
+- [HTMX releases](https://github.com/bigskysoftware/htmx/releases) — v2.0.8 confirmed
+- [Alpine.js npm](https://www.npmjs.com/package/alpinejs) — v3.15.8 confirmed
+- [Tailwind CSS releases](https://github.com/tailwindlabs/tailwindcss/releases) — v4.1.18 confirmed
+- [Tailwind standalone CLI docs](https://tailwindcss.com/docs/installation/tailwind-cli) — standalone binary approach
+- [GSAP cdnjs](https://cdnjs.com/libraries/gsap) — v3.14.2 confirmed
+- [GSAP licensing](https://gsap.com/licensing/) — free for commercial use confirmed
+- [go-atlassian pkg.go.dev](https://pkg.go.dev/github.com/ctreminiom/go-atlassian/v2) — v2.10.0 verified
+- [go-atlassian GitHub](https://github.com/ctreminiom/go-atlassian) — Jira v2/v3 API support
+- [go-github pulls_reviews.go](https://github.com/google/go-github/blob/master/github/pulls_reviews.go) — CreateReview API
+
+**Feature research:**
+- [GitHub REST API - Pull Request Reviews](https://docs.github.com/en/rest/pulls/reviews) — verified endpoints
+- [GitHub REST API - Review Comments](https://docs.github.com/en/rest/pulls/comments) — verified reply endpoint
+- [GitHub Community - Convert PR to Draft](https://github.com/orgs/community/discussions/45174) — REST PATCH works for draft=true
+- [GitHub Community - Ready for Review](https://github.com/orgs/community/discussions/70061) — GraphQL-only for markReadyForReview
+- [Jira Basic Auth](https://developer.atlassian.com/cloud/jira/software/basic-auth-for-rest-apis/) — email + API token authentication
+- MyGitPanel v1.0 codebase — internal/adapter/driving/http/handler.go, response.go, domain models (direct inspection)
+
+**Architecture research:**
+- [templ Project Structure](https://templ.guide/project-structure/project-structure/) — official component organization
+- [templ Template Composition](https://templ.guide/syntax-and-usage/template-composition/) — component passing patterns
+- [GitHub REST API: Pull Request Reviews](https://docs.github.com/en/rest/pulls/reviews) — official API reference
+
+**Pitfall research:**
+- [HTMX: Why I Tend Not To Use Content Negotiation](https://htmx.org/essays/why-tend-not-to-use-content-negotiation/) — official essay
+- [templ: Template Generation](https://templ.guide/core-concepts/template-generation/) — official build docs
+- [templ: Hosting Using Docker](https://templ.guide/hosting-and-deployment/hosting-using-docker/) — official deployment guide
+- [Jira Cloud: Rate Limiting](https://developer.atlassian.com/cloud/jira/platform/rate-limiting/) — official docs
+- [GitHub: Rate Limits for the REST API](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) — official docs
 
 ### Secondary (MEDIUM confidence)
 
-- **`google/go-github` library:** Dominant Go GitHub client, well-maintained by Google — training data confidence HIGH for choice, MEDIUM for exact version numbers (v68 approximate, may be v70+ by implementation time)
-- **`modernc.org/sqlite`:** Pure-Go SQLite driver, well-established in community — choice HIGH confidence, API compatibility MEDIUM (verify at project init)
-- **`golang-migrate/migrate`:** Widely adopted migration library — stable v4 API, HIGH confidence for choice, MEDIUM for latest version
-- **Review comment position field evolution:** `position` → `line`/`side` transition is documented in GitHub API changelog — MEDIUM confidence for current field availability in `go-github` structs
+**Stack research:**
+- [angelofallars/htmx-go pkg.go.dev](https://pkg.go.dev/github.com/angelofallars/htmx-go) — v0.5.0 (may have newer)
+- [templ + HTMX integration patterns](https://tailbits.com/blog/setting-up-htmx-and-templ-for-go) — community reference
 
-### Tertiary (LOW confidence)
+**Feature research:**
+- [Jira REST API v3 - Issue Search](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/) — JQL search endpoint (did not verify exact response schema)
+- [Jira REST API - Add Comment](https://developer.atlassian.com/server/jira/platform/jira-rest-api-example-add-comment-8946422/) — comment endpoint structure
+- [Graphite Features](https://graphite.dev/features) — inbox sections and dashboard patterns
+- [GitHub Community - Draft PR Visibility](https://github.com/orgs/community/discussions/165497) — draft label UX problem
+- [DevDynamics - Open PR Age](https://docs.devdynamics.ai/features/metrics/git-dashboard/open-pr-age) — age threshold tiers
+- [HTMX + Alpine.js + Go patterns](https://ntorga.com/full-stack-go-app-with-htmx-and-alpinejs/) — integration patterns
 
-- **GitHub secondary rate limits:** Undocumented abuse detection thresholds — training data provides general guidance (avoid bursts, stagger requests) but exact limits unknown
-- **Graphite, PullApprove, Coderabbit features:** Competitive landscape understanding based on training data — features may have evolved since May 2025; core differentiator (AI-agent-oriented comment formatting) remains unserved
+**Architecture research:**
+- [hexaGO](https://github.com/edlingao/hexaGO) — hexagonal architecture template with Go/templ/HTMX/SQLite
+- [HTMX and Alpine.js Integration](https://www.infoworld.com/article/3856520/htmx-and-alpine-js-how-to-combine-two-great-lean-front-ends.html) — combining patterns
+- [Full-Stack Go App with HTMX and Alpine.js](https://ntorga.com/full-stack-go-app-with-htmx-and-alpinejs/) — Go-specific integration guide
+- [Using Alpine.js In HTMX](https://www.bennadel.com/blog/4787-using-alpine-js-in-htmx.htm) — Alpine state preservation with HTMX swaps
 
-**Verification needed at project init:**
-1. Run `go get` commands and confirm version numbers resolve
-2. Verify `go-github` latest major version and review comment struct fields
-3. Confirm `golang:1.23-alpine` Docker tag exists (may need `1.22-alpine` or `1.24-alpine`)
-4. Validate GitHub API field names against current docs during Phase 4 planning
+**Pitfall research:**
+- [Alpine.js x-bind not applying after HTMX swap](https://github.com/alpinejs/alpine/discussions/3985) — GitHub discussion
+- [Alpine does not see x-show on elements swapped by htmx](https://github.com/alpinejs/alpine/discussions/3809) — GitHub discussion
+- [HTMX + Alpine.js back button issues](https://github.com/bigskysoftware/htmx/discussions/2931) — GitHub discussion
+- [How to Secure API Tokens in Your Database](https://hoop.dev/blog/how-to-secure-api-tokens-in-your-database-before-they-leak/) — credential encryption patterns
+- [SQLite Encryption and Secure Storage](https://www.sqliteforum.com/p/sqlite-encryption-and-secure-storage) — SQLite encryption guidance
+- [Setting up Go templ with Tailwind, HTMX and Docker](https://mbaraa.com/blog/setting-up-go-templ-with-tailwind-htmx-docker) — Docker integration
+- [GSAP: Update animation after DOM change](https://gsap.com/community/forums/topic/35696-update-the-animation-after-the-change-dom/) — GSAP forum
+- [HTMX: Animations](https://htmx.org/examples/animations/) — official animation examples
+- [Deep-Dive Guide to Building a Jira API Integration](https://www.getknit.dev/blog/deep-dive-developer-guide-to-building-a-jira-api-integration) — Jira integration guide
+- [How to Secure Jira REST API Calls in Data Center](https://success.atlassian.com/solution-resources/agile-and-devops-ado/platform-administration/how-to-secure-jira-and-confluence-rest-api-calls-in-data-center) — Jira auth
+- [Top 5 REST API Authentication Challenges in Jira](https://www.miniorange.com/blog/rest-api-authentication-problems-solved/) — Jira auth challenges
+- [HTMX history cache and Alpine template tags](https://github.com/alpinejs/alpine/discussions/2924) — GitHub discussion
 
 ---
-
-*Research completed: 2026-02-10*
+*Research completed: 2026-02-14*
 *Ready for roadmap: yes*

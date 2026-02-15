@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
@@ -36,6 +37,9 @@ func (r *RepoRepo) Add(ctx context.Context, repo model.Repository) error {
 
 	_, err := r.db.Writer.ExecContext(ctx, query, repo.FullName, repo.Owner, repo.Name, addedAt)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return fmt.Errorf("add repository %s: %w", repo.FullName, driven.ErrRepoAlreadyExists)
+		}
 		return fmt.Errorf("add repository %s: %w", repo.FullName, err)
 	}
 
@@ -59,7 +63,7 @@ func (r *RepoRepo) Remove(ctx context.Context, fullName string) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("repository %s not found", fullName)
+		return fmt.Errorf("remove repository %s: %w", fullName, driven.ErrRepoNotFound)
 	}
 
 	return nil

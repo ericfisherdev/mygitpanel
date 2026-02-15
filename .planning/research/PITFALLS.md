@@ -1,177 +1,194 @@
 # Domain Pitfalls
 
-**Domain:** GitHub PR Tracking API (Go, SQLite, Docker, Polling)
-**Project:** ReviewHub
-**Researched:** 2026-02-10
-**Overall confidence:** MEDIUM (training data corroborated by well-established, stable domain knowledge; web verification tools were unavailable)
+**Domain:** Adding Web GUI (templ/HTMX/Alpine.js/GSAP) + Jira Integration to Existing Go API
+**Project:** MyGitPanel v2.0 Milestone
+**Researched:** 2026-02-14
+**Overall confidence:** MEDIUM-HIGH (verified via official docs, community discussions, and codebase analysis)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, outages, or fundamental architecture problems.
+Mistakes that cause rewrites, architectural conflicts, or security breaches.
 
 ---
 
-### Pitfall 1: GitHub API Rate Limit Exhaustion from Naive Polling
+### Pitfall 1: Content Negotiation Trap -- Sharing Handlers Between JSON API and HTML Views
 
-**What goes wrong:** The application polls all endpoints for all repositories on every interval tick. With 10 repos and 4 API calls per repo (list PRs, reviews, review comments, check runs), a 60-second interval burns 240 requests/minute = 14,400/hour -- nearly 3x the authenticated limit of 5,000 requests/hour. The app hits 403s, stops getting data, and the user thinks it is broken.
+**What goes wrong:** The developer tries to serve both JSON and HTML from the same handler by checking the `Accept` header or an `HX-Request` header. The existing JSON API endpoints (`/api/v1/prs`, `/api/v1/repos`) get `if htmx { renderTemplate } else { writeJSON }` logic bolted onto them. This creates tightly coupled handlers that serve two masters with conflicting requirements.
 
-**Why it happens:** Developers calculate rate limits for a single repo, then forget to multiply by the number of repos, endpoints per repo, and pagination. GitHub's rate limit is global across all API calls with a given token -- not per-endpoint.
+**Why it happens:** It seems DRY to reuse the same handler and data-fetching logic. The developer sees `HX-Request: true` header from HTMX and thinks "easy, just branch on this." Carson Gross (HTMX creator) explicitly warns against this approach: "Your JSON API needs to be a stable set of endpoints that client code can rely on. Your hypermedia API can change dramatically based on user interface needs. These two things don't mix well."
 
 **Consequences:**
-- Complete API blackout for up to an hour when the limit resets
-- If the same token is used for other tools (gh CLI, other integrations), ALL of them stop working
-- Polling threads may spin on 403 errors, logging noise without recovering
-- The secondary rate limit (anti-abuse, undocumented exact thresholds) can trigger even below 5,000/hr if requests are too bursty
+- JSON API changes break the HTML views and vice versa
+- Handler functions balloon with branching logic, violating SRP
+- Testing becomes combinatorial (every handler x every content type)
+- The JSON API loses its stability guarantee -- the existing Claude Code CLI consumer breaks when HTML-driven changes alter response shapes
+- HTMX responses need HTML fragments, not full pages, but JSON consumers need complete data objects -- these are fundamentally different response shapes
 
 **Prevention:**
-1. **Use conditional requests (ETags/If-Modified-Since).** GitHub returns `304 Not Modified` for unchanged resources and does NOT count these against the rate limit. This is the single most impactful optimization. Cache the `ETag` header from each response and send `If-None-Match` on subsequent requests.
-2. **Budget requests explicitly.** Calculate: `(repos * endpoints_per_repo * avg_pages) / poll_interval_seconds * 3600` must be well under 5,000. Build a rate budget tracker that knows how many requests remain (from the `X-RateLimit-Remaining` header) and backs off proactively.
-3. **Stagger polling across repos.** Do not poll all repos simultaneously. Spread requests across the interval window. If polling every 5 minutes, distribute repo polls across that 5-minute window.
-4. **Implement exponential backoff on 403/429.** When rate-limited, respect the `X-RateLimit-Reset` or `Retry-After` header. Do not retry immediately.
-5. **Use the `since` parameter** on endpoints that support it (e.g., list comments since a timestamp) to reduce response size and avoid pagination on unchanged data.
+1. **Separate route namespaces entirely.** Keep `/api/v1/*` for JSON (existing, stable, untouched). Add `/app/*` or `/ui/*` for HTML/HTMX views. Each gets its own handler struct.
+2. **Create a dedicated `WebHandler` struct** in a new package (`internal/adapter/driving/web/`) that depends on the same domain ports as the existing `Handler` but renders templ components instead of JSON.
+3. **Share domain logic through ports, not handlers.** Both `Handler` (JSON) and `WebHandler` (HTML) inject the same `driven.PRStore`, `driven.RepoStore`, etc. The domain layer is shared; the presentation layer is separate.
+4. **Register routes on the same `http.ServeMux`.** Go 1.22+ routing with method+path patterns handles this cleanly -- `/api/v1/prs` and `/app/prs` coexist on the same mux without conflict.
 
 **Detection (warning signs):**
-- `X-RateLimit-Remaining` drops below 1000 during normal operation
-- 403 responses with `X-RateLimit-Remaining: 0`
-- 403 responses with a message about secondary rate limits (abuse detection)
+- `if r.Header.Get("HX-Request") == "true"` appearing inside existing JSON handlers
+- `Accept` header parsing in handler functions
+- JSON response struct changes breaking existing CLI consumer
+- Handler functions exceeding 40 lines due to content-type branching
 
-**Phase mapping:** Must be addressed in Phase 1 (core polling infrastructure). This is not something to add later -- the polling architecture must be designed around rate awareness from day one.
+**Phase mapping:** Must be decided in Phase 1 (GUI foundation). The route architecture determines everything downstream.
 
-**Confidence:** HIGH -- GitHub's rate limit behavior is well-documented and stable for years. The 5,000/hr authenticated limit and ETag/conditional request mechanism are long-established.
+**Confidence:** HIGH -- HTMX's own documentation explicitly recommends against content negotiation. The existing codebase's `NewServeMux` in `handler.go` already uses Go 1.22+ routing which cleanly supports parallel route namespaces.
+
+**Sources:**
+- [HTMX: Why I Tend Not To Use Content Negotiation](https://htmx.org/essays/why-tend-not-to-use-content-negotiation/)
 
 ---
 
-### Pitfall 2: SQLite "database is locked" Errors from Concurrent Access
+### Pitfall 2: templ Code Generation Not Integrated into Build Pipeline
 
-**What goes wrong:** Background polling goroutines write PR data to SQLite while the HTTP API serves read requests. Under default SQLite settings, a write lock blocks all readers, and concurrent writes fail with "database is locked" (SQLITE_BUSY). The API returns 500 errors during polling cycles.
+**What goes wrong:** The developer writes `.templ` files but forgets that templ requires a code generation step (`templ generate`) before `go build`. The Dockerfile runs `go build` without first running `templ generate`. The CI pipeline compiles stale generated code. Locally, the developer runs `templ generate` manually but the Docker build and CI do not, producing images with outdated or missing templates.
 
-**Why it happens:** SQLite uses file-level locking by default (journal mode DELETE). Go's `database/sql` opens a connection pool, and multiple goroutines try to use different connections to the same database file simultaneously. Without WAL mode, even readers block on writers.
+**Why it happens:** Unlike standard Go where `go build` is self-sufficient, templ adds a pre-build step. Generated `*_templ.go` files may or may not be committed to git. If committed, version drift between the `.templ` source and generated `.go` file causes silent bugs (rendered HTML does not match the template source). If not committed, every build environment must have `templ` installed.
 
 **Consequences:**
-- Intermittent 500 errors on API reads during polling writes
-- Data corruption risk if the application retries writes without proper transaction handling
-- Under load, cascading lock contention as goroutines queue up waiting for the lock
+- Docker images serve stale HTML that does not match the template source
+- CI builds pass with outdated generated code, hiding template errors
+- "Works on my machine" syndrome -- developer runs `templ generate` locally, CI does not
+- Version mismatch between local templ CLI and CI templ CLI produces different generated code
+- The current Dockerfile (`FROM golang:1.25-alpine AS build`) does not install `templ`
 
 **Prevention:**
-1. **Enable WAL mode immediately on database open:** `PRAGMA journal_mode=WAL;` This allows concurrent readers with a single writer. This is non-negotiable for any SQLite application with concurrent access.
-2. **Set a busy timeout:** `PRAGMA busy_timeout=5000;` (5 seconds). Without this, SQLite returns SQLITE_BUSY immediately instead of waiting. With it, SQLite retries internally for the specified duration.
-3. **Use a single `*sql.DB` instance** shared across the entire application. Do not open multiple database connections from different goroutines. Go's `database/sql` pool handles this correctly when there is one `*sql.DB`.
-4. **Set `MaxOpenConns(1)` for writes** or use a write-serializing pattern. WAL mode allows one writer at a time. Channeling all writes through a single goroutine or using a mutex around write transactions prevents write contention entirely.
-5. **Configure connection pragmas via DSN:** When using `mattn/go-sqlite3` or `modernc.org/sqlite`, set pragmas in the connection string: `file:reviewhub.db?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON`
+1. **Add `templ generate` to the Dockerfile build stage.** Install templ in the build stage: `RUN go install github.com/a-h/templ/cmd/templ@latest && templ generate` before `go build`.
+2. **Do NOT commit generated `*_templ.go` files.** Add `*_templ.go` to `.gitignore`. Generate fresh in CI and Docker builds. This eliminates version drift entirely.
+3. **Add a `go generate` directive.** In a root file: `//go:generate templ generate ./...` so `go generate ./...` runs templ. This is idiomatic Go.
+4. **Pin the templ version.** Use `go install github.com/a-h/templ/cmd/templ@v0.3.x` (pin to specific version) in Dockerfile and CI. Version mismatch between environments causes subtle rendering differences.
+5. **Add a CI check for template formatting.** `templ fmt --check` returns non-zero if templates need formatting, catching style drift.
 
 **Detection (warning signs):**
-- "database is locked" errors in logs
-- API latency spikes correlating with polling intervals
-- Intermittent test failures in CI
+- HTML output does not match what the `.templ` file shows
+- `*_templ.go` files in git with timestamps older than their `.templ` sources
+- Docker build succeeds but serves wrong HTML
+- `templ generate` produces diffs on freshly cloned repo
 
-**Phase mapping:** Must be addressed in Phase 1 (database layer setup). The SQLite connection configuration is foundational -- every subsequent feature depends on it.
+**Phase mapping:** Phase 1 (GUI foundation). The build pipeline must be updated before any templates are written.
 
-**Confidence:** HIGH -- SQLite concurrency behavior is extremely well-documented. WAL mode has been the recommended approach for concurrent-access scenarios since SQLite 3.7.0 (2010).
+**Confidence:** HIGH -- templ's official docs explicitly document this requirement. The current Dockerfile needs modification.
+
+**Sources:**
+- [templ: Template Generation](https://templ.guide/core-concepts/template-generation/)
+- [templ: Hosting Using Docker](https://templ.guide/hosting-and-deployment/hosting-using-docker/)
 
 ---
 
-### Pitfall 3: Review Comment Position Mapping is Fundamentally Complex
+### Pitfall 3: Alpine.js State Destruction on HTMX DOM Swaps
 
-**What goes wrong:** The developer assumes GitHub review comment positions are simple line numbers. They are not. The `position` field on a review comment refers to a line within the diff hunk, not a line in the file. When trying to extract "the code this comment refers to," the app either shows wrong code, crashes on edge cases, or produces garbage context for the AI consumer.
+**What goes wrong:** HTMX swaps new HTML into the DOM, destroying Alpine.js reactive state. Components initialized with `x-data` lose their state (open/closed toggles, form values, filter selections). The UI "resets" on every HTMX interaction -- dropdowns close, accordions collapse, tab selections revert.
 
-**Why it happens:** GitHub's review comment API has evolved over time and has multiple overlapping position fields:
-- `position` (deprecated-ish): The line index in the diff (1-indexed from the start of the diff). Only valid for the original diff; becomes `null` if the PR is updated after the comment.
-- `original_position`: The position in the original diff when the comment was created.
-- `line`: The line number in the file (added later). Can be `null` for older comments.
-- `original_line`: The original line number when the comment was created.
-- `side`: `LEFT` (deletion) or `RIGHT` (addition) -- critical for understanding which version of the file the comment targets.
-- `start_line` / `start_side`: For multi-line comments (comment spans a range).
-- `diff_hunk`: The actual diff context GitHub provides -- a snippet of the unified diff around the comment. This is often the most reliable source of context.
-- `subject_type`: `line` or `file` -- file-level comments have no line position at all.
-- `path`: The file path, which may have changed between commits if the file was renamed.
+**Why it happens:** HTMX's default swap strategy (`innerHTML`) replaces the target element's children entirely. Alpine.js binds reactive state to DOM elements. When those elements are replaced, Alpine's reactive proxies are garbage-collected. The new HTML has fresh `x-data` attributes but no connection to the previous state. Even with `id` preservation, HTMX's settle algorithm can conflict with Alpine's reactivity tracking.
 
 **Consequences:**
-- AI agent receives wrong code context, generates fixes for the wrong lines
-- Comments on outdated diffs have `null` positions, and the app either crashes or silently drops them
-- Multi-line comments are treated as single-line, losing context
-- File-level comments (no position) break the position-parsing logic
-- Renamed files cause path mismatches
+- UI feels broken -- users click a dropdown, trigger an HTMX request, and the dropdown snaps closed
+- Form state is lost mid-interaction
+- Complex Alpine components (multi-step forms, accordion panels) become unusable
+- Developer starts fighting the frameworks instead of building features
 
 **Prevention:**
-1. **Use `diff_hunk` as the primary context source.** GitHub already provides the relevant diff context in the `diff_hunk` field of every review comment. For an AI consumer, this is often sufficient and avoids the entire position-mapping problem. Parse the `diff_hunk` to extract the code snippet rather than trying to reconstruct it from file contents + position.
-2. **Handle all position field combinations.** Build a position resolver that tries fields in order: `line`/`side` (modern) -> `diff_hunk` parsing (fallback) -> `position` (legacy fallback) -> graceful degradation (show comment text without code context).
-3. **Handle `null` positions explicitly.** When a PR is updated after a comment, positions can become `null`. The `diff_hunk` is still available. Do not assume positions are always present.
-4. **Handle multi-line comments.** Check for `start_line` / `start_side` and expand the code context window accordingly.
-5. **Handle file-level comments.** When `subject_type` is `file`, there is no line reference. Present these differently.
-6. **Do not reconstruct diffs yourself.** Fetching the file contents and trying to map positions back is error-prone and fragile. Use what GitHub gives you (`diff_hunk`, `line`, `path`).
+1. **Use `hx-swap="morph:outerHTML"` with the Alpine Morph extension.** The `alpine-morph` HTMX extension uses Alpine's morph algorithm which preserves Alpine state during DOM updates. This is the officially recommended solution when combining HTMX and Alpine.
+2. **Scope HTMX swap targets carefully.** Do not swap the entire `x-data` container. Swap only the data-display portion inside it. Keep Alpine state containers as parents of HTMX swap targets, not the targets themselves.
+3. **Use `hx-select` to extract fragments.** When the server returns a full component, use `hx-select` to extract only the changing portion, leaving Alpine's state container untouched.
+4. **Remove `id` attributes from Alpine-managed elements** when they are inside HTMX swap targets. HTMX's settle algorithm matches elements by `id` and can mutate attributes in ways that break Alpine's reactivity tracking.
+5. **Prefer Alpine for client-only state, HTMX for server state.** Dropdown open/closed is Alpine territory (never goes to server). PR list content is HTMX territory (fetched from server). Draw clear boundaries.
 
 **Detection (warning signs):**
-- Comments appearing with no code context
-- AI agent responses referencing wrong code sections
-- Null pointer panics in position handling
-- Multi-line review comments showing only the last line
+- UI elements "resetting" after HTMX requests
+- `x-show` or `x-bind` not applying after swap
+- Alpine console warnings about missing reactive data
+- Developer adding `setTimeout` hacks to re-initialize Alpine after swaps
 
-**Phase mapping:** This is the core differentiator of ReviewHub and must be designed carefully. Recommend a dedicated phase (likely Phase 2 or 3) focused entirely on comment extraction and formatting, with explicit test cases for every position field combination. Do not combine this with basic PR listing.
+**Phase mapping:** Phase 1 (GUI foundation). The Alpine+HTMX integration pattern must be established before building any interactive components. Building multiple components with the wrong pattern means rewriting all of them.
 
-**Confidence:** MEDIUM -- The field names and general behavior are well-established in the GitHub API. The exact edge cases around null positions after PR updates and the evolution of `position` vs `line` fields are based on extensive community knowledge, but the specific current state of the API should be verified against the latest GitHub docs.
+**Confidence:** HIGH -- Multiple GitHub issues document this exact problem, and the alpine-morph solution is well-established.
+
+**Sources:**
+- [Alpine.js x-bind not applying after HTMX swap](https://github.com/alpinejs/alpine/discussions/3985)
+- [Alpine does not see x-show on elements swapped by htmx](https://github.com/alpinejs/alpine/discussions/3809)
+- [HTMX + Alpine.js back button issues](https://github.com/bigskysoftware/htmx/discussions/2931)
+- [Using Alpine.js in HTMX (Ben Nadel)](https://www.bennadel.com/blog/4787-using-alpine-js-in-htmx.htm)
 
 ---
 
-### Pitfall 4: Polling Interval Tuning and Stale Data Tradeoffs
+### Pitfall 4: Storing Jira/GitHub Credentials in SQLite Without Encryption
 
-**What goes wrong:** The developer picks a single polling interval (e.g., 60 seconds) and applies it uniformly. This is either too aggressive (wastes rate limit budget on inactive repos) or too lax (misses rapid changes during active review cycles). Users either burn through rate limits or see stale data.
+**What goes wrong:** The developer stores Jira API tokens and GitHub PATs as plaintext in the SQLite database. Anyone with read access to the database file (Docker volume mount, backup, container escape) gets full API access to the user's Jira and GitHub accounts.
 
-**Why it happens:** Uniform polling seems simpler. Developers do not consider that PR activity is bursty -- a PR might get 20 comments in 10 minutes during active review, then nothing for days.
+**Why it happens:** SQLite has no built-in column-level encryption. The developer thinks "it is a local tool, who would access the database?" But the database file is on a Docker volume, potentially backed up, and accessible to any process in the container. The existing `MYGITPANEL_GITHUB_TOKEN` is an environment variable (good), but adding Jira credentials via the web GUI means they must be persisted somewhere -- and the GUI naturally wants to store them in the database.
 
 **Consequences:**
-- Rate limit exhaustion on repos with no activity
-- Stale data frustration when a PR is actively being reviewed
-- No way for the user to trigger an immediate refresh when they know something changed
+- Credential theft from database backup or volume access
+- Jira tokens grant access to all projects the user can see -- potentially company-wide sensitive data
+- GitHub PATs with `repo` scope give full read/write access to private repositories
+- If the database is accidentally committed or shared, credentials are exposed
+- Compliance violation for any organization with credential storage policies
 
 **Prevention:**
-1. **Implement adaptive polling.** Increase poll frequency for recently-active PRs and decrease it for stale ones. Track `updated_at` timestamps; if a PR was updated in the last hour, poll every 2-3 minutes. If unchanged for 24 hours, poll every 30 minutes.
-2. **Provide a manual refresh endpoint.** `POST /api/repos/{owner}/{repo}/refresh` or `POST /api/prs/{id}/refresh` to allow the consumer to trigger an immediate poll. This is cheap to implement and covers the "I just pushed, refresh now" use case.
-3. **Use conditional requests to make frequent polling cheap.** With ETags, polling every 60 seconds costs almost nothing for unchanged resources (304s are not rate-limited). This makes aggressive intervals viable.
-4. **Separate polling schedules by endpoint type.** PR list changes (new PRs, state changes) are less frequent than comment activity. Poll the PR list every 5 minutes but comments on active PRs every 2 minutes.
-5. **Expose polling status in the API.** Return `last_polled_at` and `next_poll_at` in API responses so the consumer knows data freshness.
+1. **Encrypt credentials at rest using AES-256-GCM.** Use Go's `crypto/aes` and `crypto/cipher` to encrypt tokens before storing and decrypt on read. Store the ciphertext + nonce in the database, not the plaintext.
+2. **Derive the encryption key from an environment variable.** `MYGITPANEL_CREDENTIAL_KEY` passed at runtime. Never hardcode the key or store it in the database. This follows the principle: the database alone is not sufficient to recover credentials.
+3. **Create a `CredentialStore` port/adapter.** Domain port defines `StoreCredential(ctx, name, value)` and `GetCredential(ctx, name)`. The SQLite adapter handles encryption/decryption transparently. This keeps encryption concerns out of application logic.
+4. **Consider keeping credentials as env vars only.** For a single-user tool, environment variables (`MYGITPANEL_JIRA_TOKEN`, `MYGITPANEL_JIRA_URL`) may be sufficient. The GUI can display "configured via environment" without needing database storage. This avoids the encryption complexity entirely.
+5. **Never log credential values.** Ensure `slog` calls never include token values. Use `slog.String("jira_configured", "true")` not `slog.String("jira_token", token)`.
+6. **Rotate tokens independently.** Store credentials with metadata (created_at, last_used_at) so users can identify and rotate stale tokens.
 
 **Detection (warning signs):**
-- User complaints about stale data
-- Rate limit exhaustion despite few repos configured
-- All repos polled at the same frequency regardless of activity
+- Plaintext tokens visible in SQLite CLI: `sqlite3 mygitpanel.db "SELECT * FROM credentials;"`
+- Token values appearing in application logs
+- No `MYGITPANEL_CREDENTIAL_KEY` environment variable in Docker configuration
+- Database backup containing readable API tokens
 
-**Phase mapping:** Basic uniform polling in Phase 1, adaptive polling as a Phase 2 enhancement. The manual refresh endpoint should be in Phase 1 as it is cheap and critical for UX.
+**Phase mapping:** Must be resolved before Jira integration phase. The credential storage pattern affects both Jira and any future GitHub write operations (submitting reviews).
 
-**Confidence:** HIGH -- polling pattern design is a well-established domain with stable best practices.
+**Confidence:** HIGH -- Encryption at rest for credentials is an industry-standard requirement. The specific Go crypto primitives are stable and well-documented.
+
+**Sources:**
+- [How to Secure API Tokens in Your Database](https://hoop.dev/blog/how-to-secure-api-tokens-in-your-database-before-they-leak/)
+- [SQLite Encryption and Secure Storage](https://www.sqliteforum.com/p/sqlite-encryption-and-secure-storage)
 
 ---
 
-### Pitfall 5: GitHub Token Exposure in Logs, Errors, and Docker Configuration
+### Pitfall 5: Static Assets (Tailwind CSS, HTMX JS, Alpine JS, GSAP) Missing from Docker Scratch Image
 
-**What goes wrong:** The GitHub personal access token (PAT) appears in error messages, debug logs, HTTP client traces, or is baked into the Docker image. A leaked PAT gives full repository access to anyone who finds it.
+**What goes wrong:** The developer serves static assets from the filesystem during development. The Docker scratch image has no filesystem -- only the binary. The production container starts but serves 404 for all CSS/JS files. The app renders unstyled, non-interactive HTML.
 
-**Why it happens:** Go's `http.Client` can log request headers (including Authorization) in debug mode. Error messages from the GitHub client library may include the URL with token query parameters. Docker layers preserve environment variables set during build.
+**Why it happens:** The current Dockerfile copies only `/bin/mygitpanel` and `/bin/healthcheck` into the scratch image. There is no mechanism to include CSS, JavaScript, or other static files. During development, `http.FileServer(http.Dir("assets/"))` works because the assets directory exists. In scratch, it does not.
 
 **Consequences:**
-- Token leaked in application logs -> anyone with log access has repository access
-- Token baked into Docker image layers -> anyone who pulls the image has the token
-- Token in error messages returned via API -> consumer-facing exposure
-- GitHub detects leaked tokens and revokes them, breaking the app with no clear error message
+- Production deployment serves broken, unstyled pages
+- HTMX, Alpine.js, and GSAP JavaScript does not load -- the entire GUI is non-functional
+- Tailwind CSS does not load -- raw unstyled HTML
+- The developer adds a filesystem to the scratch image (defeating its purpose) or switches to a larger base image unnecessarily
 
 **Prevention:**
-1. **Pass token via environment variable at runtime, never at build time.** Use `docker run -e GITHUB_TOKEN=...` or Docker secrets, not `ENV` in Dockerfile or `.env` files committed to git.
-2. **Scrub authorization headers from error messages.** Wrap the HTTP client to redact `Authorization` headers before logging. Never log raw HTTP requests/responses containing the token.
-3. **Never include the token in URLs as a query parameter.** Always use the `Authorization: Bearer <token>` header. Some older GitHub examples used `?access_token=` which appears in logs and referrer headers.
-4. **Add `.env` and any secrets files to `.gitignore` from the very start.** The project already has `.planning/` in `.gitignore`; ensure `.env`, `*.pem`, and `*.key` are also excluded.
-5. **Validate token on startup.** Call `GET /user` to verify the token works and has the needed scopes. Fail fast with a clear error ("Token invalid or missing required scopes") rather than mysterious 401s later during polling.
-6. **Use minimal token scopes.** The app only needs `repo` scope (for private repos) or no scope at all (for public repos only). Do not use tokens with `admin`, `delete`, or `write` scopes.
+1. **Use Go's `//go:embed` to embed all static assets into the binary.** Create an `internal/assets/` package with `//go:embed static/*` that embeds CSS, JS, and any other static files. Serve via `http.FileServer(http.FS(assets.Static))`. This keeps the single-binary deployment model.
+2. **Build Tailwind CSS in the Docker build stage.** Add a Node.js step or use the Tailwind standalone CLI in the Dockerfile build stage: download the tailwind binary, run `tailwindcss -i input.css -o static/styles.css --minify`, then embed the output.
+3. **Use CDN links for HTMX, Alpine.js, and GSAP during development**, but vendor them for production. Download specific versions into the `static/` directory and embed them. This avoids CDN dependency in production and ensures version pinning.
+4. **Alternative: Use CDN in production too.** For a single-user tool, CDN links for HTMX (14KB), Alpine.js (15KB), and GSAP are acceptable. But this requires internet access from the browser, which may not be available in all deployment scenarios.
+5. **Add an integration test** that starts the compiled binary and requests `/static/styles.css` to verify embedding works. This catches the "assets not embedded" bug before deployment.
 
 **Detection (warning signs):**
-- Token visible in `docker inspect` output
-- Authorization header appearing in log output
-- GitHub sending "token has been revoked" emails
-- `.env` file appearing in `git status`
+- Browser console showing 404 for `/static/*.css` and `/static/*.js`
+- HTML renders but with no styling or interactivity
+- Docker image size does not increase after adding static assets (they were not embedded)
+- `http.Dir("assets/")` in production code (filesystem-dependent, breaks in scratch)
 
-**Phase mapping:** Phase 1 (project setup and configuration). Token handling is the first thing configured and must be secure from the start.
+**Phase mapping:** Phase 1 (GUI foundation). The asset pipeline must work before any templates reference CSS or JS.
 
-**Confidence:** HIGH -- token security practices are well-established and stable.
+**Confidence:** HIGH -- The current Dockerfile is a scratch image. Go's `embed` package is the standard solution for this exact problem. The Dockerfile will need modification.
+
+**Sources:**
+- [Setting up Go templ with Tailwind, HTMX and Docker](https://mbaraa.com/blog/setting-up-go-templ-with-tailwind-htmx-docker)
+- [templ: Hosting Using Docker](https://templ.guide/hosting-and-deployment/hosting-using-docker/)
 
 ---
 
@@ -181,128 +198,196 @@ Mistakes that cause delays, technical debt, or degraded experience.
 
 ---
 
-### Pitfall 6: GitHub API Pagination Ignored or Incorrectly Implemented
+### Pitfall 6: GSAP Animations Breaking on HTMX DOM Swaps
 
-**What goes wrong:** The developer fetches only the first page of results (default 30 items) from endpoints like "list pull requests" or "list review comments." For active repos with many PRs, this silently drops data. The app appears to work during development (small test repos) but fails in production (large repos).
+**What goes wrong:** GSAP animations are applied to elements on page load. When HTMX swaps new content into the page, the animated elements are destroyed and replaced with new, unanimated elements. Animations stop working after the first HTMX interaction. Worse, GSAP timelines and ScrollTrigger instances referencing destroyed elements leak memory and throw errors.
 
-**Why it happens:** GitHub's default page size is 30 items. During development, test repos have fewer than 30 open PRs, so pagination is never triggered. The issue only surfaces with real-world repos.
-
-**Prevention:**
-1. **Always paginate every list endpoint.** Use the `Link` header from GitHub's response to detect additional pages. The `rel="next"` link indicates more pages exist.
-2. **Set `per_page=100`** (GitHub's maximum) to minimize the number of requests needed.
-3. **Use the `state` parameter to filter.** For PR listing, use `state=open` to only fetch open PRs (you rarely need thousands of closed PRs for a tracking tool).
-4. **Implement a pagination helper** that wraps list endpoints and handles the `Link` header parsing automatically. The `google/go-github` library has built-in pagination support via `ListOptions` and checking `Response.NextPage`.
-5. **Cap maximum pages** as a safety measure. If a repo has 10,000 open PRs, you probably have a configuration problem, not a pagination problem. Log a warning if page count exceeds a threshold.
-
-**Detection (warning signs):**
-- App shows exactly 30 PRs for a repo you know has more
-- Missing PRs that exist in the GitHub web UI
-- No `Link` header parsing in the HTTP client code
-
-**Phase mapping:** Phase 1 (core polling). Pagination must be correct from the first implementation.
-
-**Confidence:** HIGH -- GitHub pagination behavior is well-documented and has been stable for many years.
-
----
-
-### Pitfall 7: go-github Library Version and API Compatibility
-
-**What goes wrong:** The developer uses an outdated version of `google/go-github` that does not support newer API fields (like `line` and `side` on review comments, multi-line comment support, or GraphQL-backed fields). Alternatively, the developer uses `go-github/v60+` which requires Go 1.21+ and the developer is targeting an older Go version.
-
-**Why it happens:** `go-github` follows GitHub API changes closely and has frequent major version bumps (v50, v55, v60+). It is easy to follow an old tutorial that imports `go-github/v45` and miss newer fields. The library versions are tightly coupled to Go versions.
-
-**Prevention:**
-1. **Use the latest stable `go-github` version** at project start. Check the GitHub releases page for the current version.
-2. **Verify the review comment struct fields.** Ensure the version you are using has `Line`, `Side`, `StartLine`, `StartSide`, `SubjectType`, and `DiffHunk` fields on `PullRequestComment`.
-3. **Pin the version in `go.mod`** and document why a specific version was chosen.
-4. **Consider whether `go-github` is even necessary.** For a focused application like ReviewHub that only uses a handful of endpoints, a thin custom HTTP client with typed response structs may be simpler and more maintainable than a massive generated library. You avoid version churn and only model the fields you actually need.
-
-**Detection (warning signs):**
-- Import path does not include a major version suffix (`go-github` without `/vXX`)
-- Review comment struct does not have `Line` field
-- Compile errors after Go version update
-
-**Phase mapping:** Phase 1 (project setup). The GitHub client choice is foundational.
-
-**Confidence:** MEDIUM -- The general advice is stable, but specific version numbers and struct field availability should be verified against current `go-github` releases.
-
----
-
-### Pitfall 8: Graceless Docker Container Shutdown Corrupting SQLite
-
-**What goes wrong:** Docker sends SIGTERM, but the application does not handle it. Goroutines are killed mid-transaction. SQLite WAL file is left in an inconsistent state. On restart, the database may be corrupted or missing recent writes.
-
-**Why it happens:** Go applications without signal handling exit immediately on SIGTERM (Docker's default stop signal). If a SQLite write transaction is in progress, the WAL checkpoint does not complete. Docker waits 10 seconds then sends SIGKILL if the process has not stopped.
+**Why it happens:** GSAP attaches animation state to specific DOM element references. When HTMX replaces those elements, GSAP's references become stale (pointing to removed nodes). Unlike CSS transitions which are declarative and automatically apply to new elements, GSAP animations are imperative -- they must be explicitly re-initialized on new DOM elements.
 
 **Consequences:**
-- Lost writes from the last polling cycle
-- Potential SQLite database corruption requiring recovery or rebuild
-- WAL file grows unbounded if checkpoints never complete cleanly
+- Animations play once (on initial page load) then never again
+- Memory leaks from orphaned GSAP instances referencing removed DOM nodes
+- Console errors from GSAP trying to animate `null` targets
+- ScrollTrigger instances accumulate, causing performance degradation
+- Developer disables HTMX for animated sections, losing the partial-update benefit
 
 **Prevention:**
-1. **Handle SIGTERM and SIGINT** using `signal.NotifyContext` or `signal.Notify`. On signal, stop accepting new polls, wait for in-flight transactions to complete, close the database, then exit.
-2. **Use `context.Context` throughout.** Pass a cancellable context to all polling goroutines and database operations. When shutdown is triggered, cancel the context and wait for goroutines to finish via a `sync.WaitGroup`.
-3. **Set a reasonable shutdown timeout.** Wait up to 30 seconds for in-flight operations, then force-exit. This must be less than Docker's stop timeout (default 10s, configurable via `stop_grace_period`).
-4. **Configure Docker `stop_grace_period`** to be longer than the application's shutdown timeout. If the app needs 15 seconds to drain, set `stop_grace_period: 30s`.
-5. **Call `db.Close()` explicitly** in the shutdown path. This ensures the WAL is checkpointed and the database file is consistent.
-6. **Use a Docker HEALTHCHECK** to detect if the app is stuck. If shutdown hangs, the health check fails, and Docker can force-restart.
+1. **Re-initialize GSAP on `htmx:afterSettle` events.** Listen for HTMX lifecycle events and re-run GSAP animations on the newly swapped content:
+   ```javascript
+   document.addEventListener('htmx:afterSettle', function(event) {
+     gsap.from(event.detail.target.querySelectorAll('.animate-in'), {
+       opacity: 0, y: 20, stagger: 0.1
+     });
+   });
+   ```
+2. **Kill existing GSAP instances before swap.** Listen to `htmx:beforeSwap` to kill animations on elements about to be removed:
+   ```javascript
+   document.addEventListener('htmx:beforeSwap', function(event) {
+     gsap.killTweensOf(event.detail.target.querySelectorAll('*'));
+     ScrollTrigger.getAll().forEach(st => {
+       if (event.detail.target.contains(st.trigger)) st.kill();
+     });
+   });
+   ```
+3. **Use CSS-based animations for simple transitions.** HTMX natively supports CSS transitions via `htmx-added`, `htmx-settling`, and `htmx-swapping` classes. Reserve GSAP for complex sequences (staggered lists, physics-based motion, timeline choreography) and use CSS for simple fade/slide transitions.
+4. **Scope GSAP to swap targets.** Do not apply GSAP to the entire page. Scope animations to the specific elements being swapped, making cleanup targeted and predictable.
+5. **Create a reusable animation initializer.** A function like `initAnimations(container)` that can be called on any DOM subtree, used both on page load and after HTMX swaps.
 
 **Detection (warning signs):**
-- "database disk image is malformed" errors after container restart
-- Missing data after container restart
-- WAL file growing very large (never checkpointed)
-- Container taking exactly 10 seconds to stop (SIGKILL after timeout)
+- Animations work on first page load but not after clicking HTMX-powered links
+- Browser DevTools showing increasing memory usage over time
+- Console warnings: "GSAP target not found"
+- `ScrollTrigger.getAll().length` growing without bound
 
-**Phase mapping:** Phase 1 (Docker and infrastructure setup). Graceful shutdown must be in the initial skeleton.
+**Phase mapping:** Phase 2 or later (after basic GUI is working). GSAP animations are polish, not foundation. Get HTMX+templ+Alpine working first, add GSAP animations last.
 
-**Confidence:** HIGH -- Go signal handling and SQLite shutdown behavior are well-documented.
+**Confidence:** MEDIUM -- GSAP's DOM-reference model is well-understood, but specific HTMX integration patterns are community-sourced, not officially documented by either project.
+
+**Sources:**
+- [GSAP: Update animation after DOM change](https://gsap.com/community/forums/topic/35696-update-the-animation-after-the-change-dom/)
+- [HTMX: Animations](https://htmx.org/examples/animations/)
 
 ---
 
-### Pitfall 9: Not Tracking PR Update Timestamps Leading to Redundant Processing
+### Pitfall 7: Jira REST API Rate Limiting is Opaque and Punishing
 
-**What goes wrong:** Every polling cycle fully re-fetches and re-processes every PR, even if nothing has changed. This wastes rate limit budget, creates unnecessary database churn, and makes it impossible to determine what actually changed between polls.
+**What goes wrong:** The developer polls Jira for issue updates using the same aggressive polling pattern used for GitHub. Jira's rate limits are less transparent than GitHub's -- Jira Cloud uses a points-based system where complex queries consume more points than simple ones. The app hits 429s with no clear indication of when to retry, and gets temporarily blocked.
 
-**Why it happens:** The developer stores the current PR state but does not compare it to the previous state. Without change tracking, the app cannot distinguish "PR was updated" from "PR is the same as last poll."
+**Why it happens:** Unlike GitHub which publishes clear rate limit headers (`X-RateLimit-Remaining`), Jira Cloud's rate limiting is points-based and the point cost per request is not documented per endpoint. The developer assumes "5 requests per minute is fine" without understanding that a JQL search with many results costs more points than a simple issue fetch.
+
+**Consequences:**
+- 429 responses with `Retry-After` headers that may be minutes long
+- Temporary IP or token blocking for sustained abuse
+- Starting March 2, 2026, new tiered quota rate limits apply to all OAuth 2.0 apps (though API token traffic is governed by existing burst limits)
+- No way to predict remaining budget without trial and error
 
 **Prevention:**
-1. **Store `updated_at` from GitHub's PR response.** This is the definitive "something changed" signal. Only re-fetch details (comments, reviews, checks) for PRs whose `updated_at` is newer than the stored value.
-2. **Use ETags per resource.** Store the ETag for each API response (per-repo PR list, per-PR comments). Only process the response body when the ETag has changed (i.e., GitHub returns 200, not 304).
-3. **Implement change detection in the database layer.** When upserting PR data, compare the new state to the stored state and only trigger downstream processing (comment re-fetch, status update) if something actually changed.
-4. **Use `sort=updated&direction=desc`** when listing PRs. This puts recently-changed PRs first. Combined with `since` parameter awareness, you can stop paginating once you reach PRs older than your last poll.
-5. **Log what changed.** When a PR is updated, log which fields changed. This is invaluable for debugging and confirms the change detection is working.
+1. **Use webhooks instead of polling for Jira.** Jira supports webhooks for issue updates. Configure a webhook to POST to your app when issues change state. This eliminates polling entirely and is Jira's recommended approach.
+2. **If polling is necessary, use JQL with `updated >= -5m`.** Filter to recently-changed issues only. This reduces response size and API point cost.
+3. **Implement exponential backoff with jitter on 429.** Respect the `Retry-After` header exactly. Do not retry before the specified time.
+4. **Cache Jira responses aggressively.** Issue metadata (project, type, priority) changes rarely. Cache it for hours, not minutes. Only poll for status changes.
+5. **Separate Jira polling from GitHub polling.** Use independent polling loops with independent rate budgets. A Jira rate limit should not affect GitHub data freshness.
+6. **Use Jira's `fields` parameter** to request only the fields you need. `GET /rest/api/3/issue/KEY?fields=status,summary,assignee` costs fewer points than fetching all fields.
 
 **Detection (warning signs):**
-- Rate limit consumption does not decrease after initial data load
-- Database row update timestamps change every poll even when nothing changed on GitHub
-- Polling a single repo uses 20+ requests per cycle regardless of activity
+- 429 responses from Jira with long `Retry-After` values
+- Jira data going stale for minutes at a time
+- Application logs showing repeated Jira request failures
 
-**Phase mapping:** Phase 1 (polling design). Change tracking should be built into the initial polling loop, not bolted on later.
+**Phase mapping:** Jira integration phase. Design the Jira adapter with rate limiting awareness from the start.
 
-**Confidence:** HIGH -- standard polling optimization patterns.
+**Confidence:** MEDIUM -- Jira's rate limiting model is documented at a high level, but per-endpoint point costs are not published. The March 2026 tiered quota changes add uncertainty.
+
+**Sources:**
+- [Jira Cloud: Rate Limiting](https://developer.atlassian.com/cloud/jira/platform/rate-limiting/)
+- [Deep-Dive Guide to Building a Jira API Integration](https://www.getknit.dev/blog/deep-dive-developer-guide-to-building-a-jira-api-integration)
 
 ---
 
-### Pitfall 10: Conflating "PR Author" and "Review Requested" Queries
+### Pitfall 8: Jira Authentication Model Mismatch (Cloud vs Data Center)
 
-**What goes wrong:** The developer uses a single API call or search query to get both "PRs I authored" and "PRs where my review is requested." The two concepts require different API calls with different parameters, and conflating them produces incorrect results or misses PRs entirely.
+**What goes wrong:** The developer implements Jira authentication for Cloud (email + API token via Basic Auth) but the user runs Jira Data Center (PAT or OAuth). Or vice versa. The app fails to authenticate, and the error message is unhelpful ("401 Unauthorized" with no context on which auth method was expected).
 
-**Why it happens:** It seems like a single search query could handle both. But GitHub's `author:` and `review-requested:` search qualifiers cannot be ORed -- they are ANDed. A search for `author:me review-requested:me` returns PRs where BOTH conditions are true (which is almost never).
+**Why it happens:** Jira Cloud and Jira Data Center/Server have different authentication mechanisms:
+- **Jira Cloud:** Email + API token sent as Basic Auth (`email:token` base64-encoded), or OAuth 2.0
+- **Jira Data Center:** Personal Access Token (Bearer token), or username + password (deprecated), or OAuth 1.0a
+- Atlassian is retiring basic auth with username/password pairs, but API tokens still use Basic Auth format (confusingly)
+
+**Consequences:**
+- App works for Cloud users but fails silently for Data Center users (or vice versa)
+- Users provide the wrong credential format (PAT where API token is expected)
+- OAuth vs Basic Auth requires completely different flows and token storage
+- Error messages like "401" do not explain what the user needs to change
 
 **Prevention:**
-1. **Make two separate API calls:** One for `GET /search/issues?q=author:{username}+type:pr+state:open` and one for `GET /search/issues?q=review-requested:{username}+type:pr+state:open`. Alternatively, use the repository PR list endpoint with appropriate parameters.
-2. **Use the repos-based approach for review requests.** For "PRs needing my review" from configured repos, iterate through each configured repo with `GET /repos/{owner}/{repo}/pulls?state=open` and check the `requested_reviewers` field. This is more reliable than search and respects the configured repo list.
-3. **Deduplicate results.** A PR the user authored might also have a review request from them (self-review). Ensure the data model handles this -- a PR can be both "authored" and "review-requested."
-4. **Handle team review requests.** Review requests can be assigned to teams, not just individuals. If the user is a member of a requested team, the PR should show as needing review. This requires an additional call to check team memberships or using the `review-requested` search qualifier which handles teams.
+1. **Pick one Jira deployment model and document it.** For a personal tool, Jira Cloud with API token is the simplest. Explicitly state "Jira Cloud only" in documentation and configuration UI.
+2. **Validate credentials on save.** When the user enters Jira credentials via the GUI, immediately test them with a `GET /rest/api/3/myself` call. Show success/failure before saving.
+3. **Provide clear configuration guidance.** The GUI should explain: "Create a Jira API token at https://id.atlassian.com/manage-profile/security/api-tokens. Enter your email and the token."
+4. **If supporting both Cloud and Data Center,** add a `jira_deployment_type` configuration field that switches the authentication adapter. Use the Strategy pattern -- the Jira port interface is the same, but `JiraCloudAdapter` and `JiraDataCenterAdapter` handle auth differently.
 
 **Detection (warning signs):**
-- "PRs needing review" list is empty when the user knows they have pending reviews
-- Search API queries using AND where OR is intended
-- Missing PRs from repos not in the configured list
+- "401 Unauthorized" from Jira with no additional context
+- Users confused about which credentials to enter
+- Auth working for some users but not others (different Jira deployments)
 
-**Phase mapping:** Phase 1 (core polling queries). The query design is fundamental to what data the app shows.
+**Phase mapping:** Jira integration phase, first task. Authentication must work before any Jira features can be built.
 
-**Confidence:** HIGH -- GitHub Search API qualifier behavior is well-documented.
+**Confidence:** HIGH -- Jira Cloud vs Data Center auth differences are well-documented by Atlassian.
+
+**Sources:**
+- [How to Secure Jira REST API Calls in Data Center](https://success.atlassian.com/solution-resources/agile-and-devops-ado/platform-administration/how-to-secure-jira-and-confluence-rest-api-calls-in-data-center)
+- [Top 5 REST API Authentication Challenges in Jira](https://www.miniorange.com/blog/rest-api-authentication-problems-solved/)
+
+---
+
+### Pitfall 9: GitHub Review Submission API Triggering Secondary Rate Limits
+
+**What goes wrong:** The GUI lets users submit reviews (approve, request changes, comment) via the GitHub API. The developer uses `POST /repos/{owner}/{repo}/pulls/{number}/reviews` which is a write endpoint. Creating content quickly triggers GitHub's secondary (abuse) rate limits, which have lower thresholds than the primary 5,000/hr limit and are not well-documented.
+
+**Why it happens:** GitHub's secondary rate limits specifically target "creating content too quickly." Review submissions, comments, and status updates are write operations that GitHub monitors more aggressively. The existing polling-only app only does reads; adding write operations changes the rate limit risk profile.
+
+**Consequences:**
+- 403 or 429 with abuse detection message
+- Temporary block that affects ALL API operations (reads and writes) for the token
+- The existing polling loop stops working because the shared token is blocked
+- Users cannot submit reviews during the block period
+
+**Prevention:**
+1. **Separate read and write tokens.** Use one PAT for polling (read-only, `repo:read` scope) and another for write operations (review submission). If one is blocked, the other continues working.
+2. **Rate-limit write operations client-side.** Add a minimum delay between write operations (e.g., 1 second between review submissions). Users are unlikely to submit reviews faster than this.
+3. **Queue write operations.** Do not fire API calls directly from the HTTP handler. Enqueue write operations and process them with controlled pacing.
+4. **Show clear feedback on rate limit errors.** If a review submission is rate-limited, show "GitHub is temporarily limiting requests. Your review will be submitted shortly." and retry automatically.
+5. **The existing `gofri/go-github-ratelimit/v2` middleware handles secondary rate limits.** Ensure it is applied to the write client as well, not just the polling client.
+
+**Detection (warning signs):**
+- "You have exceeded a secondary rate limit" error messages
+- Review submissions failing intermittently
+- Polling data going stale after a burst of review submissions
+- 403 responses on read operations that were previously working
+
+**Phase mapping:** Review submission feature phase. Must be designed before the "submit review from GUI" feature.
+
+**Confidence:** HIGH -- GitHub's secondary rate limit behavior for content creation is well-documented.
+
+**Sources:**
+- [GitHub: Rate Limits for the REST API](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
+- [GitHub: REST API for Pull Request Reviews](https://docs.github.com/en/rest/pulls/reviews)
+
+---
+
+### Pitfall 10: Tailwind CSS Build Complexity in Multi-Stage Docker Build
+
+**What goes wrong:** Tailwind CSS requires a build step that scans template files for class usage and generates a purged CSS file. In the existing Dockerfile, there is no Node.js runtime and no Tailwind CLI. The developer either includes the entire Tailwind CDN (300KB+ unpurged) or tries to add a Node.js build stage to the lean Docker pipeline.
+
+**Why it happens:** Tailwind CSS v3+ uses JIT compilation that requires scanning source files. The `.templ` files contain Tailwind classes, but the Tailwind CLI does not know about `.templ` file format by default. Without proper configuration, Tailwind either misses classes (purging too aggressively) or includes everything (CDN mode, bloated CSS).
+
+**Consequences:**
+- Production CSS missing classes used in templ templates (broken styling)
+- Bloated CSS file if purging is disabled (300KB+ instead of ~10KB)
+- Docker build complexity increases significantly with Node.js stage
+- Build times increase with every Tailwind version upgrade
+
+**Prevention:**
+1. **Use the Tailwind standalone CLI** (no Node.js required). Download the platform-specific binary in the Dockerfile build stage:
+   ```dockerfile
+   RUN curl -sLO https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64 \
+       && chmod +x tailwindcss-linux-x64 \
+       && ./tailwindcss-linux-x64 -i input.css -o static/styles.css --minify
+   ```
+2. **Configure Tailwind to scan `.templ` files.** In `tailwind.config.js`, add `"./internal/**/*.templ"` to the `content` array. Tailwind's JIT scanner treats them as text files and finds class names.
+3. **Embed the built CSS via `//go:embed`.** After Tailwind builds the CSS in the Docker build stage, copy it to the embed directory before `go build`.
+4. **Alternative: Use Tailwind CDN for simplicity.** For a single-user tool, the CDN play-mode (`<script src="https://cdn.tailwindcss.com">`) avoids the entire build pipeline. Accept the larger payload (~300KB) in exchange for zero build complexity. This is a valid tradeoff for a personal tool.
+5. **Order the Dockerfile stages correctly.** Tailwind build must happen AFTER templ files are copied but BEFORE `go build` (so the CSS can be embedded).
+
+**Detection (warning signs):**
+- Missing CSS classes in production (elements unstyled)
+- CSS file size > 100KB in production (unpurged)
+- Dockerfile adding a `node:alpine` build stage
+- `tailwind.config.js` not listing `.templ` in content paths
+
+**Phase mapping:** Phase 1 (GUI foundation). The CSS build pipeline must work before any styled components are created.
+
+**Confidence:** HIGH -- Tailwind's standalone CLI and content scanning are well-documented. The `.templ` file scanning is a known configuration step.
 
 ---
 
@@ -312,83 +397,70 @@ Mistakes that cause annoyance but are fixable without major rework.
 
 ---
 
-### Pitfall 11: Ignoring GitHub's Requested `User-Agent` Header
+### Pitfall 11: HTMX History Cache Conflicts with Alpine.js Template State
 
-**What goes wrong:** GitHub requires a `User-Agent` header on all API requests. Requests without one may be rejected with a 403. Go's default `http.Client` sets `User-Agent` to `Go-http-client/1.1`, which works but is not informative. Some rate limiting or blocking decisions by GitHub consider the User-Agent.
+**What goes wrong:** HTMX's history cache saves and restores HTML snapshots for back/forward navigation. When a cached page is restored, Alpine.js components re-initialize from their `x-data` attributes, but any state that was modified client-side (open dropdowns, selected tabs, expanded accordions) reverts to the initial state. If `x-if` or `<template>` tags were used, their content may be missing from the cached HTML entirely.
 
-**Prevention:** Set a descriptive `User-Agent` header: `ReviewHub/1.0 (github.com/username/reviewhub)`. If using `go-github`, it sets its own User-Agent, but you can override it.
+**Why it happens:** HTMX serializes the DOM to HTML for history caching. Alpine's `<template>` elements and conditionally-rendered content (`x-if`) exist in a state that HTMX cannot capture. When the HTML is restored, Alpine sees fresh `x-data` attributes and re-initializes, losing any runtime state.
 
-**Phase mapping:** Phase 1 (HTTP client setup). Trivial to add upfront, annoying to debug later.
+**Prevention:**
+1. **Use `hx-push-url="false"` on requests that should not be cached.** Modal opens, tab switches, and accordion toggles should not create history entries.
+2. **Avoid `x-if` with `<template>` in HTMX-cached pages.** Use `x-show` instead, which toggles `display:none` rather than removing/adding DOM elements. HTMX can cache `x-show` state correctly.
+3. **If history caching is needed, disable it selectively.** Use `hx-history="false"` on the body or specific containers where Alpine state is complex.
+
+**Phase mapping:** Phase 2+ (after basic navigation works). History integration is polish, not foundation.
+
+**Confidence:** MEDIUM -- Based on GitHub issues and community discussions.
+
+**Sources:**
+- [HTMX history cache and Alpine template tags](https://github.com/alpinejs/alpine/discussions/2924)
+
+---
+
+### Pitfall 12: WebHandler Growing into a God Struct
+
+**What goes wrong:** Following the existing `Handler` pattern, the developer creates a `WebHandler` with every store and service injected. As features grow (PR views, repo management, Jira views, settings, review submission), the constructor takes 12+ parameters. The struct becomes a catch-all that violates SRP.
+
+**Why it happens:** The existing `Handler` struct already takes 8 parameters. Adding Jira-related ports, credential stores, and review submission services doubles this. The developer follows the established pattern without questioning whether it scales.
+
+**Prevention:**
+1. **Group web handlers by feature domain.** `PRWebHandler`, `RepoWebHandler`, `JiraWebHandler`, `SettingsWebHandler`. Each has only the dependencies it needs.
+2. **Use a handler registry pattern.** A `WebRouter` function takes all handlers and registers routes, similar to the existing `NewServeMux` but for web routes.
+3. **Apply ISP aggressively.** If `JiraWebHandler` only needs `JiraIssueReader`, do not inject the full `JiraStore` interface.
+
+**Phase mapping:** Phase 1 (GUI foundation). Set the handler grouping pattern before building features.
+
+**Confidence:** HIGH -- This is a standard Go architecture concern, and the existing codebase already shows the early signs with 8 constructor parameters.
+
+---
+
+### Pitfall 13: templ Component Prop Explosion
+
+**What goes wrong:** Templ components start with simple props but grow to accept 10+ parameters as the UI becomes richer. A `PRCard` component that starts as `PRCard(pr model.PullRequest)` grows to `PRCard(pr model.PullRequest, reviews []model.Review, threads []ReviewThread, isExpanded bool, showActions bool, jiraIssue *JiraIssue, ciStatus string, ...)`. Templates become unreadable.
+
+**Prevention:**
+1. **Use view models.** Create dedicated structs for template data: `type PRCardViewModel struct { ... }`. The handler builds the view model from domain data. The template receives one struct.
+2. **Compose components.** `PRCard` renders the card frame. `PRReviewSection` renders reviews inside it. Each component has a focused prop set.
+3. **Avoid passing domain models directly to templates.** Templates should receive presentation-ready data, not raw domain objects. This also prevents the templ package from importing domain types unnecessarily.
+
+**Phase mapping:** Phase 1 (GUI foundation). Establish the view model pattern with the first template.
+
+**Confidence:** HIGH -- Standard MVC/MVVM pattern, applicable to any template system.
+
+---
+
+### Pitfall 14: CORS Issues When GUI and API Share the Same Origin
+
+**What goes wrong:** The developer adds CORS middleware for the JSON API (needed by external consumers like Claude Code CLI) and accidentally applies it to the HTML GUI routes. Or conversely, forgets that the GUI making HTMX requests to its own server does not need CORS at all, and wastes time debugging "why does CORS work in development but not production."
+
+**Prevention:**
+1. **HTMX requests to the same origin do not need CORS.** If the GUI is served from the same Go server, HTMX requests are same-origin and CORS is irrelevant.
+2. **Apply CORS middleware only to `/api/v1/*` routes,** not to `/app/*` routes. Use route-scoped middleware, not global middleware.
+3. **The existing middleware stack** (`loggingMiddleware`, `recoveryMiddleware`) is global. Add CORS as route-scoped, not another global wrapper.
+
+**Phase mapping:** Phase 1 (GUI foundation). Middleware scoping should be decided when adding web routes.
 
 **Confidence:** HIGH.
-
----
-
-### Pitfall 12: Not Handling GitHub API Error Response Bodies
-
-**What goes wrong:** The developer checks only HTTP status codes but ignores the JSON error body. GitHub returns detailed error messages (including which field failed validation, whether rate limit is primary or secondary, and documentation URLs) in the response body. Without parsing these, debugging failures is guesswork.
-
-**Prevention:**
-1. Parse all non-2xx responses as GitHub error objects: `{"message": "...", "documentation_url": "...", "errors": [...]}`.
-2. Log the full error body, not just the status code.
-3. Distinguish primary rate limit (status 403, `X-RateLimit-Remaining: 0`) from secondary/abuse rate limit (status 403 or 429, message about abuse detection) as they have different backoff strategies.
-
-**Phase mapping:** Phase 1 (HTTP client/error handling). Build this into the GitHub client wrapper from the start.
-
-**Confidence:** HIGH.
-
----
-
-### Pitfall 13: SQLite Schema Migrations in Docker
-
-**What goes wrong:** The database file is persisted via a Docker volume. When the application updates and the schema changes, there is no migration mechanism. The app crashes on startup with schema mismatch errors, or worse, silently writes to wrong columns.
-
-**Prevention:**
-1. **Implement versioned migrations from the start.** Use a simple migration table (`schema_version`) and numbered migration files. Libraries like `golang-migrate/migrate` or `pressly/goose` work well, but even a hand-rolled version table is sufficient for a small project.
-2. **Run migrations on startup** before the app begins serving or polling.
-3. **Never alter columns in SQLite.** SQLite's `ALTER TABLE` is limited. To change a column, create a new table, copy data, drop the old table, rename. Plan for this in your migration strategy.
-4. **Back up the database file before migrations** in the Docker entrypoint. A simple `cp reviewhub.db reviewhub.db.bak` before starting the app.
-
-**Phase mapping:** Phase 1 (database setup). The migration mechanism must exist before the first schema is created.
-
-**Confidence:** HIGH.
-
----
-
-### Pitfall 14: Resolved vs. Unresolved Comment Threads are Not a Simple Boolean
-
-**What goes wrong:** The developer models comment resolution as a boolean on each comment. But GitHub's resolution model is at the conversation/thread level, not the individual comment level. A thread (started by one comment with replies) is resolved or not, and any participant can resolve or unresolve it. Additionally, "outdated" (comment on code that has since been changed) is a separate state from "resolved."
-
-**Why it happens:** The PR review comments API returns individual comments, not threads. Thread structure must be reconstructed from the `in_reply_to_id` field. Resolution status is on the review thread, accessible via GraphQL or the `pulls/comments` endpoint's `is_resolved` field (added later, may not be on all comment types consistently).
-
-**Prevention:**
-1. **Model threads, not individual comments.** Group comments by their root comment (follow `in_reply_to_id` chains). The thread is the unit of resolution, not individual replies.
-2. **Check for `is_resolved` field availability** in your `go-github` version. If unavailable, consider the GraphQL API for thread resolution status, or fetch the pull request review threads endpoint.
-3. **Distinguish "resolved" from "outdated."** A comment can be outdated (code has changed) but not resolved (the concern has not been addressed). Both states matter for the AI consumer.
-4. **Present thread context to the AI consumer.** When formatting a comment for AI consumption, include the full thread (original comment + all replies) so the AI understands the full conversation, not just the last message.
-
-**Phase mapping:** Phase 2-3 (comment formatting). This is the differentiator feature and needs careful modeling.
-
-**Confidence:** MEDIUM -- The general threading model is well-known, but the specific API fields for resolution status should be verified against current GitHub API docs and `go-github` struct definitions.
-
----
-
-### Pitfall 15: Hexagonal Architecture Over-Engineering in a Small Go Service
-
-**What goes wrong:** The developer creates deeply nested port/adapter/domain layers for a service with one domain concept (PRs), one external dependency (GitHub), and one storage mechanism (SQLite). The result is dozens of interfaces and adapter files for what could be three packages. Every change requires touching 5 files. New contributors (or the AI agent maintaining it) struggle with the indirection.
-
-**Why it happens:** Hexagonal architecture is prescribed by project conventions (and it IS the right pattern for DDD). But Go's idiom is "a little copying is better than a little dependency." Over-abstraction is a Go anti-pattern even when hexagonal architecture is correct.
-
-**Prevention:**
-1. **Start with clear boundaries but thin layers.** Three core boundaries are sufficient: `domain` (PR models, business rules), `github` (adapter for GitHub API), `sqlite` (adapter for storage), `http` (adapter for serving the API). Each is a Go package.
-2. **Define ports as interfaces in the domain package** where they are consumed, not where they are implemented. This is idiomatic Go (`io.Reader` is defined in `io`, not in `os`).
-3. **Do not create interfaces until you have two implementations** or a clear testing need. A `GitHubClient` interface is justified (you will mock it in tests). A `PRFormatter` interface for one implementation is premature.
-4. **Keep the adapter layer thin.** Adapters should translate between external formats and domain types. They should not contain business logic. But they also should not be split into sub-layers.
-5. **Avoid the "Clean Architecture" file explosion.** You do not need `usecase`, `interactor`, `presenter`, `gateway`, `controller` as separate concepts. In Go, a handler calls a service which calls a repository. Three layers, not seven.
-
-**Phase mapping:** Phase 1 (project structure). Get the package layout right from the start. Refactoring package structure in Go is painful because of import cycles.
-
-**Confidence:** HIGH -- this is standard Go architecture guidance combined with the project's hexagonal architecture requirement.
 
 ---
 
@@ -396,42 +468,50 @@ Mistakes that cause annoyance but are fixable without major rework.
 
 | Phase Topic | Likely Pitfall | Mitigation | Severity |
 |-------------|---------------|------------|----------|
-| Project setup / skeleton | Token insecurity, no migration framework, wrong SQLite pragmas | Configure WAL+busy_timeout, migrations, env-var token on day one | Critical |
-| Core polling loop | Rate limit exhaustion, no pagination, no change detection | Budget-aware polling with ETags, always paginate, track `updated_at` | Critical |
-| PR data model | Conflating author vs reviewer queries, wrong thread model | Separate queries, model threads not individual comments | Moderate |
-| Comment formatting | Position mapping complexity, missing context | Use `diff_hunk` as primary source, handle all null cases | Critical |
-| Docker deployment | Ungraceful shutdown, schema migration on volume | Signal handling + context cancellation, versioned migrations | Moderate |
-| Adaptive features | Uniform polling waste | Adaptive intervals based on activity, conditional requests | Minor (Phase 2) |
+| GUI foundation (templ + routing) | Content negotiation trap; templ build pipeline missing | Separate route namespaces; add `templ generate` to Dockerfile | Critical |
+| Asset pipeline (Tailwind + JS) | Static assets missing from scratch image | `//go:embed` all static files; Tailwind standalone CLI in Docker | Critical |
+| HTMX + Alpine.js integration | Alpine state destroyed on swaps | Alpine Morph extension; scope swap targets below `x-data` containers | Critical |
+| GSAP animations | Animations break after first swap | Re-initialize on `htmx:afterSettle`; kill on `htmx:beforeSwap` | Moderate |
+| Jira integration | Auth model mismatch; rate limits opaque | Pick Cloud-only; validate creds on save; webhook instead of polling | Moderate |
+| Credential storage | Plaintext tokens in SQLite | AES-256-GCM encryption with env-var key, or env-vars only | Critical |
+| GitHub review submission | Secondary rate limits from writes | Separate read/write tokens; client-side rate limiting | Moderate |
+| Handler architecture | God struct growth | Group handlers by feature domain; use view models | Minor |
 
 ---
 
-## Domain-Specific Insight: The "Works in Development, Fails in Production" Gap
+## Domain-Specific Insight: The "Two Frameworks Fighting Over the DOM" Problem
 
-Many of these pitfalls share a common thread: they are invisible during development with small test repos and light usage, but surface immediately with real-world repositories.
+The core architectural tension in this stack is that HTMX and Alpine.js both manipulate the DOM, but with conflicting models:
 
-**The gap manifests as:**
-- Pagination: never triggered with < 30 PRs
-- Rate limiting: never hit with 1-2 repos
-- Comment positions: never null with fresh PRs (only after pushes to existing PRs)
-- SQLite locking: never contended with manual API testing (no concurrent polling)
-- Stale data: never noticed with frequent manual refreshes
+- **HTMX** replaces DOM subtrees entirely (server-rendered HTML swapped in)
+- **Alpine.js** binds reactive state to existing DOM elements (client-side reactivity)
+- **GSAP** attaches animation state to DOM element references (imperative animation)
 
-**Mitigation:** From Phase 1, test with a realistic scenario: 5+ repos, at least one with 50+ open PRs, PRs that have been updated multiple times (stale comments with null positions), and concurrent API + polling load. Do not wait until deployment to encounter scale issues.
+When HTMX swaps content, it invalidates Alpine's reactive bindings AND GSAP's animation targets. The solution is clear boundaries:
+
+1. **HTMX owns data content.** PR lists, review threads, Jira issue status -- content that comes from the server.
+2. **Alpine.js owns UI state.** Dropdown visibility, tab selection, filter toggles -- client-only state that never goes to the server.
+3. **GSAP owns transitions.** Entry animations, list reordering, attention-drawing effects -- visual polish tied to HTMX lifecycle events.
+
+The alpine-morph extension is the glue that makes HTMX and Alpine coexist. Without it, every HTMX swap breaks Alpine. This is not optional -- it is a hard requirement for this stack.
 
 ---
 
 ## Sources and Confidence Notes
 
-All findings in this document are based on training data (cutoff May 2025) covering well-established, stable domains:
-
-- **GitHub REST API:** Rate limiting (5,000/hr authenticated), pagination (Link header), conditional requests (ETags), and review comment fields have been stable for years. HIGH confidence these fundamentals have not changed.
-- **SQLite concurrency:** WAL mode, busy_timeout, and file-level locking behavior have been stable since SQLite 3.7.0. HIGH confidence.
-- **Go concurrency patterns:** Signal handling, context cancellation, sync.WaitGroup are core Go patterns unchanged since Go 1.7+. HIGH confidence.
-- **Review comment position fields:** The evolution from `position` to `line`/`side` is well-documented but the exact current state of field availability should be verified against current GitHub API docs and `go-github` library. MEDIUM confidence.
-- **`go-github` library versions:** Specific version numbers and struct field availability change frequently. MEDIUM confidence; verify current version at project start.
+| Source | Type | Confidence Impact |
+|--------|------|-------------------|
+| [HTMX: Content Negotiation Essay](https://htmx.org/essays/why-tend-not-to-use-content-negotiation/) | Official docs | HIGH |
+| [templ: Docker Hosting](https://templ.guide/hosting-and-deployment/hosting-using-docker/) | Official docs | HIGH |
+| [templ: Template Generation](https://templ.guide/core-concepts/template-generation/) | Official docs | HIGH |
+| [Alpine/HTMX GitHub Discussions](https://github.com/alpinejs/alpine/discussions/3985) | Community verified | HIGH |
+| [Jira Cloud: Rate Limiting](https://developer.atlassian.com/cloud/jira/platform/rate-limiting/) | Official docs | HIGH |
+| [GitHub: Rate Limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) | Official docs | HIGH |
+| GSAP + HTMX integration patterns | Community forums | MEDIUM |
+| Credential encryption patterns | Industry standard | HIGH |
 
 **Verification recommended for:**
-1. Current `go-github` latest version and its review comment struct fields
-2. GitHub's secondary rate limit thresholds (undocumented, may have changed)
-3. Whether `is_resolved` is available on review comments via REST API or requires GraphQL
-4. Current GitHub best practices documentation for any new recommendations
+1. Alpine Morph extension compatibility with current Alpine.js and HTMX versions
+2. Tailwind standalone CLI support for `.templ` file scanning (may need custom extractor)
+3. Jira Cloud tiered quota rate limits post-March 2026 enforcement
+4. GSAP licensing for commercial use (GSAP has a specific license model)

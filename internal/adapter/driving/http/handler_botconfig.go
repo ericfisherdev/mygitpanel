@@ -2,11 +2,13 @@ package httphandler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 // ListBots returns all configured bot usernames.
@@ -47,7 +49,7 @@ func (h *Handler) AddBot(w http.ResponseWriter, r *http.Request) {
 
 	saved, err := h.botConfigStore.Add(r.Context(), bot)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
+		if errors.Is(err, driven.ErrBotAlreadyExists) {
 			writeError(w, http.StatusConflict, "bot username already exists")
 			return
 		}
@@ -64,7 +66,7 @@ func (h *Handler) RemoveBot(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
 
 	if err := h.botConfigStore.Remove(r.Context(), username); err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, driven.ErrBotNotFound) {
 			writeError(w, http.StatusNotFound, "bot not found")
 			return
 		}
