@@ -10,8 +10,8 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 
-// Sidebar renders the collapsible sidebar with PR list.
-func Sidebar(cards []viewmodel.PRCardViewModel) templ.Component {
+// Sidebar renders the collapsible sidebar with search, PR list, and repo manager.
+func Sidebar(data viewmodel.DashboardViewModel) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -32,23 +32,47 @@ func Sidebar(cards []viewmodel.PRCardViewModel) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<aside x-data=\"{ collapsed: false }\" x-bind:class=\"collapsed ? 'w-16' : 'w-80'\" class=\"bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen transition-all duration-200 shrink-0\"><!-- Header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><h1 x-show=\"!collapsed\" x-transition class=\"text-xl font-bold text-indigo-600 dark:text-indigo-400\">ReviewHub</h1><button @click=\"collapsed = !collapsed\" class=\"p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors\" title=\"Toggle sidebar\"><svg x-bind:class=\"collapsed ? 'rotate-180' : ''\" class=\"w-5 h-5 transition-transform duration-200\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M15 19l-7-7 7-7\"></path></svg></button></div><!-- PR list --><div x-show=\"!collapsed\" x-transition id=\"pr-list\" class=\"flex-1 overflow-y-auto\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<aside x-data=\"{ collapsed: false }\" x-bind:class=\"collapsed ? 'w-16' : 'w-80'\" class=\"bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen transition-all duration-200 shrink-0\"><!-- Header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><h1 x-show=\"!collapsed\" x-transition class=\"text-xl font-bold text-indigo-600 dark:text-indigo-400\">ReviewHub</h1><div class=\"flex items-center gap-1\"><span x-show=\"!collapsed\" x-transition>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		for _, card := range cards {
+		templ_7745c5c3_Err = ThemeToggle().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</span> <button @click=\"collapsed = !collapsed\" class=\"p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors\" title=\"Toggle sidebar\"><svg x-bind:class=\"collapsed ? 'rotate-180' : ''\" class=\"w-5 h-5 transition-transform duration-200\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M15 19l-7-7 7-7\"></path></svg></button></div></div><!-- Search and filters --><div x-show=\"!collapsed\" x-transition>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = SearchBar(data.RepoNames).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div><!-- PR list --><div x-show=\"!collapsed\" x-transition id=\"pr-list\" class=\"flex-1 overflow-y-auto\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		for _, card := range data.Cards {
 			templ_7745c5c3_Err = PRCard(card).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		if len(cards) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<p class=\"p-4 text-sm text-gray-400 dark:text-gray-500\">No pull requests found</p>")
+		if len(data.Cards) == 0 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<p class=\"p-4 text-sm text-gray-400 dark:text-gray-500\">No pull requests found</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div></aside>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div><!-- Repo manager --><div x-show=\"!collapsed\" x-transition>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = RepoManager(data.Repos).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div></aside>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

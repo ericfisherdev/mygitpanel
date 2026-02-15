@@ -12,3 +12,15 @@ templ PRList(cards []viewmodel.PRCardViewModel) {
 		<p class="p-4 text-sm text-gray-400 dark:text-gray-500">No pull requests found</p>
 	}
 }
+
+// PRListOOB renders the PR card list with an OOB swap attribute for out-of-band updates.
+templ PRListOOB(cards []viewmodel.PRCardViewModel) {
+	<div id="pr-list" hx-swap-oob="morph">
+		for _, card := range cards {
+			@components.PRCard(card)
+		}
+		if len(cards) == 0 {
+			<p class="p-4 text-sm text-gray-400 dark:text-gray-500">No pull requests found</p>
+		}
+	</div>
+}
