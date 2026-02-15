@@ -1,0 +1,87 @@
+package components
+
+// SearchBar renders a text search input with status and repo filter dropdowns.
+// All controls use HTMX to trigger debounced requests that update the PR list.
+templ SearchBar(repos []string) {
+	<div class="p-3 space-y-2 border-b border-gray-200 dark:border-gray-700">
+		<!-- Text search input -->
+		<div class="relative">
+			<svg
+				class="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none"
+				fill="none"
+				stroke="currentColor"
+				viewBox="0 0 24 24"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+			</svg>
+			<input
+				type="text"
+				name="q"
+				placeholder="Search PRs..."
+				autocomplete="off"
+				hx-get="/app/prs/search"
+				hx-trigger="input changed delay:500ms"
+				hx-target="#pr-list"
+				hx-swap="morph"
+				hx-ext="alpine-morph"
+				hx-include="[name='status'],[name='repo']"
+				class="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-400"
+			/>
+		</div>
+		<!-- Filter row -->
+		<div class="flex gap-2">
+			<select
+				name="status"
+				hx-get="/app/prs/search"
+				hx-trigger="change"
+				hx-target="#pr-list"
+				hx-swap="morph"
+				hx-ext="alpine-morph"
+				hx-include="[name='q'],[name='repo']"
+				class="flex-1 text-xs py-1.5 px-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+			>
+				<option value="all">All Status</option>
+				<option value="open">Open</option>
+				<option value="closed">Closed</option>
+				<option value="merged">Merged</option>
+			</select>
+			<select
+				id="repo-filter"
+				name="repo"
+				hx-get="/app/prs/search"
+				hx-trigger="change"
+				hx-target="#pr-list"
+				hx-swap="morph"
+				hx-ext="alpine-morph"
+				hx-include="[name='q'],[name='status']"
+				class="flex-1 text-xs py-1.5 px-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+			>
+				<option value="all">All Repos</option>
+				for _, repo := range repos {
+					<option value={ repo }>{ repo }</option>
+				}
+			</select>
+		</div>
+	</div>
+}
+
+// RepoFilterOptions renders just the options for the repo filter dropdown (for OOB swap).
+templ RepoFilterOptions(repos []string) {
+	<select
+		id="repo-filter"
+		name="repo"
+		hx-get="/app/prs/search"
+		hx-trigger="change"
+		hx-target="#pr-list"
+		hx-swap="morph"
+		hx-ext="alpine-morph"
+		hx-include="[name='q'],[name='status']"
+		hx-swap-oob="morph"
+		class="flex-1 text-xs py-1.5 px-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+	>
+		<option value="all">All Repos</option>
+		for _, repo := range repos {
+			<option value={ repo }>{ repo }</option>
+		}
+	</select>
+}

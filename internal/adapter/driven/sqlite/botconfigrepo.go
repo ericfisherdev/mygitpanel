@@ -3,11 +3,14 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // Compile-time interface satisfaction check.
@@ -35,6 +38,10 @@ func (r *BotConfigRepo) Add(ctx context.Context, config model.BotConfig) (model.
 
 	result, err := r.db.Writer.ExecContext(ctx, query, config.Username, addedAt.UTC())
 	if err != nil {
+		var se *sqlite.Error
+		if errors.As(err, &se) && se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
+			return model.BotConfig{}, fmt.Errorf("add bot config %q: %w", config.Username, driven.ErrBotAlreadyExists)
+		}
 		return model.BotConfig{}, fmt.Errorf("add bot config %q: %w", config.Username, err)
 	}
 
@@ -66,7 +73,7 @@ func (r *BotConfigRepo) Remove(ctx context.Context, username string) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("bot config %q not found", username)
+		return fmt.Errorf("remove bot config %q: %w", username, driven.ErrBotNotFound)
 	}
 
 	return nil

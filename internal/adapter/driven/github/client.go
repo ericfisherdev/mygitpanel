@@ -70,16 +70,17 @@ func NewClientWithHTTPClient(httpClient *http.Client, baseURL, username, token s
 	}, nil
 }
 
-// FetchPullRequests retrieves all open pull requests for the given repository.
+// FetchPullRequests retrieves pull requests for the given repository filtered by state.
+// Valid state values are "open", "closed", or "all" (as accepted by the GitHub API).
 // It handles pagination automatically and maps go-github types to domain model types.
-func (c *Client) FetchPullRequests(ctx context.Context, repoFullName string) ([]model.PullRequest, error) {
+func (c *Client) FetchPullRequests(ctx context.Context, repoFullName string, state string) ([]model.PullRequest, error) {
 	owner, repo, err := splitRepo(repoFullName)
 	if err != nil {
 		return nil, err
 	}
 
 	opts := &gh.PullRequestListOptions{
-		State:     "open",
+		State:     state,
 		Sort:      "updated",
 		Direction: "desc",
 		ListOptions: gh.ListOptions{

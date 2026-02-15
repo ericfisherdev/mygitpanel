@@ -97,7 +97,7 @@ func TestFetchPullRequests_SinglePage(t *testing.T) {
 	})
 
 	client, _ := newTestClient(t, handler)
-	result, err := client.FetchPullRequests(context.Background(), "owner/repo")
+	result, err := client.FetchPullRequests(context.Background(), "owner/repo", "all")
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -163,7 +163,7 @@ func TestFetchPullRequests_Pagination(t *testing.T) {
 	})
 
 	client, _ := newTestClient(t, handler)
-	result, err := client.FetchPullRequests(context.Background(), "owner/repo")
+	result, err := client.FetchPullRequests(context.Background(), "owner/repo", "all")
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -207,7 +207,7 @@ func TestFetchPullRequests_DraftDetection(t *testing.T) {
 	})
 
 	client, _ := newTestClient(t, handler)
-	result, err := client.FetchPullRequests(context.Background(), "owner/repo")
+	result, err := client.FetchPullRequests(context.Background(), "owner/repo", "all")
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -222,7 +222,7 @@ func TestFetchPullRequests_EmptyRepo(t *testing.T) {
 	})
 
 	client, _ := newTestClient(t, handler)
-	result, err := client.FetchPullRequests(context.Background(), "owner/repo")
+	result, err := client.FetchPullRequests(context.Background(), "owner/repo", "all")
 
 	require.NoError(t, err)
 	assert.NotNil(t, result, "should return empty slice, not nil")
@@ -248,7 +248,7 @@ func TestFetchPullRequests_InvalidRepoName(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := client.FetchPullRequests(context.Background(), tc.repo)
+			_, err := client.FetchPullRequests(context.Background(), tc.repo, "all")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "invalid repo name")
 		})
@@ -276,7 +276,7 @@ func TestFetchPullRequests_HeadSHA(t *testing.T) {
 	})
 
 	client, _ := newTestClient(t, handler)
-	result, err := client.FetchPullRequests(context.Background(), "owner/repo")
+	result, err := client.FetchPullRequests(context.Background(), "owner/repo", "all")
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -475,7 +475,7 @@ func TestFetchPullRequests_StatusMapping(t *testing.T) {
 	})
 
 	client, _ := newTestClient(t, handler)
-	result, err := client.FetchPullRequests(context.Background(), "owner/repo")
+	result, err := client.FetchPullRequests(context.Background(), "owner/repo", "all")
 
 	require.NoError(t, err)
 	require.Len(t, result, 3)

@@ -494,7 +494,7 @@ func TestAddRepo(t *testing.T) {
 		{
 			name:       "duplicate",
 			body:       `{"full_name": "owner/repo"}`,
-			repoStore:  &mockRepoStore{addErr: errors.New("UNIQUE constraint failed: repositories.full_name")},
+			repoStore:  &mockRepoStore{addErr: driven.ErrRepoAlreadyExists},
 			wantStatus: http.StatusConflict,
 			wantError:  "repository already exists",
 		},
@@ -550,7 +550,7 @@ func TestRemoveRepo(t *testing.T) {
 		},
 		{
 			name:       "not found",
-			repoStore:  &mockRepoStore{removeErr: errors.New("not found")},
+			repoStore:  &mockRepoStore{removeErr: driven.ErrRepoNotFound},
 			wantStatus: http.StatusNotFound,
 			wantError:  "repository not found",
 		},
@@ -955,7 +955,7 @@ func TestAddBot(t *testing.T) {
 
 func TestAddBot_Duplicate(t *testing.T) {
 	botStore := &mockBotConfigStore{
-		addErr: errors.New("UNIQUE constraint failed: bot_config.username"),
+		addErr: driven.ErrBotAlreadyExists,
 	}
 
 	mux := setupMuxWithBots(botStore)

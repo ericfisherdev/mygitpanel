@@ -4,16 +4,18 @@
 
 See: .planning/PROJECT.md (updated 2026-02-14)
 
-**Core value:** Review comments formatted with enough code context that an AI agent can understand and fix the code
-**Current focus:** v1.0 milestone complete — planning next milestone
+**Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
+**Current focus:** Phase 8 — GitHub Write Operations (planning needed)
 
 ## Current Position
 
-Milestone: v1.0 MVP — SHIPPED 2026-02-14
-Status: Milestone archived
-Last activity: 2026-02-14 - v1.0 milestone completion
+Milestone: 2026.2.0 Web GUI
+Phase: 7 of 9 (GUI Foundation) — COMPLETE
+Plan: 3 of 3
+Status: Phase complete
+Last activity: 2026-02-14 — Completed 07-03-PLAN.md (interactive features: search, theme, repo mgmt, animations)
 
-Progress: [████████████████████] 100%
+Progress: [====================] 100% (3/3 plans)
 
 ## Performance Metrics
 
@@ -22,22 +24,34 @@ Progress: [████████████████████] 100%
 - Total plans completed: 16
 - Average duration: 6min
 - Total execution time: ~1.5 hours
-- Timeline: 5 days (2026-02-10 → 2026-02-14)
+- Timeline: 5 days (2026-02-10 to 2026-02-14)
 
-**By Phase:**
+**2026.2.0 Velocity:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 3/3 | 21min | 7min |
-| 02-github-integration | 2/2 | 16min | 8min |
-| 03-core-api | 2/2 | 12min | 6min |
-| 04-review-intelligence | 4/4 | 19min | 4.8min |
-| 05-pr-health-signals | 3/3 | 14min | 4.7min |
-| 06-docker-deployment | 2/2 | 10min | 5min |
+| 07-gui-foundation | 3/3 | 14min | 5min |
 
 ## Accumulated Context
 
-Full decision log archived in .planning/milestones/v1.0-ROADMAP.md.
+### Decisions
+
+Full v1.0 decision log archived in .planning/milestones/v1.0-ROADMAP.md.
+
+Recent decisions (2026.2.0):
+- CalVer YYYY.MM.MICRO versioning going forward
+- templ/HTMX/Alpine.js/Tailwind/GSAP frontend stack (no React/Vue/Svelte)
+- Separate route namespaces: /api/v1/* for JSON, / and /app/* for web GUI
+- alpine-morph HTMX extension to prevent Alpine state destruction during swaps
+- GitHub creds in Phase 8 (needed for write ops), Jira creds in Phase 9
+- Removed explicit templ import from .templ files — generator adds it automatically
+- Extracted RegisterAPIRoutes and ApplyMiddleware from NewServeMux for dual-adapter composition
+- Extracted viewmodel package to break import cycle between web handler and templ sub-packages
+- Non-fatal enrichment pattern: review/health failures log errors but still render basic PR data
+- Duplicated isValidRepoName in web handler (10-line function, not worth shared package)
+- In-memory PR filtering for search — appropriate for expected scale, no new DB queries needed
+- htmx:afterSettle for GSAP animations — morph swaps settle after DOM morphing completes
+- OOB swap pattern: repo mutations render primary target + PRListOOB + RepoFilterOptions
 
 ### Pending Todos
 
@@ -45,10 +59,11 @@ None.
 
 ### Blockers/Concerns
 
-None — all resolved during v1.0.
+- Phase 8: Draft-to-ready is GraphQL-only — needs spike to decide approach (shurcooL/githubv4 vs gh CLI vs defer)
+- Phase 9: Jira rate limiting is opaque — plan for research-phase during Phase 9 planning
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: v1.0 milestone archived and tagged
-Resume file: /gsd:new-milestone for next version
+Stopped at: Completed Phase 7 (GUI Foundation) — all 3 plans done
+Resume file: Ready for Phase 8 planning

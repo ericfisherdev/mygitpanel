@@ -16,7 +16,7 @@ import (
 // --- Mock implementations ---
 
 type mockGitHubClient struct {
-	fetchPRs                  func(ctx context.Context, repoFullName string) ([]model.PullRequest, error)
+	fetchPRs                  func(ctx context.Context, repoFullName string, state string) ([]model.PullRequest, error)
 	fetchReviews              func(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error)
 	fetchReviewComments       func(ctx context.Context, repoFullName string, prNumber int) ([]model.ReviewComment, error)
 	fetchIssueComments        func(ctx context.Context, repoFullName string, prNumber int) ([]model.IssueComment, error)
@@ -27,8 +27,8 @@ type mockGitHubClient struct {
 	fetchRequiredStatusChecks func(ctx context.Context, repoFullName string, branch string) ([]string, error)
 }
 
-func (m *mockGitHubClient) FetchPullRequests(ctx context.Context, repoFullName string) ([]model.PullRequest, error) {
-	return m.fetchPRs(ctx, repoFullName)
+func (m *mockGitHubClient) FetchPullRequests(ctx context.Context, repoFullName string, state string) ([]model.PullRequest, error) {
+	return m.fetchPRs(ctx, repoFullName, state)
 }
 
 func (m *mockGitHubClient) FetchReviews(ctx context.Context, repoFullName string, prNumber int) ([]model.Review, error) {
@@ -333,7 +333,7 @@ func TestPollRepo_AuthoredPRs(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{Number: 1, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
 				{Number: 2, Author: "otheruser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
@@ -345,17 +345,30 @@ func TestPollRepo_AuthoredPRs(t *testing.T) {
 	prStore := &mockPRStore{}
 	pollRepoVia(t, ghClient, prStore, "testuser", nil, "org/repo")
 
-	// First upsert is from poll loop; additional upserts from health data fetching.
-	require.GreaterOrEqual(t, len(prStore.upserts), 1)
-	assert.Equal(t, 1, prStore.upserts[0].PR.Number)
-	assert.False(t, prStore.upserts[0].PR.NeedsReview, "authored PR should not need review")
+	// All 3 PRs should be upserted (no relevance filter).
+	// Each PR gets a poll-loop upsert plus health data upserts.
+	prNumbers := make(map[int]bool)
+	for _, u := range prStore.upserts {
+		prNumbers[u.PR.Number] = true
+	}
+	assert.True(t, prNumbers[1], "PR #1 should be upserted")
+	assert.True(t, prNumbers[2], "PR #2 should be upserted")
+	assert.True(t, prNumbers[3], "PR #3 should be upserted")
+
+	// Verify authored PR does not need review.
+	for _, u := range prStore.upserts {
+		if u.PR.Number == 1 {
+			assert.False(t, u.PR.NeedsReview, "authored PR should not need review")
+			break
+		}
+	}
 }
 
 func TestPollRepo_ReviewRequestedPRs(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{
 					Number:             10,
@@ -379,17 +392,36 @@ func TestPollRepo_ReviewRequestedPRs(t *testing.T) {
 	prStore := &mockPRStore{}
 	pollRepoVia(t, ghClient, prStore, "testuser", nil, "org/repo")
 
-	// First upsert is from poll loop; additional upserts from health data fetching.
-	require.GreaterOrEqual(t, len(prStore.upserts), 1)
-	assert.Equal(t, 10, prStore.upserts[0].PR.Number)
-	assert.True(t, prStore.upserts[0].PR.NeedsReview, "review-requested PR should need review")
+	// Both PRs should be upserted (no relevance filter).
+	prNumbers := make(map[int]bool)
+	for _, u := range prStore.upserts {
+		prNumbers[u.PR.Number] = true
+	}
+	assert.True(t, prNumbers[10], "PR #10 should be upserted")
+	assert.True(t, prNumbers[11], "PR #11 should be upserted")
+
+	// Verify review-requested PR has NeedsReview=true.
+	for _, u := range prStore.upserts {
+		if u.PR.Number == 10 {
+			assert.True(t, u.PR.NeedsReview, "review-requested PR should need review")
+			break
+		}
+	}
+
+	// Verify unrelated PR has NeedsReview=false.
+	for _, u := range prStore.upserts {
+		if u.PR.Number == 11 {
+			assert.False(t, u.PR.NeedsReview, "unrelated PR should not need review")
+			break
+		}
+	}
 }
 
 func TestPollRepo_TeamReviewRequest(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{
 					Number:             20,
@@ -415,7 +447,7 @@ func TestPollRepo_Deduplication(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{
 					Number:             30,
@@ -445,7 +477,7 @@ func TestPollRepo_SkipUnchanged(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{
 					Number:       40,
@@ -480,7 +512,7 @@ func TestPollRepo_DraftFlagging(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{
 					Number:       50,
@@ -506,7 +538,7 @@ func TestPollRepo_StaleCleanup(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{Number: 11, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
 				{Number: 12, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
@@ -528,6 +560,32 @@ func TestPollRepo_StaleCleanup(t *testing.T) {
 	require.Len(t, prStore.deletes, 1)
 	assert.Equal(t, 10, prStore.deletes[0].Number)
 	assert.Equal(t, "org/repo", prStore.deletes[0].RepoFullName)
+}
+
+func TestPollRepo_UnrelatedPRStored(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+
+	ghClient := &mockGitHubClient{
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
+			return []model.PullRequest{
+				{
+					Number:       99,
+					Author:       "stranger",
+					RepoFullName: "org/repo",
+					Status:       model.PRStatusOpen,
+					UpdatedAt:    now,
+				},
+			}, nil
+		},
+	}
+
+	prStore := &mockPRStore{}
+	pollRepoVia(t, ghClient, prStore, "testuser", nil, "org/repo")
+
+	// PR where user is NOT author and NOT requested reviewer should still be stored.
+	require.GreaterOrEqual(t, len(prStore.upserts), 1)
+	assert.Equal(t, 99, prStore.upserts[0].PR.Number)
+	assert.False(t, prStore.upserts[0].PR.NeedsReview, "unrelated PR should not need review")
 }
 
 func TestIsReviewRequestedFrom(t *testing.T) {
@@ -589,7 +647,7 @@ func TestPollRepo_FetchesReviewData(t *testing.T) {
 	var fetchReviewsCalled, fetchReviewCommentsCalled, fetchIssueCommentsCalled bool
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{Number: 60, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
 			}, nil
@@ -640,7 +698,7 @@ func TestPollRepo_SkipsReviewDataForUnchangedPRs(t *testing.T) {
 	var fetchReviewsCalled bool
 
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, _ string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, _ string, _ string) ([]model.PullRequest, error) {
 			return []model.PullRequest{
 				{Number: 70, Author: "testuser", RepoFullName: "org/repo", Status: model.PRStatusOpen, UpdatedAt: now},
 			}, nil
@@ -672,7 +730,7 @@ func TestAdaptiveScheduling(t *testing.T) {
 
 	// Two repos: one with recent activity (hot), one with old activity (stale).
 	ghClient := &mockGitHubClient{
-		fetchPRs: func(_ context.Context, repoFullName string) ([]model.PullRequest, error) {
+		fetchPRs: func(_ context.Context, repoFullName string, _ string) ([]model.PullRequest, error) {
 			switch repoFullName {
 			case "org/hot-repo":
 				return []model.PullRequest{
