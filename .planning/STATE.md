@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 
 Milestone: 2026.2.0 Web GUI
 Phase: 7 of 9 (GUI Foundation)
-Plan: 1 of 3
+Plan: 2 of 3
 Status: In progress
-Last activity: 2026-02-14 — Completed 07-01-PLAN.md (web GUI scaffold)
+Last activity: 2026-02-14 — Completed 07-02-PLAN.md (PR feed sidebar and detail panel)
 
-Progress: [======..............] 33% (1/3 plans)
+Progress: [=============.......] 67% (2/3 plans)
 
 ## Performance Metrics
 
@@ -30,7 +30,7 @@ Progress: [======..............] 33% (1/3 plans)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 07-gui-foundation | 1/3 | 3min | 3min |
+| 07-gui-foundation | 2/3 | 10min | 5min |
 
 ## Accumulated Context
 
@@ -46,6 +46,8 @@ Recent decisions (2026.2.0):
 - GitHub creds in Phase 8 (needed for write ops), Jira creds in Phase 9
 - Removed explicit templ import from .templ files — generator adds it automatically
 - Extracted RegisterAPIRoutes and ApplyMiddleware from NewServeMux for dual-adapter composition
+- Extracted viewmodel package to break import cycle between web handler and templ sub-packages
+- Non-fatal enrichment pattern: review/health failures log errors but still render basic PR data
 
 ### Pending Todos
 
@@ -59,5 +61,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 07-01-PLAN.md, ready for 07-02-PLAN.md
-Resume file: .planning/phases/07-gui-foundation/07-02-PLAN.md
+Stopped at: Completed 07-02-PLAN.md, ready for 07-03-PLAN.md
+Resume file: .planning/phases/07-gui-foundation/07-03-PLAN.md
