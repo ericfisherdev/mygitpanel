@@ -19,6 +19,8 @@ var (
 // RepoStore defines the driven port for repository persistence.
 // Add returns ErrRepoAlreadyExists if the repository already exists.
 // Remove returns ErrRepoNotFound if the repository does not exist.
+// GetByFullName returns (nil, nil) if the repository does not exist —
+// queries return nil for missing entities rather than an error.
 type RepoStore interface {
 	Add(ctx context.Context, repo model.Repository) error
 	Remove(ctx context.Context, fullName string) error
