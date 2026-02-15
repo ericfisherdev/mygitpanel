@@ -15,6 +15,7 @@ The most significant technical finding is that **thread resolution status (`isRe
 ## Standard Stack
 
 ### Core (already in project)
+
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
 | google/go-github/v82 | v82.0.0 | GitHub REST API client | Already in use; has PullRequestReview, PullRequestComment, IssueComment structs with all needed fields |
@@ -129,7 +130,7 @@ func groupIntoThreads(comments []model.ReviewComment) []CommentThread {
 ```
 
 ### Pattern 4: Suggestion Block Extraction via Regex
-**What:** GitHub suggestion blocks are markdown code fences with `suggestion` as the language identifier. They can use 3+ backticks. Must extract the proposed code change.
+**What:** GitHub suggestion blocks are Markdown code fences with `suggestion` as the language identifier. They can use 3+ backticks. Must extract the proposed code change.
 **When to use:** CFMT-04 requirement.
 
 ```go
@@ -195,7 +196,7 @@ For individual inline review comments from CodeRabbit, nitpick detection require
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
 | GitHub API pagination | Manual page tracking | go-github's `ListOptions` + response `NextPage` | Already proven in FetchPullRequests, handles edge cases |
-| Suggestion block parsing | Custom markdown parser | Regex on code fence pattern | Suggestion blocks are simple fenced code with known language tag |
+| Suggestion block parsing | Custom Markdown parser | Regex on code fence pattern | Suggestion blocks are simple fenced code with known language tag |
 | Rate limiting | Manual 429 handling | Existing httpcache + go-github-ratelimit transport stack | Already configured and tested |
 | Review state aggregation | Custom state machine | Simple latest-review-per-reviewer query | GitHub already tracks this -- just read `state` from latest review per user |
 | Comment body sanitization | HTML stripping/XSS protection | bluemonday HTML sanitizer (see `internal/adapter/driving/web/markdown.go`) | Phase 7 introduced Markdown-to-HTML rendering for the web GUI; all comment bodies are sanitized via bluemonday before display. The JSON API still serves raw Markdown for AI agent consumption. |
@@ -243,6 +244,7 @@ For individual inline review comments from CodeRabbit, nitpick detection require
 ## Code Examples
 
 ### Mapping go-github PullRequestReview to Domain Model
+
 ```go
 // Source: go-github PullRequestReview struct fields
 // https://github.com/google/go-github/blob/master/github/pulls_reviews.go
