@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -8,7 +9,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// allConfigKeys lists every MYGITPANEL_ env var that Load() reads.
+var allConfigKeys = []string{
+	"MYGITPANEL_GITHUB_TOKEN",
+	"MYGITPANEL_GITHUB_USERNAME",
+	"MYGITPANEL_GITHUB_TEAMS",
+	"MYGITPANEL_POLL_INTERVAL",
+	"MYGITPANEL_LISTEN_ADDR",
+	"MYGITPANEL_DB_PATH",
+}
+
+// isolateConfigEnv saves and unsets all MYGITPANEL_ env vars so tests don't
+// inherit values from the host environment (e.g. a running dev server).
+// t.Cleanup restores original values after the test.
+func isolateConfigEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range allConfigKeys {
+		if orig, ok := os.LookupEnv(key); ok {
+			t.Cleanup(func() { os.Setenv(key, orig) })
+		} else {
+			t.Cleanup(func() { os.Unsetenv(key) })
+		}
+		os.Unsetenv(key)
+	}
+}
+
 func TestLoad_Success(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 	t.Setenv("MYGITPANEL_POLL_INTERVAL", "10m")
@@ -26,6 +53,7 @@ func TestLoad_Success(t *testing.T) {
 }
 
 func TestLoad_Defaults(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
@@ -38,6 +66,7 @@ func TestLoad_Defaults(t *testing.T) {
 }
 
 func TestLoad_MissingToken(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
 	cfg, err := Load()
@@ -48,6 +77,7 @@ func TestLoad_MissingToken(t *testing.T) {
 }
 
 func TestLoad_MissingUsername(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 
 	cfg, err := Load()
@@ -58,6 +88,7 @@ func TestLoad_MissingUsername(t *testing.T) {
 }
 
 func TestLoad_EmptyToken(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "")
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
@@ -69,6 +100,7 @@ func TestLoad_EmptyToken(t *testing.T) {
 }
 
 func TestLoad_InvalidPollInterval(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 	t.Setenv("MYGITPANEL_POLL_INTERVAL", "not-a-duration")
@@ -81,6 +113,7 @@ func TestLoad_InvalidPollInterval(t *testing.T) {
 }
 
 func TestLoad_GitHubTeams(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 	t.Setenv("MYGITPANEL_GITHUB_TEAMS", "team-a, team-b")
@@ -92,6 +125,7 @@ func TestLoad_GitHubTeams(t *testing.T) {
 }
 
 func TestLoad_GitHubTeams_Empty(t *testing.T) {
+	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 

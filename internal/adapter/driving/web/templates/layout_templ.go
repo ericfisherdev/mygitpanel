@@ -50,7 +50,7 @@ func Layout(title string, contents templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<!-- Script loading order: htmx -> htmx-ext-alpine-morph -> alpine plugins -> alpine core --><script src=\"/static/vendor/htmx.min.js\"></script><script src=\"/static/vendor/htmx-ext-alpine-morph.js\"></script><script src=\"/static/vendor/alpine-morph.min.js\" defer></script><script src=\"/static/vendor/alpine-persist.min.js\" defer></script><script src=\"/static/vendor/alpine.min.js\" defer></script><script src=\"/static/vendor/gsap.min.js\"></script><script src=\"/static/js/animations.js\" defer></script><script>\n\t\t\tdocument.addEventListener('alpine:init', function() {\n\t\t\t\tAlpine.store('theme', {\n\t\t\t\t\tdark: Alpine.$persist(false).as('darkMode')\n\t\t\t\t});\n\t\t\t});\n\t\t</script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<!-- Script loading order: htmx -> htmx-ext-alpine-morph -> alpine plugins -> stores -> alpine core --><script src=\"/static/vendor/htmx.min.js\"></script><script src=\"/static/vendor/htmx-ext-alpine-morph.js\"></script><script src=\"/static/vendor/alpine-morph.min.js\" defer></script><script src=\"/static/vendor/alpine-persist.min.js\" defer></script><script src=\"/static/js/stores.js\" defer></script><script src=\"/static/vendor/alpine.min.js\" defer></script><script src=\"/static/vendor/gsap.min.js\"></script><script src=\"/static/js/animations.js\" defer></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
