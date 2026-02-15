@@ -278,9 +278,9 @@ Mistakes that cause delays, technical debt, or degraded experience.
 - Jira data going stale for minutes at a time
 - Application logs showing repeated Jira request failures
 
-**Phase mapping:** Jira integration phase. Design the Jira adapter with rate limiting awareness from the start.
+**Phase mapping:** Jira integration phase. Design the Jira adapter with rate-limiting awareness from the start.
 
-**Confidence:** MEDIUM -- Jira's rate limiting model is documented at a high level, but per-endpoint point costs are not published. The March 2026 tiered quota changes add uncertainty.
+**Confidence:** MEDIUM -- Jira's rate-limiting model is documented at a high level, but per-endpoint point costs are not published. The March 2026 tiered quota changes add uncertainty.
 
 **Sources:**
 - [Jira Cloud: Rate Limiting](https://developer.atlassian.com/cloud/jira/platform/rate-limiting/)

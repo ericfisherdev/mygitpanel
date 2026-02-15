@@ -42,7 +42,7 @@ The most significant technical finding is that **thread resolution status (`isRe
 
 The existing `Review` and `ReviewComment` domain models need field additions. A new `IssueComment` model is needed for PR-level (non-inline) comments. A `BotConfig` model is needed for configurable bot detection.
 
-```
+```text
 internal/
   domain/model/
     review.go            # Add CommitID field for outdated detection

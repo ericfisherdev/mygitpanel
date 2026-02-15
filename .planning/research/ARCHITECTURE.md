@@ -336,7 +336,7 @@ func (s *JiraService) AddComment(ctx context.Context, issueKey string, body stri
 ### Flow 1: Dashboard Page Load (Full Page)
 
 ```
-Browser GET /
+Browser GET /{$}
   -> WebHandler.Dashboard()
     -> prStore.ListAll()         // existing port
     -> prStore.ListNeedingReview() // existing port
@@ -348,8 +348,8 @@ Browser GET /
 ### Flow 2: PR List Refresh (HTMX Partial)
 
 ```
-HTMX GET /prs (HX-Request: true)
-  -> WebHandler.PRList()
+HTMX GET /app/prs/search (HX-Request: true)
+  -> WebHandler.SearchPRs()
     -> prStore.ListAll()
     -> Convert to view models
     -> components.PRList(viewModels).Render(ctx, w)
@@ -360,7 +360,7 @@ HTMX GET /prs (HX-Request: true)
 ### Flow 3: Submit Review (HTMX POST)
 
 ```
-HTMX POST /prs/owner/repo/123/review
+HTMX POST /app/prs/owner/repo/123/review
   Body: event=APPROVE&body=LGTM
   -> WebHandler.SubmitReview()
     -> reviewSubmitSvc.SubmitReview(ctx, "owner/repo", 123, "LGTM", "APPROVE")
@@ -374,7 +374,7 @@ HTMX POST /prs/owner/repo/123/review
 ### Flow 4: Jira Sidebar Load (HTMX Partial)
 
 ```
-HTMX GET /prs/owner/repo/123/jira (lazy loaded)
+HTMX GET /app/prs/owner/repo/123/jira (lazy loaded)
   -> WebHandler.JiraSidebar()
     -> Get PR from prStore to get branch name and URL
     -> jiraSvc.GetLinkedIssues(ctx, prURL, branchName)
@@ -419,8 +419,9 @@ func run() error {
     webMux := webhandler.NewServeMux(wh, slog.Default())
     mux.Handle("/", webMux)
 
-    // Static assets
-    mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+    // Static assets (served from embedded filesystem via go:embed)
+    staticFS, _ := fs.Sub(web.StaticFS, "static")
+    mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticFS)))
 
     // ... rest unchanged ...
 }
@@ -548,8 +549,8 @@ func extractJiraKeys(branchName string) []string {
 templ files (`.templ`) compile to Go code (`.go` files with `_templ.go` suffix). This is a build-time step:
 
 ```bash
-# Install templ CLI
-go install github.com/a-h/templ/cmd/templ@latest
+# Install templ CLI (pin version for reproducible builds)
+go install github.com/a-h/templ/cmd/templ@v0.3.977
 
 # Generate Go code from .templ files
 templ generate
@@ -558,7 +559,7 @@ templ generate
 templ generate --watch
 ```
 
-Generated `_templ.go` files **should be committed** to the repository. This ensures `go build` works without the templ CLI installed.
+Generated `_templ.go` files **must NOT be committed** to the repository (add `*_templ.go` to `.gitignore`). The Dockerfile and CI pipeline run `templ generate` during the build stage, producing fresh generated code each time. Pin the templ CLI version to avoid generated code differences across environments.
 
 ### Tailwind CSS Build
 
@@ -574,13 +575,12 @@ chmod +x tailwindcss-linux-x64
 ./tailwindcss-linux-x64 -i static/css/input.css -o static/css/output.css --watch
 ```
 
-Tailwind scans templ files for class names. Configure `tailwind.config.js`:
+Tailwind v4 uses CSS-first configuration (no `tailwind.config.js`). Configure via the CSS input file:
 
-```js
-module.exports = {
-  content: ["./internal/adapter/driving/web/**/*.templ"],
-  // ...
-}
+```css
+/* internal/adapter/driving/web/static/css/input.css */
+@import "tailwindcss";
+@source "../../../templates/**/*.templ";
 ```
 
 ### Static Asset Embedding
