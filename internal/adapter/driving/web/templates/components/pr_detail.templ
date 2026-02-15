@@ -1,0 +1,286 @@
+package components
+
+import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+import "fmt"
+
+// PRDetail renders the full PR detail panel with tabbed content.
+templ PRDetail(pr viewmodel.PRDetailViewModel) {
+	<div class="max-w-4xl mx-auto" x-data="{ tab: 'reviews' }">
+		<!-- Header -->
+		<div class="mb-6">
+			<div class="flex items-start justify-between gap-4">
+				<div>
+					<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+						{ pr.Title }
+						<span class="text-gray-400 font-normal">#{ fmt.Sprint(pr.Number) }</span>
+					</h2>
+					<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+						{ pr.Repository } &middot; { pr.Author }
+					</p>
+				</div>
+				<a
+					href={ templ.SafeURL(pr.URL) }
+					target="_blank"
+					rel="noopener noreferrer"
+					class="shrink-0 inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+				>
+					GitHub &nearr;
+				</a>
+			</div>
+			<!-- Status badges -->
+			<div class="flex items-center gap-2 mt-3 flex-wrap">
+				if pr.Status == "open" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Open</span>
+				} else if pr.Status == "merged" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">Merged</span>
+				} else if pr.Status == "closed" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">Closed</span>
+				}
+				if pr.IsDraft {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">Draft</span>
+				}
+				if pr.CIStatus == "passing" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">CI Passing</span>
+				} else if pr.CIStatus == "failing" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">CI Failing</span>
+				} else if pr.CIStatus == "pending" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">CI Pending</span>
+				}
+				if pr.MergeableStatus == "conflicted" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">Conflicts</span>
+				} else if pr.MergeableStatus == "mergeable" {
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Mergeable</span>
+				}
+			</div>
+		</div>
+		<!-- Info section -->
+		<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-6">
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+				<div>
+					<span class="text-gray-500 dark:text-gray-400">Branch</span>
+					<p class="font-mono text-gray-900 dark:text-gray-100 truncate" title={ pr.Branch }>{ pr.Branch }</p>
+				</div>
+				<div>
+					<span class="text-gray-500 dark:text-gray-400">Base</span>
+					<p class="font-mono text-gray-900 dark:text-gray-100">{ pr.BaseBranch }</p>
+				</div>
+				<div>
+					<span class="text-gray-500 dark:text-gray-400">Head SHA</span>
+					<p class="font-mono text-gray-900 dark:text-gray-100">{ pr.HeadSHA }</p>
+				</div>
+				<div>
+					<span class="text-gray-500 dark:text-gray-400">Opened</span>
+					<p class="text-gray-900 dark:text-gray-100">{ fmt.Sprintf("%d days ago", pr.DaysSinceOpened) }</p>
+				</div>
+			</div>
+			<div class="flex items-center gap-6 mt-4 text-sm">
+				<span class="text-green-600 dark:text-green-400 font-medium">+{ fmt.Sprint(pr.Additions) }</span>
+				<span class="text-red-600 dark:text-red-400 font-medium">-{ fmt.Sprint(pr.Deletions) }</span>
+				<span class="text-gray-600 dark:text-gray-400">{ fmt.Sprint(pr.ChangedFiles) } files changed</span>
+				if pr.UnresolvedThreads > 0 {
+					<span class="text-yellow-600 dark:text-yellow-400">{ fmt.Sprint(pr.UnresolvedThreads) } unresolved</span>
+				}
+				if pr.ResolvedThreads > 0 {
+					<span class="text-green-600 dark:text-green-400">{ fmt.Sprint(pr.ResolvedThreads) } resolved</span>
+				}
+			</div>
+		</div>
+		<!-- Tab navigation -->
+		<div class="border-b border-gray-200 dark:border-gray-700 mb-4">
+			<nav class="flex gap-4 -mb-px" aria-label="PR detail tabs">
+				<button
+					id="tab-reviews"
+					@click="tab = 'reviews'"
+					x-bind:class="tab === 'reviews' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'"
+					class="py-2 px-1 border-b-2 text-sm font-medium transition-colors"
+				>
+					Reviews ({ fmt.Sprint(len(pr.Reviews)) })
+				</button>
+				<button
+					id="tab-threads"
+					@click="tab = 'threads'"
+					x-bind:class="tab === 'threads' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'"
+					class="py-2 px-1 border-b-2 text-sm font-medium transition-colors"
+				>
+					Threads ({ fmt.Sprint(len(pr.Threads)) })
+				</button>
+				<button
+					id="tab-comments"
+					@click="tab = 'comments'"
+					x-bind:class="tab === 'comments' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'"
+					class="py-2 px-1 border-b-2 text-sm font-medium transition-colors"
+				>
+					Comments ({ fmt.Sprint(len(pr.IssueComments)) })
+				</button>
+				<button
+					id="tab-ci"
+					@click="tab = 'ci'"
+					x-bind:class="tab === 'ci' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'"
+					class="py-2 px-1 border-b-2 text-sm font-medium transition-colors"
+				>
+					CI ({ fmt.Sprint(len(pr.CheckRuns)) })
+				</button>
+			</nav>
+		</div>
+		<!-- Tab content -->
+		<!-- Reviews tab -->
+		<div x-show="tab === 'reviews'" role="tabpanel" aria-labelledby="tab-reviews">
+			if len(pr.Reviews) == 0 {
+				<p class="text-sm text-gray-400 dark:text-gray-500 py-4">No reviews yet</p>
+			}
+			for _, review := range pr.Reviews {
+				@ReviewCard(review)
+			}
+		</div>
+		<!-- Threads tab -->
+		<div x-show="tab === 'threads'" role="tabpanel" aria-labelledby="tab-threads">
+			if len(pr.Threads) == 0 {
+				<p class="text-sm text-gray-400 dark:text-gray-500 py-4">No review threads</p>
+			}
+			for _, thread := range pr.Threads {
+				@ThreadCard(thread)
+			}
+		</div>
+		<!-- Comments tab -->
+		<div x-show="tab === 'comments'" role="tabpanel" aria-labelledby="tab-comments">
+			if len(pr.IssueComments) == 0 {
+				<p class="text-sm text-gray-400 dark:text-gray-500 py-4">No comments</p>
+			}
+			for _, comment := range pr.IssueComments {
+				@IssueCommentCard(comment)
+			}
+		</div>
+		<!-- CI tab -->
+		<div x-show="tab === 'ci'" role="tabpanel" aria-labelledby="tab-ci">
+			if len(pr.CheckRuns) == 0 {
+				<p class="text-sm text-gray-400 dark:text-gray-500 py-4">No CI checks</p>
+			}
+			for _, check := range pr.CheckRuns {
+				@CheckRunCard(check)
+			}
+		</div>
+	</div>
+}
+
+// ReviewCard renders a single review entry.
+templ ReviewCard(review viewmodel.ReviewViewModel) {
+	<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-3">
+		<div class="flex items-center gap-2 mb-2">
+			<span class="font-medium text-sm text-gray-900 dark:text-gray-100">{ review.Reviewer }</span>
+			if review.State == "approved" {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">Approved</span>
+			} else if review.State == "changes_requested" {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">Changes Requested</span>
+			} else if review.State == "commented" {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300">Commented</span>
+			} else if review.State == "dismissed" {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400">Dismissed</span>
+			}
+			if review.IsBot {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">Bot</span>
+			}
+			if review.IsOutdated {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300">Outdated</span>
+			}
+			if review.IsNitpick {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400">Nitpick</span>
+			}
+			<span class="text-xs text-gray-400 dark:text-gray-500 ml-auto">{ review.SubmittedAt }</span>
+		</div>
+		if review.Body != "" {
+			<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ review.Body }</p>
+		}
+	</div>
+}
+
+// ThreadCard renders a code review thread with root comment and replies.
+templ ThreadCard(thread viewmodel.ThreadViewModel) {
+	<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-3 overflow-hidden">
+		<!-- Thread header -->
+		<div class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-750 border-b border-gray-200 dark:border-gray-700">
+			if thread.IsResolved {
+				<span class="text-green-500" title="Resolved">&#10003;</span>
+			} else {
+				<span class="text-yellow-500" title="Unresolved">&#9679;</span>
+			}
+			<span class="text-xs font-mono text-gray-600 dark:text-gray-400 truncate">{ thread.RootComment.FilePath }</span>
+			if thread.RootComment.Line > 0 {
+				<span class="text-xs text-gray-400 dark:text-gray-500">L{ fmt.Sprint(thread.RootComment.Line) }</span>
+			}
+			<span class="text-xs text-gray-400 dark:text-gray-500 ml-auto">{ fmt.Sprint(thread.CommentCount) } comments</span>
+		</div>
+		<!-- Diff hunk -->
+		if thread.RootComment.DiffHunk != "" {
+			<pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 p-3 overflow-x-auto border-b border-gray-200 dark:border-gray-700">{ thread.RootComment.DiffHunk }</pre>
+		}
+		<!-- Root comment -->
+		<div class="p-4">
+			<div class="flex items-center gap-2 mb-1">
+				<span class="font-medium text-sm text-gray-900 dark:text-gray-100">{ thread.RootComment.Author }</span>
+				<span class="text-xs text-gray-400 dark:text-gray-500">{ thread.RootComment.CreatedAt }</span>
+				if thread.RootComment.IsOutdated {
+					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300">Outdated</span>
+				}
+			</div>
+			<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ thread.RootComment.Body }</p>
+		</div>
+		<!-- Replies -->
+		for _, reply := range thread.Replies {
+			<div class="px-4 py-3 ml-4 border-t border-gray-100 dark:border-gray-700">
+				<div class="flex items-center gap-2 mb-1">
+					<span class="font-medium text-sm text-gray-900 dark:text-gray-100">{ reply.Author }</span>
+					<span class="text-xs text-gray-400 dark:text-gray-500">{ reply.CreatedAt }</span>
+				</div>
+				<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ reply.Body }</p>
+			</div>
+		}
+	</div>
+}
+
+// IssueCommentCard renders a PR-level general comment.
+templ IssueCommentCard(comment viewmodel.IssueCommentViewModel) {
+	<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-3">
+		<div class="flex items-center gap-2 mb-2">
+			<span class="font-medium text-sm text-gray-900 dark:text-gray-100">{ comment.Author }</span>
+			if comment.IsBot {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">Bot</span>
+			}
+			<span class="text-xs text-gray-400 dark:text-gray-500 ml-auto">{ comment.CreatedAt }</span>
+		</div>
+		<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ comment.Body }</p>
+	</div>
+}
+
+// CheckRunCard renders a single CI/CD check run entry.
+templ CheckRunCard(check viewmodel.CheckRunViewModel) {
+	<div class="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 mb-2">
+		<!-- Status indicator -->
+		if check.Conclusion == "success" {
+			<span class="w-3 h-3 rounded-full bg-green-500 shrink-0" title="Success"></span>
+		} else if check.Conclusion == "failure" {
+			<span class="w-3 h-3 rounded-full bg-red-500 shrink-0" title="Failure"></span>
+		} else if check.Conclusion == "neutral" || check.Conclusion == "skipped" {
+			<span class="w-3 h-3 rounded-full bg-gray-400 shrink-0" title={ check.Conclusion }></span>
+		} else if check.Status == "completed" {
+			<span class="w-3 h-3 rounded-full bg-yellow-500 shrink-0" title={ check.Conclusion }></span>
+		} else {
+			<span class="w-3 h-3 rounded-full bg-yellow-500 animate-pulse shrink-0" title={ check.Status }></span>
+		}
+		<div class="flex-1 min-w-0">
+			<span class="text-sm font-medium text-gray-900 dark:text-gray-100">{ check.Name }</span>
+			if check.IsRequired {
+				<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 ml-2">Required</span>
+			}
+		</div>
+		if check.DetailsURL != "" {
+			<a
+				href={ templ.SafeURL(check.DetailsURL) }
+				target="_blank"
+				rel="noopener noreferrer"
+				class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
+			>
+				Details
+			</a>
+		}
+	</div>
+}

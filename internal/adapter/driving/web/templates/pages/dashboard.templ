@@ -1,15 +1,12 @@
 package pages
 
-templ Dashboard() {
-	<div class="flex h-screen">
-		<!-- Sidebar placeholder -->
-		<aside id="sidebar" class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4">
-			<h1 class="text-xl font-bold text-indigo-600 dark:text-indigo-400">ReviewHub</h1>
-			<p class="text-sm text-gray-500 dark:text-gray-400 mt-2">PR Dashboard</p>
-			<div id="pr-list" class="mt-4">
-				<p class="text-gray-400 dark:text-gray-500 text-sm">PR feed loading in Plan 02...</p>
-			</div>
-		</aside>
+import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
+
+// Dashboard renders the main dashboard page with sidebar and detail area.
+templ Dashboard(cards []viewmodel.PRCardViewModel) {
+	<div class="flex h-screen overflow-hidden">
+		@components.Sidebar(cards)
 		<!-- Main content area -->
 		<main class="flex-1 p-6 overflow-y-auto">
 			<div id="pr-detail" class="flex items-center justify-center h-full">
