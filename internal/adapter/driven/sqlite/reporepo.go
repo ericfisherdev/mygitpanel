@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // Compile-time interface satisfaction check.
@@ -37,7 +38,8 @@ func (r *RepoRepo) Add(ctx context.Context, repo model.Repository) error {
 
 	_, err := r.db.Writer.ExecContext(ctx, query, repo.FullName, repo.Owner, repo.Name, addedAt)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
+		var se *sqlite.Error
+		if errors.As(err, &se) && se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
 			return fmt.Errorf("add repository %s: %w", repo.FullName, driven.ErrRepoAlreadyExists)
 		}
 		return fmt.Errorf("add repository %s: %w", repo.FullName, err)

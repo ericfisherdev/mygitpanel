@@ -95,30 +95,35 @@ This is the core new driving adapter. It follows the same pattern as the existin
 
 ```
 internal/adapter/driving/web/
-  handler.go              <-- WebHandler struct, constructor, route registration
-  handler_dashboard.go    <-- Dashboard page handler
-  handler_pr.go           <-- PR detail page, HTMX partials
-  handler_repos.go        <-- Repo management handlers
-  handler_review.go       <-- Review submission handlers (POST)
-  handler_jira.go         <-- Jira-related handlers
-  handler_settings.go     <-- Bot config, Jira config UI
-  components/
-    pr_card.templ          <-- PR card component
-    pr_list.templ          <-- PR list (HTMX partial target)
-    review_thread.templ    <-- Review thread display
-    review_form.templ      <-- Review submission form
-    check_runs.templ       <-- CI status display
-    jira_sidebar.templ     <-- Jira issue panel
-    badge.templ            <-- Status badges
-    nav.templ              <-- Navigation bar
-    toast.templ            <-- Notification toasts
-  layouts/
-    base.templ             <-- HTML skeleton (head, body, scripts)
-    app.templ              <-- App shell with nav, sidebar
-  pages/
-    dashboard.templ        <-- Dashboard page composition
-    pr_detail.templ        <-- PR detail page composition
-    settings.templ         <-- Settings page composition
+  handler.go              <-- Handler struct, constructor, route handlers
+  routes.go               <-- Route registration (RegisterRoutes)
+  viewmodel.go            <-- Domain-to-view-model mapping
+  viewmodel/viewmodel.go  <-- View model struct definitions
+  markdown.go             <-- Markdown-to-HTML rendering with bluemonday XSS sanitization
+  csrf.go                 <-- CSRF token generation and validation
+  embed.go                <-- go:embed for static assets
+  templates/
+    layout.templ           <-- HTML skeleton (head, body, scripts)
+    pages/
+      dashboard.templ      <-- Dashboard page composition
+    components/
+      pr_card.templ        <-- PR card component
+      pr_detail.templ      <-- PR detail panel
+      sidebar.templ        <-- Collapsible sidebar
+      search_bar.templ     <-- Search and filter bar
+      theme_toggle.templ   <-- Dark/light theme toggle
+      repo_manager.templ   <-- Repo add/remove management
+    partials/
+      pr_list.templ        <-- PR list (HTMX swap target)
+      pr_detail_content.templ  <-- PR detail content (HTMX partial)
+      repo_list.templ      <-- Repo list (HTMX partial)
+  static/
+    css/input.css          <-- Tailwind CSS input (compiled via standalone CLI)
+    css/output.css         <-- Generated (gitignored)
+    js/animations.js       <-- GSAP animation initializers
+    js/csrf.js             <-- CSRF token header injection for HTMX
+    js/stores.js           <-- Alpine.js stores (theme persistence)
+    vendor/                <-- Vendored JS: htmx, alpine, gsap, extensions
 ```
 
 **Key design decisions:**
@@ -173,21 +178,12 @@ func (h *WebHandler) PRList(w http.ResponseWriter, r *http.Request) {
 HTMX routes live under a separate prefix to avoid collision with the JSON API:
 
 ```
-GET  /                              -> Dashboard (full page)
-GET  /prs                           -> PR list (HTMX partial or full page)
-GET  /prs/{owner}/{repo}/{number}   -> PR detail page
-GET  /prs/{owner}/{repo}/{number}/threads  -> Review threads (HTMX partial)
-GET  /prs/{owner}/{repo}/{number}/checks   -> Check runs (HTMX partial)
-GET  /prs/{owner}/{repo}/{number}/jira     -> Jira sidebar (HTMX partial)
-POST /prs/{owner}/{repo}/{number}/review   -> Submit review
-POST /prs/{owner}/{repo}/{number}/reply    -> Reply to comment
-GET  /repos                         -> Repo management page
-POST /repos                         -> Add repo (HTMX form)
-DELETE /repos/{owner}/{repo}        -> Remove repo (HTMX)
-GET  /settings                      -> Settings page
-POST /settings/bots                 -> Add bot (HTMX form)
-DELETE /settings/bots/{username}    -> Remove bot (HTMX)
-POST /refresh/{owner}/{repo}        -> Trigger manual refresh (HTMX)
+GET  /{$}                                       -> Dashboard (full page)
+GET  /app/prs/{owner}/{repo}/{number}            -> PR detail (HTMX partial)
+GET  /app/prs/search                             -> Search PRs (HTMX partial)
+POST /app/repos                                  -> Add repo (HTMX form)
+DELETE /app/repos/{owner}/{repo}                 -> Remove repo (HTMX)
+GET  /static/*                                   -> Embedded static assets
 ```
 
 ### 3. Alpine.js Integration (Client-Side State)

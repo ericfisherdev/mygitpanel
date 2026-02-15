@@ -1,18 +1,25 @@
 # Build stage
 FROM golang:1.25-alpine AS build
 
-# Install templ CLI
-RUN go install github.com/a-h/templ/cmd/templ@latest
+# Install templ CLI (pinned version for reproducible builds)
+RUN go install github.com/a-h/templ/cmd/templ@v0.3.977
 
-# Download Tailwind standalone CLI v4
+# Install Node.js for Tailwind CSS plugins (@tailwindcss/typography)
+RUN apk add --no-cache nodejs npm
+
+# Download Tailwind standalone CLI v4 (pinned version)
 RUN wget -O /usr/local/bin/tailwindcss \
-    https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64-musl \
+    https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.18/tailwindcss-linux-x64-musl \
     && chmod +x /usr/local/bin/tailwindcss
 
 WORKDIR /src
 
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
+
+# Install npm dependencies for Tailwind plugins
+COPY package.json package-lock.json* ./
+RUN npm install --production
 
 COPY . .
 

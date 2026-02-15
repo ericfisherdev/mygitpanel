@@ -21,10 +21,10 @@ The web GUI stack adds type-safe templating, server-driven dynamic updates, and 
 
 **Core technologies:**
 - **templ (v0.3.977)**: Type-safe HTML templating that compiles to Go code at build time. Templates are Go functions returning components, with full compile-time type checking. No reflection, no runtime parsing. Integrates directly with net/http.
-- **HTMX (2.0.8 CDN)**: Server-driven partial page updates via HTML attributes. The server returns HTML fragments (templ components), not JSON. Keeps rendering logic server-side in Go, consistent with hexagonal architecture.
-- **Alpine.js (3.15.x CDN)**: Lightweight client-side state for UI interactions that don't need server round-trips (dropdowns, tabs, modals). Declared inline with x-data attributes—no build step, no components, no virtual DOM.
-- **Tailwind CSS (v4.1.x standalone CLI)**: Utility-first CSS compiled via standalone binary—no Node.js, no npm, no package.json. Scans .templ files for class usage and produces optimized CSS.
-- **GSAP (3.14.x CDN)**: Performant animations for PR card transitions, attention signals, and status updates. Free for all uses (Webflow acquisition, April 2025). Works with HTMX lifecycle events.
+- **HTMX (2.0.8, vendored)**: Server-driven partial page updates via HTML attributes. The server returns HTML fragments (templ components), not JSON. Keeps rendering logic server-side in Go, consistent with hexagonal architecture. Vendored under `static/vendor/` and embedded via `//go:embed`.
+- **Alpine.js (3.15.x, vendored)**: Lightweight client-side state for UI interactions that don't need server round-trips (dropdowns, tabs, modals). Declared inline with x-data attributes—no build step, no components, no virtual DOM. Vendored under `static/vendor/` and embedded via `//go:embed`.
+- **Tailwind CSS (v4.1.x standalone CLI)**: Utility-first CSS compiled via standalone binary. Scans .templ files for class usage and produces optimized CSS. Uses `@tailwindcss/typography` plugin (installed via npm in Docker build stage).
+- **GSAP (3.14.x, vendored)**: Performant animations for PR card transitions, attention signals, and status updates. Free for all uses (Webflow acquisition, April 2025). Works with HTMX lifecycle events. Vendored under `static/vendor/` and embedded via `//go:embed`.
 - **go-atlassian (v2.10.0)**: Jira Cloud REST API client. Supports Jira v2/v3 APIs with typed structs, pagination, and multiple auth methods. Mirrors go-github's service-based design (familiar pattern).
 - **go-github v82 (existing)**: Already includes PullRequests.CreateReview() for review submission. No new dependency needed—just extend the existing GitHubClient port with write methods.
 

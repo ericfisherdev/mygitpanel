@@ -29,7 +29,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 **Milestone Goal:** Add a web GUI that surfaces all existing API capabilities and extends them with full PR review workflows, Jira integration, and customizable attention configuration.
 
-- [ ] **Phase 7: GUI Foundation** — Read-only dashboard with templ/HTMX/Alpine.js/Tailwind/GSAP
+- [x] **Phase 7: GUI Foundation** — Read-only dashboard with templ/HTMX/Alpine.js/Tailwind/GSAP
 - [ ] **Phase 8: Review Workflows and Attention Signals** — Write operations, credential management, configurable thresholds, PR ignore list
 - [ ] **Phase 9: Jira Integration** — Jira API adapter, issue viewing, commenting, auto-linking
 
@@ -96,6 +96,6 @@ Phases execute in numeric order: 7 → 8 → 9
 | 4. Review Intelligence | v1.0 | 4/4 | Complete | 2026-02-12 |
 | 5. PR Health Signals | v1.0 | 3/3 | Complete | 2026-02-13 |
 | 6. Docker Deployment | v1.0 | 2/2 | Complete | 2026-02-14 |
-| 7. GUI Foundation | 2026.2.0 | 3/3 | In Progress | - |
+| 7. GUI Foundation | 2026.2.0 | 3/3 | Complete | 2026-02-15 |
 | 8. Review Workflows and Attention Signals | 2026.2.0 | 0/TBD | Not started | - |
 | 9. Jira Integration | 2026.2.0 | 0/TBD | Not started | - |
