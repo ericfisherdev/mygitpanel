@@ -2,8 +2,8 @@ package components
 
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 
-// Sidebar renders the collapsible sidebar with PR list.
-templ Sidebar(cards []viewmodel.PRCardViewModel) {
+// Sidebar renders the collapsible sidebar with search, PR list, and repo manager.
+templ Sidebar(data viewmodel.DashboardViewModel) {
 	<aside
 		x-data="{ collapsed: false }"
 		x-bind:class="collapsed ? 'w-16' : 'w-80'"
@@ -18,21 +18,30 @@ templ Sidebar(cards []viewmodel.PRCardViewModel) {
 			>
 				ReviewHub
 			</h1>
-			<button
-				@click="collapsed = !collapsed"
-				class="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
-				title="Toggle sidebar"
-			>
-				<svg
-					x-bind:class="collapsed ? 'rotate-180' : ''"
-					class="w-5 h-5 transition-transform duration-200"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
+			<div class="flex items-center gap-1">
+				<span x-show="!collapsed" x-transition>
+					@ThemeToggle()
+				</span>
+				<button
+					@click="collapsed = !collapsed"
+					class="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+					title="Toggle sidebar"
 				>
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-				</svg>
-			</button>
+					<svg
+						x-bind:class="collapsed ? 'rotate-180' : ''"
+						class="w-5 h-5 transition-transform duration-200"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+					</svg>
+				</button>
+			</div>
+		</div>
+		<!-- Search and filters -->
+		<div x-show="!collapsed" x-transition>
+			@SearchBar(data.RepoNames)
 		</div>
 		<!-- PR list -->
 		<div
@@ -41,12 +50,16 @@ templ Sidebar(cards []viewmodel.PRCardViewModel) {
 			id="pr-list"
 			class="flex-1 overflow-y-auto"
 		>
-			for _, card := range cards {
+			for _, card := range data.Cards {
 				@PRCard(card)
 			}
-			if len(cards) == 0 {
+			if len(data.Cards) == 0 {
 				<p class="p-4 text-sm text-gray-400 dark:text-gray-500">No pull requests found</p>
 			}
+		</div>
+		<!-- Repo manager -->
+		<div x-show="!collapsed" x-transition>
+			@RepoManager(data.Repos)
 		</div>
 	</aside>
 }

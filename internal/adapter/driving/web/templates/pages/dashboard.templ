@@ -4,9 +4,9 @@ import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmod
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
 
 // Dashboard renders the main dashboard page with sidebar and detail area.
-templ Dashboard(cards []viewmodel.PRCardViewModel) {
+templ Dashboard(data viewmodel.DashboardViewModel) {
 	<div class="flex h-screen overflow-hidden">
-		@components.Sidebar(cards)
+		@components.Sidebar(data)
 		<!-- Main content area -->
 		<main class="flex-1 p-6 overflow-y-auto">
 			<div id="pr-detail" class="flex items-center justify-center h-full">

@@ -18,4 +18,9 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 
 	// HTMX partial routes.
 	mux.HandleFunc("GET /app/prs/{owner}/{repo}/{number}", h.GetPRDetail)
+	mux.HandleFunc("GET /app/prs/search", h.SearchPRs)
+
+	// Repo management routes.
+	mux.HandleFunc("POST /app/repos", h.AddRepo)
+	mux.HandleFunc("DELETE /app/repos/{owner}/{repo}", h.RemoveRepo)
 }

@@ -107,3 +107,24 @@ type SuggestionViewModel struct {
 	EndLine      int
 	ProposedCode string
 }
+
+// RepoFilterViewModel holds presentation data for a repo in the filter dropdown.
+type RepoFilterViewModel struct {
+	FullName string
+	Selected bool
+}
+
+// RepoViewModel holds presentation data for a watched repo in the repo manager.
+type RepoViewModel struct {
+	FullName   string
+	Owner      string
+	Name       string
+	DeletePath string // computed: /app/repos/{owner}/{repo}
+}
+
+// DashboardViewModel holds all data needed to render the dashboard page.
+type DashboardViewModel struct {
+	Cards     []PRCardViewModel
+	Repos     []RepoViewModel
+	RepoNames []string // distinct repo names for search bar filter
+}
