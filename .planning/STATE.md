@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
-**Current focus:** Phase 7 — GUI Foundation
+**Current focus:** Phase 8 — GitHub Write Operations (planning needed)
 
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
-Phase: 7 of 9 (GUI Foundation)
-Plan: 2 of 3
-Status: In progress
-Last activity: 2026-02-14 — Completed 07-02-PLAN.md (PR feed sidebar and detail panel)
+Phase: 7 of 9 (GUI Foundation) — COMPLETE
+Plan: 3 of 3
+Status: Phase complete
+Last activity: 2026-02-14 — Completed 07-03-PLAN.md (interactive features: search, theme, repo mgmt, animations)
 
-Progress: [=============.......] 67% (2/3 plans)
+Progress: [====================] 100% (3/3 plans)
 
 ## Performance Metrics
 
@@ -30,7 +30,7 @@ Progress: [=============.......] 67% (2/3 plans)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 07-gui-foundation | 2/3 | 10min | 5min |
+| 07-gui-foundation | 3/3 | 14min | 5min |
 
 ## Accumulated Context
 
@@ -48,6 +48,10 @@ Recent decisions (2026.2.0):
 - Extracted RegisterAPIRoutes and ApplyMiddleware from NewServeMux for dual-adapter composition
 - Extracted viewmodel package to break import cycle between web handler and templ sub-packages
 - Non-fatal enrichment pattern: review/health failures log errors but still render basic PR data
+- Duplicated isValidRepoName in web handler (10-line function, not worth shared package)
+- In-memory PR filtering for search — appropriate for expected scale, no new DB queries needed
+- htmx:afterSettle for GSAP animations — morph swaps settle after DOM morphing completes
+- OOB swap pattern: repo mutations render primary target + PRListOOB + RepoFilterOptions
 
 ### Pending Todos
 
@@ -61,5 +65,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 07-02-PLAN.md, ready for 07-03-PLAN.md
-Resume file: .planning/phases/07-gui-foundation/07-03-PLAN.md
+Stopped at: Completed Phase 7 (GUI Foundation) — all 3 plans done
+Resume file: Ready for Phase 8 planning
