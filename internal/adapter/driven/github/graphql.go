@@ -9,6 +9,18 @@ import (
 	"net/http"
 )
 
+const markReadyMutation = `mutation($id: ID!) {
+	markPullRequestReadyForReview(input: {pullRequestId: $id}) {
+		pullRequest { isDraft }
+	}
+}`
+
+const convertToDraftMutation = `mutation($id: ID!) {
+	convertPullRequestToDraft(input: {pullRequestId: $id}) {
+		pullRequest { isDraft }
+	}
+}`
+
 const threadResolutionQuery = `query($owner: String!, $repo: String!, $pr: Int!) {
 	repository(owner: $owner, name: $repo) {
 		pullRequest(number: $pr) {
@@ -144,4 +156,66 @@ func (c *Client) FetchThreadResolution(ctx context.Context, repoFullName string,
 	}
 
 	return result, nil
+}
+
+// graphqlMutationResponse represents the minimal response shape for GraphQL mutations.
+// We only check for errors; the actual mutation payload is not inspected.
+type graphqlMutationResponse struct {
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// SetDraftStatus toggles a PR's draft state via GitHub GraphQL mutations.
+// nodeID is the PR's GraphQL node ID (not the numeric PR number).
+// draft=true converts to draft; draft=false marks ready for review.
+func (c *Client) SetDraftStatus(ctx context.Context, repoFullName string, _ int, nodeID string, draft bool) error {
+	if c.token == "" {
+		return fmt.Errorf("SetDraftStatus requires a GitHub token")
+	}
+
+	mutation := markReadyMutation
+	if draft {
+		mutation = convertToDraftMutation
+	}
+
+	reqBody := graphqlRequest{
+		Query: mutation,
+		Variables: map[string]any{
+			"id": nodeID,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshaling draft status mutation: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.graphqlURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("creating draft status request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", fmt.Sprintf("bearer %s", c.token))
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("draft status mutation for %s: %w", repoFullName, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("draft status mutation for %s: HTTP %d", repoFullName, resp.StatusCode)
+	}
+
+	var gqlResp graphqlMutationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&gqlResp); err != nil {
+		return fmt.Errorf("decoding draft status response for %s: %w", repoFullName, err)
+	}
+
+	if len(gqlResp.Errors) > 0 {
+		return fmt.Errorf("draft status mutation for %s: %s", repoFullName, gqlResp.Errors[0].Message)
+	}
+
+	return nil
 }

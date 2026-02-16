@@ -87,6 +87,22 @@ func (m *mockGitHubClient) FetchRequiredStatusChecks(ctx context.Context, repoFu
 	return nil, nil
 }
 
+func (m *mockGitHubClient) CreateReview(_ context.Context, _ string, _ int, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockGitHubClient) CreateIssueComment(_ context.Context, _ string, _ int, _ string) error {
+	return nil
+}
+
+func (m *mockGitHubClient) ReplyToReviewComment(_ context.Context, _ string, _ int, _ int64, _ string) error {
+	return nil
+}
+
+func (m *mockGitHubClient) SetDraftStatus(_ context.Context, _ string, _ int, _ string, _ bool) error {
+	return nil
+}
+
 type upsertCall struct {
 	PR model.PullRequest
 }
