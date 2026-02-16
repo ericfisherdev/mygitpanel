@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
-**Current focus:** Phase 8 — Review Workflows and Attention Signals
+**Current focus:** Phase 8 complete — Review Workflows and Attention Signals
 
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
 Phase: 8 of 9 (Review Workflows and Attention Signals)
-Plan: 3 of 4
-Status: In progress
-Last activity: 2026-02-15 — Completed 08-03-PLAN.md (credential GUI, review submission, comment reply, draft toggle)
+Plan: 4 of 4
+Status: Phase complete
+Last activity: 2026-02-15 — Completed 08-04-PLAN.md (attention signals, repo settings, ignore list)
 
-Progress: [===============.....] 75% (3/4 plans)
+Progress: [====================] 100% (4/4 plans)
 
 ## Performance Metrics
 
@@ -31,7 +31,7 @@ Progress: [===============.....] 75% (3/4 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
-| 08-review-workflows | 3/4 | 17min | 6min |
+| 08-review-workflows | 4/4 | 26min | 7min |
 
 ## Accumulated Context
 
@@ -64,6 +64,9 @@ Recent decisions (2026.2.0):
 - Write handlers use requireGitHubClient helper returning 403 if no client configured
 - renderPRDetailRefresh shared method for consistent re-render after all write operations
 - Stored credentials take priority over env vars in composition root
+- Settings cache per request avoids N+1 queries when enriching PR cards with attention signals
+- Display-layer ignored PR filtering using set-based O(n+m) approach
+- CountApprovals lightweight query on ReviewStore for list-view approval counts
 
 ### Pending Todos
 
@@ -76,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 08-03-PLAN.md (credential GUI, review submission, comment reply, draft toggle)
-Resume file: .planning/phases/08-review-workflows-and-attention-signals/08-04-PLAN.md
+Stopped at: Completed Phase 8 (all 4 plans: data foundation, GitHub write API, end-to-end wiring, attention signals)
+Resume file: Phase 9 planning
