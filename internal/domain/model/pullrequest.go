@@ -16,6 +16,7 @@ type PullRequest struct {
 	BaseBranch      string
 	NeedsReview     bool
 	HeadSHA         string // Current head commit SHA; used for outdated review detection.
+	NodeID          string // NodeID is the GitHub GraphQL node ID; required for draft toggle mutations.
 	Additions       int
 	Deletions       int
 	ChangedFiles    int

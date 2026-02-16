@@ -1,0 +1,1 @@
+ALTER TABLE pull_requests ADD COLUMN node_id TEXT NOT NULL DEFAULT '';
