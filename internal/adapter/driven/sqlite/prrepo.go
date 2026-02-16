@@ -30,10 +30,10 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 	const query = `
 		INSERT INTO pull_requests (
 			number, repo_full_name, title, author, status, is_draft, needs_review,
-			url, branch, base_branch, labels, head_sha,
+			url, branch, base_branch, labels, head_sha, node_id,
 			additions, deletions, changed_files, mergeable_status, ci_status,
 			opened_at, updated_at, last_activity_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(repo_full_name, number) DO UPDATE SET
 			title = excluded.title,
 			author = excluded.author,
@@ -45,6 +45,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 			base_branch = excluded.base_branch,
 			labels = excluded.labels,
 			head_sha = excluded.head_sha,
+			node_id = excluded.node_id,
 			additions = excluded.additions,
 			deletions = excluded.deletions,
 			changed_files = excluded.changed_files,
@@ -86,7 +87,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 
 	_, err = r.db.Writer.ExecContext(ctx, query,
 		pr.Number, pr.RepoFullName, pr.Title, pr.Author, string(pr.Status), isDraft, needsReview,
-		pr.URL, pr.Branch, pr.BaseBranch, string(labelsJSON), pr.HeadSHA,
+		pr.URL, pr.Branch, pr.BaseBranch, string(labelsJSON), pr.HeadSHA, pr.NodeID,
 		pr.Additions, pr.Deletions, pr.ChangedFiles, mergeableStatus, ciStatus,
 		pr.OpenedAt.UTC(), pr.UpdatedAt.UTC(), pr.LastActivityAt.UTC(),
 	)
@@ -101,7 +102,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 func (r *PRRepo) GetByRepository(ctx context.Context, repoFullName string) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, head_sha,
+		       url, branch, base_branch, labels, head_sha, node_id,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
 		       opened_at, updated_at, last_activity_at
 		FROM pull_requests
@@ -116,7 +117,7 @@ func (r *PRRepo) GetByRepository(ctx context.Context, repoFullName string) ([]mo
 func (r *PRRepo) GetByStatus(ctx context.Context, status model.PRStatus) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, head_sha,
+		       url, branch, base_branch, labels, head_sha, node_id,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
 		       opened_at, updated_at, last_activity_at
 		FROM pull_requests
@@ -132,7 +133,7 @@ func (r *PRRepo) GetByStatus(ctx context.Context, status model.PRStatus) ([]mode
 func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number int) (*model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, head_sha,
+		       url, branch, base_branch, labels, head_sha, node_id,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
 		       opened_at, updated_at, last_activity_at
 		FROM pull_requests
@@ -154,7 +155,7 @@ func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number in
 func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, head_sha,
+		       url, branch, base_branch, labels, head_sha, node_id,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
 		       opened_at, updated_at, last_activity_at
 		FROM pull_requests
@@ -169,7 +170,7 @@ func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 func (r *PRRepo) ListNeedingReview(ctx context.Context) ([]model.PullRequest, error) {
 	const query = `
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, head_sha,
+		       url, branch, base_branch, labels, head_sha, node_id,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
 		       opened_at, updated_at, last_activity_at
 		FROM pull_requests
@@ -237,7 +238,7 @@ func scanPR(s scanner) (*model.PullRequest, error) {
 	err := s.Scan(
 		&pr.ID, &pr.Number, &pr.RepoFullName, &pr.Title, &pr.Author,
 		&status, &isDraft, &needsReview, &pr.URL, &pr.Branch, &pr.BaseBranch,
-		&labelsJSON, &pr.HeadSHA,
+		&labelsJSON, &pr.HeadSHA, &pr.NodeID,
 		&pr.Additions, &pr.Deletions, &pr.ChangedFiles, &mergeableStatus, &ciStatus,
 		&openedAt, &updatedAt, &lastActivityAt,
 	)
