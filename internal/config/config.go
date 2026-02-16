@@ -18,20 +18,21 @@ type Config struct {
 	DBPath         string
 }
 
+// HasGitHubCredentials returns true when both GitHubToken and GitHubUsername
+// are non-empty. Used by the composition root to decide whether to create a
+// real GitHub client at startup or start with a nil client in the provider.
+func (c *Config) HasGitHubCredentials() bool {
+	return c.GitHubToken != "" && c.GitHubUsername != ""
+}
+
 // Load reads configuration from environment variables and returns a validated Config.
-// Required variables: MYGITPANEL_GITHUB_TOKEN, MYGITPANEL_GITHUB_USERNAME.
+// GitHub credentials (MYGITPANEL_GITHUB_TOKEN, MYGITPANEL_GITHUB_USERNAME) are optional;
+// if absent, the app starts but polling is inactive until credentials are provided via GUI.
 // Optional variables with defaults: MYGITPANEL_POLL_INTERVAL (5m),
 // MYGITPANEL_LISTEN_ADDR (127.0.0.1:8080), MYGITPANEL_DB_PATH (mygitpanel.db).
 func Load() (*Config, error) {
-	token, ok := os.LookupEnv("MYGITPANEL_GITHUB_TOKEN")
-	if !ok || token == "" {
-		return nil, fmt.Errorf("MYGITPANEL_GITHUB_TOKEN is required but not set")
-	}
-
-	username, ok := os.LookupEnv("MYGITPANEL_GITHUB_USERNAME")
-	if !ok || username == "" {
-		return nil, fmt.Errorf("MYGITPANEL_GITHUB_USERNAME is required but not set")
-	}
+	token := os.Getenv("MYGITPANEL_GITHUB_TOKEN")
+	username := os.Getenv("MYGITPANEL_GITHUB_USERNAME")
 
 	pollInterval := 5 * time.Minute
 	if v, ok := os.LookupEnv("MYGITPANEL_POLL_INTERVAL"); ok {

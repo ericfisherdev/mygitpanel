@@ -65,38 +65,60 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "mygitpanel.db", cfg.DBPath)
 }
 
-func TestLoad_MissingToken(t *testing.T) {
+func TestLoad_MissingToken_SucceedsWithEmptyValue(t *testing.T) {
 	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
 	cfg, err := Load()
 
-	assert.Nil(t, cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "MYGITPANEL_GITHUB_TOKEN")
+	require.NoError(t, err)
+	assert.Equal(t, "", cfg.GitHubToken)
+	assert.Equal(t, "testuser", cfg.GitHubUsername)
+	assert.False(t, cfg.HasGitHubCredentials())
 }
 
-func TestLoad_MissingUsername(t *testing.T) {
+func TestLoad_MissingUsername_SucceedsWithEmptyValue(t *testing.T) {
 	isolateConfigEnv(t)
 	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "ghp_test123")
 
 	cfg, err := Load()
 
-	assert.Nil(t, cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "MYGITPANEL_GITHUB_USERNAME")
+	require.NoError(t, err)
+	assert.Equal(t, "ghp_test123", cfg.GitHubToken)
+	assert.Equal(t, "", cfg.GitHubUsername)
+	assert.False(t, cfg.HasGitHubCredentials())
 }
 
-func TestLoad_EmptyToken(t *testing.T) {
+func TestLoad_MissingBothCredentials_SucceedsWithEmptyValues(t *testing.T) {
 	isolateConfigEnv(t)
-	t.Setenv("MYGITPANEL_GITHUB_TOKEN", "")
-	t.Setenv("MYGITPANEL_GITHUB_USERNAME", "testuser")
 
 	cfg, err := Load()
 
-	assert.Nil(t, cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "MYGITPANEL_GITHUB_TOKEN")
+	require.NoError(t, err)
+	assert.Equal(t, "", cfg.GitHubToken)
+	assert.Equal(t, "", cfg.GitHubUsername)
+	assert.False(t, cfg.HasGitHubCredentials())
+}
+
+func TestHasGitHubCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		token    string
+		username string
+		want     bool
+	}{
+		{"both set", "ghp_test", "user", true},
+		{"token empty", "", "user", false},
+		{"username empty", "ghp_test", "", false},
+		{"both empty", "", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{GitHubToken: tt.token, GitHubUsername: tt.username}
+			assert.Equal(t, tt.want, cfg.HasGitHubCredentials())
+		})
+	}
 }
 
 func TestLoad_InvalidPollInterval(t *testing.T) {
