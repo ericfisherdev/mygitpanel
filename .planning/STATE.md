@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 
 Milestone: 2026.2.0 Web GUI
 Phase: 8 of 9 (Review Workflows and Attention Signals)
-Plan: 2 of 4
+Plan: 3 of 4
 Status: In progress
-Last activity: 2026-02-15 — Completed 08-02-PLAN.md (GitHub write operations, credential hot-swap, flexible config)
+Last activity: 2026-02-15 — Completed 08-03-PLAN.md (credential GUI, review submission, comment reply, draft toggle)
 
-Progress: [==========..........] 50% (2/4 plans)
+Progress: [===============.....] 75% (3/4 plans)
 
 ## Performance Metrics
 
@@ -31,7 +31,7 @@ Progress: [==========..........] 50% (2/4 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
-| 08-review-workflows | 2/4 | 6min | 3min |
+| 08-review-workflows | 3/4 | 17min | 6min |
 
 ## Accumulated Context
 
@@ -40,6 +40,7 @@ Progress: [==========..........] 50% (2/4 plans)
 Full v1.0 decision log archived in .planning/milestones/v1.0-ROADMAP.md.
 
 Recent decisions (2026.2.0):
+
 - CalVer YYYY.MM.MICRO versioning going forward
 - templ/HTMX/Alpine.js/Tailwind/GSAP frontend stack (no React/Vue/Svelte)
 - Separate route namespaces: /api/v1/* for JSON, / and /app/* for web GUI
@@ -59,6 +60,10 @@ Recent decisions (2026.2.0):
 - Raw GraphQL mutations for draft toggle (no shurcooL/githubv4 dependency needed)
 - GitHubClientProvider with RWMutex for runtime credential hot-swap
 - Config.Load() optional GitHub credentials — backward compatible, GUI can provide at runtime
+- CredentialStatus in components/ (not partials/) to avoid import cycle with sidebar
+- Write handlers use requireGitHubClient helper returning 403 if no client configured
+- renderPRDetailRefresh shared method for consistent re-render after all write operations
+- Stored credentials take priority over env vars in composition root
 
 ### Pending Todos
 
@@ -66,11 +71,10 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 8: Draft-to-ready resolved — raw GraphQL mutations (markReadyMutation/convertToDraftMutation) following existing FetchThreadResolution pattern
 - Phase 9: Jira rate limiting is opaque — plan for research-phase during Phase 9 planning
 
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 08-02-PLAN.md (GitHub write operations and credential hot-swap)
-Resume file: .planning/phases/08-review-workflows-and-attention-signals/08-03-PLAN.md
+Stopped at: Completed 08-03-PLAN.md (credential GUI, review submission, comment reply, draft toggle)
+Resume file: .planning/phases/08-review-workflows-and-attention-signals/08-04-PLAN.md
