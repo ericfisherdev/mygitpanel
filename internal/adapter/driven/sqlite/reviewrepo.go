@@ -273,6 +273,22 @@ func (r *ReviewRepo) DeleteReviewsByPR(ctx context.Context, prID int64) error {
 	return nil
 }
 
+// CountApprovals returns the number of distinct reviewers who approved the given PR.
+func (r *ReviewRepo) CountApprovals(ctx context.Context, prID int64) (int, error) {
+	const query = `
+		SELECT COUNT(DISTINCT reviewer_login)
+		FROM reviews
+		WHERE pr_id = ? AND state = 'approved'
+	`
+
+	var count int
+	if err := r.db.Reader.QueryRowContext(ctx, query, prID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count approvals for PR %d: %w", prID, err)
+	}
+
+	return count, nil
+}
+
 func scanReview(s scanner) (*model.Review, error) {
 	var review model.Review
 	var state string

@@ -1,6 +1,7 @@
 package components
 
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+import "fmt"
 
 // RepoManager renders the add/remove repo form and watched repo list in the sidebar.
 templ RepoManager(repos []viewmodel.RepoViewModel) {
@@ -46,23 +47,47 @@ templ RepoManager(repos []viewmodel.RepoViewModel) {
 			<!-- Watched repo list -->
 			<div id="repo-list">
 				for _, repo := range repos {
-					<div class="flex items-center justify-between py-1">
-						<span class="text-xs text-gray-700 dark:text-gray-300 truncate" title={ repo.FullName }>
-							{ repo.FullName }
-						</span>
-						<button
-							hx-delete={ repo.DeletePath }
-							hx-target="#repo-list"
-							hx-swap="morph"
-							hx-ext="alpine-morph"
-							hx-confirm={ "Remove " + repo.FullName + "?" }
-							class="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors shrink-0"
-							title={ "Remove " + repo.FullName }
-						>
-							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-							</svg>
-						</button>
+					<div x-data="{ showSettings: false }">
+						<div class="flex items-center justify-between py-1">
+							<span class="text-xs text-gray-700 dark:text-gray-300 truncate" title={ repo.FullName }>
+								{ repo.FullName }
+							</span>
+							<div class="flex items-center gap-0.5 shrink-0">
+								<button
+									@click="showSettings = !showSettings"
+									hx-get={ fmt.Sprintf("/app/repos/%s/%s/settings", repo.Owner, repo.Name) }
+									hx-target={ fmt.Sprintf("#repo-settings-panel-%s-%s", repo.Owner, repo.Name) }
+									hx-swap="innerHTML"
+									hx-trigger="click once"
+									class="p-1 text-gray-400 hover:text-indigo-500 dark:text-gray-500 dark:hover:text-indigo-400 transition-colors"
+									title={ "Settings for " + repo.FullName }
+								>
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+									</svg>
+								</button>
+								<button
+									hx-delete={ repo.DeletePath }
+									hx-target="#repo-list"
+									hx-swap="morph"
+									hx-ext="alpine-morph"
+									hx-confirm={ "Remove " + repo.FullName + "?" }
+									class="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+									title={ "Remove " + repo.FullName }
+								>
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+									</svg>
+								</button>
+							</div>
+						</div>
+						<div
+							x-show="showSettings"
+							x-transition
+							id={ fmt.Sprintf("repo-settings-panel-%s-%s", repo.Owner, repo.Name) }
+							class="mb-2"
+						></div>
 					</div>
 				}
 				if len(repos) == 0 {

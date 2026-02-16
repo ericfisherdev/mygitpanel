@@ -19,4 +19,6 @@ type ReviewStore interface {
 	// DeleteReviewsByPR removes all reviews, review comments, and issue comments
 	// associated with the given PR. Used for cleanup when a PR is removed.
 	DeleteReviewsByPR(ctx context.Context, prID int64) error
+	// CountApprovals returns the number of distinct reviewers who approved the PR.
+	CountApprovals(ctx context.Context, prID int64) (int, error)
 }

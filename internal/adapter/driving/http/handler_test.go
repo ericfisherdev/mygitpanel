@@ -128,6 +128,9 @@ func (m *mockReviewStore) UpdateCommentResolution(_ context.Context, _ int64, _ 
 	return nil
 }
 func (m *mockReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error { return nil }
+func (m *mockReviewStore) CountApprovals(_ context.Context, _ int64) (int, error) {
+	return 0, nil
+}
 
 // errReviewStore returns an error from GetReviewsByPR.
 type errReviewStore struct{ mockReviewStore }

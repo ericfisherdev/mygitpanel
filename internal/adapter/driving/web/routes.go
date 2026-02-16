@@ -37,4 +37,8 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/comment", h.AddComment)
 	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/comments/{id}/reply", h.ReplyToComment)
 	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/draft", h.ToggleDraft)
+
+	// Repo settings routes.
+	mux.HandleFunc("GET /app/repos/{owner}/{repo}/settings", h.GetRepoSettings)
+	mux.HandleFunc("POST /app/repos/{owner}/{repo}/settings", h.SaveRepoSettings)
 }

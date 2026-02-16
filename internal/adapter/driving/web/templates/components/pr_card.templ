@@ -64,6 +64,21 @@ templ PRCard(card viewmodel.PRCardViewModel) {
 				</span>
 			}
 		</div>
+		<!-- Attention signal badges -->
+		if card.NeedsMoreReviews || card.IsStale {
+			<div class="flex items-center gap-2 mt-1.5 flex-wrap">
+				if card.NeedsMoreReviews {
+					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
+						{ fmt.Sprint(card.ApprovalCount) }/{ fmt.Sprint(card.RequiredReviewCount) } approvals
+					</span>
+				}
+				if card.IsStale {
+					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
+						{ fmt.Sprint(card.DaysInactive) }d inactive
+					</span>
+				}
+			</div>
+		}
 	</div>
 }
 

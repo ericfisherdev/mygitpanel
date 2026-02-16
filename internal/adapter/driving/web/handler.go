@@ -29,6 +29,7 @@ type Handler struct {
 	credentialStore driven.CredentialStore
 	repoSettings    driven.RepoSettingsStore
 	ignoreStore     driven.IgnoreStore
+	reviewStore     driven.ReviewStore
 	reviewSvc       *application.ReviewService
 	healthSvc       *application.HealthService
 	pollSvc         *application.PollService
@@ -44,6 +45,7 @@ func NewHandler(
 	credentialStore driven.CredentialStore,
 	repoSettings driven.RepoSettingsStore,
 	ignoreStore driven.IgnoreStore,
+	reviewStore driven.ReviewStore,
 	reviewSvc *application.ReviewService,
 	healthSvc *application.HealthService,
 	pollSvc *application.PollService,
@@ -57,6 +59,7 @@ func NewHandler(
 		credentialStore: credentialStore,
 		repoSettings:    repoSettings,
 		ignoreStore:     ignoreStore,
+		reviewStore:     reviewStore,
 		reviewSvc:       reviewSvc,
 		healthSvc:       healthSvc,
 		pollSvc:         pollSvc,
@@ -82,12 +85,22 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Filter out ignored PRs and count them.
+	prs, ignoredCount := h.filterIgnoredPRs(r.Context(), prs)
+
 	// Ensure CSRF cookie is set for mutating requests.
 	csrfToken(w, r)
 
 	credStatus := h.loadCredentialStatus(r.Context())
 
-	data := buildDashboardViewModel(prs, repos, credStatus)
+	cards := h.enrichPRCardsWithAttentionSignals(r.Context(), prs)
+	data := vm.DashboardViewModel{
+		Cards:            cards,
+		Repos:            toRepoViewModels(repos),
+		RepoNames:        extractRepoNames(repos),
+		CredentialStatus: credStatus,
+		IgnoredCount:     ignoredCount,
+	}
 	component := pages.Dashboard(data)
 	layout := templates.Layout("ReviewHub", component)
 
@@ -109,8 +122,11 @@ func (h *Handler) SearchPRs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Filter out ignored PRs.
+	prs, _ = h.filterIgnoredPRs(r.Context(), prs)
+
 	filtered := filterPRs(prs, query, status, repo)
-	cards := toPRCardViewModels(filtered)
+	cards := h.enrichPRCardsWithAttentionSignals(r.Context(), filtered)
 	component := partials.PRList(cards)
 
 	if err := component.Render(r.Context(), w); err != nil {
@@ -273,8 +289,11 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Filter out ignored PRs for the sidebar.
+	prs, _ = h.filterIgnoredPRs(r.Context(), prs)
+
 	repoVMs := toRepoViewModels(repos)
-	cards := toPRCardViewModels(prs)
+	cards := h.enrichPRCardsWithAttentionSignals(r.Context(), prs)
 	repoNames := extractRepoNames(repos)
 
 	// Primary target: repo list.
@@ -376,16 +395,6 @@ func (h *Handler) loadCredentialStatus(ctx context.Context) vm.CredentialStatusV
 	}
 
 	return buildCredentialStatusViewModel(token, username)
-}
-
-// buildDashboardViewModel constructs the full view model for the dashboard page.
-func buildDashboardViewModel(prs []model.PullRequest, repos []model.Repository, credStatus vm.CredentialStatusViewModel) vm.DashboardViewModel {
-	return vm.DashboardViewModel{
-		Cards:            toPRCardViewModels(prs),
-		Repos:            toRepoViewModels(repos),
-		RepoNames:        extractRepoNames(repos),
-		CredentialStatus: credStatus,
-	}
 }
 
 // toRepoViewModels converts domain repos to presentation view models.
@@ -718,6 +727,183 @@ func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Info("draft status toggled", "repo", repoFullName, "pr", number, "is_draft", newDraftState)
 	h.renderPRDetailRefresh(w, r, repoFullName, number)
+}
+
+// GetRepoSettings renders the per-repo settings form partial.
+func (h *Handler) GetRepoSettings(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	repoFullName := owner + "/" + repo
+
+	settings, err := h.repoSettings.GetSettings(r.Context(), repoFullName)
+	if err != nil {
+		h.logger.Error("failed to get repo settings", "repo", repoFullName, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	settingsVM := buildRepoSettingsViewModel(repoFullName, owner, repo, settings, false)
+	component := components.RepoSettings(settingsVM)
+
+	if err := component.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render repo settings", "error", err)
+	}
+}
+
+// SaveRepoSettings processes the repo settings form submission.
+func (h *Handler) SaveRepoSettings(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	repoFullName := owner + "/" + repo
+
+	requiredReviewCount, err := strconv.Atoi(r.FormValue("required_review_count"))
+	if err != nil || requiredReviewCount < 0 {
+		http.Error(w, "invalid required review count", http.StatusBadRequest)
+		return
+	}
+
+	urgencyDays, err := strconv.Atoi(r.FormValue("urgency_days"))
+	if err != nil || urgencyDays < 0 {
+		http.Error(w, "invalid urgency days", http.StatusBadRequest)
+		return
+	}
+
+	settings := model.RepoSettings{
+		RepoFullName:        repoFullName,
+		RequiredReviewCount: requiredReviewCount,
+		UrgencyDays:         urgencyDays,
+	}
+
+	if err := h.repoSettings.SetSettings(r.Context(), settings); err != nil {
+		h.logger.Error("failed to save repo settings", "repo", repoFullName, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("repo settings saved", "repo", repoFullName, "required_reviews", requiredReviewCount, "urgency_days", urgencyDays)
+
+	settingsVM := buildRepoSettingsViewModel(repoFullName, owner, repo, &settings, true)
+	component := components.RepoSettings(settingsVM)
+
+	if err := component.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render repo settings after save", "error", err)
+	}
+}
+
+// defaultRequiredReviewCount is the default number of approvals required when no settings exist.
+const defaultRequiredReviewCount = 2
+
+// defaultUrgencyDays is the default number of inactive days before a PR is flagged as stale.
+const defaultUrgencyDays = 7
+
+// buildRepoSettingsViewModel creates a RepoSettingsViewModel, applying defaults when settings is nil.
+func buildRepoSettingsViewModel(repoFullName, owner, repo string, settings *model.RepoSettings, saved bool) vm.RepoSettingsViewModel {
+	requiredReviewCount := defaultRequiredReviewCount
+	urgencyDays := defaultUrgencyDays
+
+	if settings != nil {
+		requiredReviewCount = settings.RequiredReviewCount
+		urgencyDays = settings.UrgencyDays
+	}
+
+	return vm.RepoSettingsViewModel{
+		RepoFullName:        repoFullName,
+		Owner:               owner,
+		Repo:                repo,
+		RequiredReviewCount: requiredReviewCount,
+		UrgencyDays:         urgencyDays,
+		Saved:               saved,
+	}
+}
+
+// filterIgnoredPRs removes ignored PRs from the slice and returns the filtered
+// list plus the total ignored count.
+func (h *Handler) filterIgnoredPRs(ctx context.Context, prs []model.PullRequest) ([]model.PullRequest, int) {
+	if h.ignoreStore == nil {
+		return prs, 0
+	}
+
+	ignored, err := h.ignoreStore.ListIgnored(ctx)
+	if err != nil {
+		h.logger.Error("failed to list ignored PRs", "error", err)
+		return prs, 0
+	}
+
+	if len(ignored) == 0 {
+		return prs, 0
+	}
+
+	ignoredSet := make(map[string]struct{}, len(ignored))
+	for _, ig := range ignored {
+		key := fmt.Sprintf("%s:%d", ig.RepoFullName, ig.PRNumber)
+		ignoredSet[key] = struct{}{}
+	}
+
+	filtered := make([]model.PullRequest, 0, len(prs))
+	for _, pr := range prs {
+		key := fmt.Sprintf("%s:%d", pr.RepoFullName, pr.Number)
+		if _, ok := ignoredSet[key]; !ok {
+			filtered = append(filtered, pr)
+		}
+	}
+
+	return filtered, len(ignored)
+}
+
+// enrichPRCardsWithAttentionSignals converts PRs to card view models and adds
+// attention signal flags based on per-repo thresholds.
+func (h *Handler) enrichPRCardsWithAttentionSignals(ctx context.Context, prs []model.PullRequest) []vm.PRCardViewModel {
+	cards := toPRCardViewModels(prs)
+
+	if h.repoSettings == nil || h.reviewStore == nil {
+		return cards
+	}
+
+	// Cache settings per repo to avoid N+1 queries.
+	settingsCache := make(map[string]*model.RepoSettings)
+
+	for i, pr := range prs {
+		settings, ok := settingsCache[pr.RepoFullName]
+		if !ok {
+			var err error
+			settings, err = h.repoSettings.GetSettings(ctx, pr.RepoFullName)
+			if err != nil {
+				h.logger.Error("failed to get repo settings for attention signals", "repo", pr.RepoFullName, "error", err)
+			}
+			settingsCache[pr.RepoFullName] = settings
+		}
+
+		requiredReviews := defaultRequiredReviewCount
+		urgencyDays := defaultUrgencyDays
+
+		if settings != nil {
+			requiredReviews = settings.RequiredReviewCount
+			urgencyDays = settings.UrgencyDays
+		}
+
+		approvalCount, err := h.reviewStore.CountApprovals(ctx, pr.ID)
+		if err != nil {
+			h.logger.Error("failed to count approvals", "pr_id", pr.ID, "error", err)
+		}
+
+		cards[i].NeedsMoreReviews = approvalCount < requiredReviews
+		cards[i].IsStale = pr.DaysSinceLastActivity() >= urgencyDays
+		cards[i].ApprovalCount = approvalCount
+		cards[i].RequiredReviewCount = requiredReviews
+		cards[i].DaysInactive = pr.DaysSinceLastActivity()
+	}
+
+	return cards
 }
 
 // renderPRDetailRefresh re-fetches PR data and renders the PR detail content partial.

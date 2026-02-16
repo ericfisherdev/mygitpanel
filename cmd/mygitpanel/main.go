@@ -119,7 +119,7 @@ func run() error {
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
 	// 7.6. Create web handler and register GUI routes.
-	webHandler := webhandler.NewHandler(prStore, repoStore, credentialStore, repoSettingsStore, ignoreStore, reviewSvc, healthSvc, pollSvc, provider, ghUsername, slog.Default())
+	webHandler := webhandler.NewHandler(prStore, repoStore, credentialStore, repoSettingsStore, ignoreStore, reviewStore, reviewSvc, healthSvc, pollSvc, provider, ghUsername, slog.Default())
 	webhandler.RegisterRoutes(mux, webHandler)
 
 	// Apply middleware.

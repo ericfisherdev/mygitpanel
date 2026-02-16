@@ -258,6 +258,10 @@ func (m *mockReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error {
 	return nil
 }
 
+func (m *mockReviewStore) CountApprovals(_ context.Context, _ int64) (int, error) {
+	return 0, nil
+}
+
 func (m *mockReviewStore) reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -51,6 +51,10 @@ func (m *mockReviewStoreForService) DeleteReviewsByPR(_ context.Context, _ int64
 	return nil
 }
 
+func (m *mockReviewStoreForService) CountApprovals(_ context.Context, _ int64) (int, error) {
+	return 0, nil
+}
+
 type mockBotConfigStoreForService struct {
 	usernames []string
 }

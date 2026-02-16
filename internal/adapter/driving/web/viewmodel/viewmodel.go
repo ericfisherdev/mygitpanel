@@ -19,6 +19,13 @@ type PRCardViewModel struct {
 	Labels                []string
 	URL                   string
 	DetailPath            string
+
+	// Attention signal fields (populated from per-repo thresholds).
+	NeedsMoreReviews    bool
+	IsStale             bool
+	ApprovalCount       int
+	RequiredReviewCount int
+	DaysInactive        int
 }
 
 // PRDetailViewModel holds presentation-ready data for the full PR detail panel.
@@ -54,6 +61,10 @@ type PRDetailViewModel struct {
 	ReviewActionURL string // POST target for review submission
 	CommentURL      string // POST target for PR-level comments
 	DraftToggleURL  string // POST target for draft toggle
+
+	// Ignore feature fields.
+	IsIgnored bool   // true if this PR has been ignored by the user
+	IgnoreURL string // POST target for ignoring this PR
 }
 
 // ReviewViewModel holds presentation-ready data for a single review.
@@ -150,4 +161,25 @@ type DashboardViewModel struct {
 	Repos            []RepoViewModel
 	RepoNames        []string // distinct repo names for search bar filter
 	CredentialStatus CredentialStatusViewModel
+	IgnoredCount     int
+}
+
+// RepoSettingsViewModel holds presentation data for the per-repo settings form.
+type RepoSettingsViewModel struct {
+	RepoFullName        string
+	Owner               string
+	Repo                string
+	RequiredReviewCount int
+	UrgencyDays         int
+	Saved               bool // true after successful save (for success banner)
+}
+
+// IgnoredPRViewModel holds presentation data for a single ignored PR.
+type IgnoredPRViewModel struct {
+	RepoFullName string
+	PRNumber     int
+	Title        string
+	Author       string
+	IgnoredAt    string
+	RestorePath  string // computed: DELETE /app/prs/{owner}/{repo}/{number}/ignore
 }
