@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
-**Current focus:** Phase 8 — GitHub Write Operations (planning needed)
+**Current focus:** Phase 8 — Review Workflows and Attention Signals
 
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
-Phase: 7 of 9 (GUI Foundation) — COMPLETE
-Plan: 3 of 3
-Status: Phase complete
-Last activity: 2026-02-14 — Completed 07-03-PLAN.md (interactive features: search, theme, repo mgmt, animations)
+Phase: 8 of 9 (Review Workflows and Attention Signals)
+Plan: 1 of 4
+Status: In progress
+Last activity: 2026-02-15 — Completed 08-01-PLAN.md (data foundation: domain models, ports, adapters, migrations)
 
-Progress: [====================] 100% (3/3 plans)
+Progress: [=====...............] 25% (1/4 plans)
 
 ## Performance Metrics
 
@@ -31,6 +31,7 @@ Progress: [====================] 100% (3/3 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
+| 08-review-workflows | 1/4 | 3min | 3min |
 
 ## Accumulated Context
 
@@ -52,6 +53,9 @@ Recent decisions (2026.2.0):
 - In-memory PR filtering for search — appropriate for expected scale, no new DB queries needed
 - htmx:afterSettle for GSAP animations — morph swaps settle after DOM morphing completes
 - OOB swap pattern: repo mutations render primary target + PRListOOB + RepoFilterOptions
+- CredentialStore.Get returns empty string for missing keys (not error) — consistent with nil-nil pattern
+- IgnoreStore.Ignore uses ON CONFLICT DO NOTHING for idempotency
+- RepoSettings foreign key to repositories with ON DELETE CASCADE
 
 ### Pending Todos
 
@@ -64,6 +68,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-14
-Stopped at: Completed Phase 7 (GUI Foundation) — all 3 plans done
-Resume file: Ready for Phase 8 planning
+Last session: 2026-02-15
+Stopped at: Completed 08-01-PLAN.md (data foundation)
+Resume file: .planning/phases/08-review-workflows-and-attention-signals/08-02-PLAN.md
