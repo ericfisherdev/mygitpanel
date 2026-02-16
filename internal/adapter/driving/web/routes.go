@@ -41,4 +41,11 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	// Repo settings routes.
 	mux.HandleFunc("GET /app/repos/{owner}/{repo}/settings", h.GetRepoSettings)
 	mux.HandleFunc("POST /app/repos/{owner}/{repo}/settings", h.SaveRepoSettings)
+
+	// PR ignore routes.
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/ignore", h.IgnorePR)
+	mux.HandleFunc("DELETE /app/prs/{owner}/{repo}/{number}/ignore", h.UnignorePR)
+
+	// Ignored PRs list page.
+	mux.HandleFunc("GET /app/ignored", h.ListIgnoredPRs)
 }

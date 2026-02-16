@@ -950,3 +950,162 @@ func (h *Handler) renderPRDetailRefresh(w http.ResponseWriter, r *http.Request, 
 		h.logger.Error("failed to render PR detail after write", "error", err)
 	}
 }
+
+// IgnorePR adds a PR to the ignore list and re-renders the PR list sidebar.
+func (h *Handler) IgnorePR(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	repoFullName := owner + "/" + repo
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.ignoreStore.Ignore(r.Context(), repoFullName, number); err != nil {
+		h.logger.Error("failed to ignore PR", "repo", repoFullName, "number", number, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("PR ignored", "repo", repoFullName, "number", number)
+
+	// Re-render the PR list (ignored PR disappears).
+	h.renderPRListRefresh(w, r)
+}
+
+// UnignorePR removes a PR from the ignore list and re-renders the ignored list.
+func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	repoFullName := owner + "/" + repo
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.ignoreStore.Unignore(r.Context(), repoFullName, number); err != nil {
+		h.logger.Error("failed to unignore PR", "repo", repoFullName, "number", number, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("PR unignored", "repo", repoFullName, "number", number)
+
+	// Re-render the ignored PRs page content.
+	h.renderIgnoredPRsContent(w, r)
+}
+
+// ListIgnoredPRs renders the ignored PRs page.
+func (h *Handler) ListIgnoredPRs(w http.ResponseWriter, r *http.Request) {
+	// Ensure CSRF cookie is set.
+	csrfToken(w, r)
+
+	ignoredVMs := h.buildIgnoredPRViewModels(r.Context())
+
+	isHTMX := r.Header.Get("HX-Request") == "true"
+	component := pages.IgnoredPRs(ignoredVMs)
+
+	if isHTMX {
+		if err := component.Render(r.Context(), w); err != nil {
+			h.logger.Error("failed to render ignored PRs partial", "error", err)
+		}
+		return
+	}
+
+	layout := templates.Layout("Ignored PRs - ReviewHub", component)
+	if err := layout.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render ignored PRs page", "error", err)
+	}
+}
+
+// buildIgnoredPRViewModels loads ignored PRs and enriches with basic PR data.
+func (h *Handler) buildIgnoredPRViewModels(ctx context.Context) []vm.IgnoredPRViewModel {
+	ignored, err := h.ignoreStore.ListIgnored(ctx)
+	if err != nil {
+		h.logger.Error("failed to list ignored PRs", "error", err)
+		return nil
+	}
+
+	vms := make([]vm.IgnoredPRViewModel, 0, len(ignored))
+	for _, ig := range ignored {
+		title := fmt.Sprintf("#%d", ig.PRNumber)
+		author := ""
+
+		// Enrich with PR data if available.
+		pr, err := h.prStore.GetByNumber(ctx, ig.RepoFullName, ig.PRNumber)
+		if err != nil {
+			h.logger.Error("failed to get PR for ignored list", "repo", ig.RepoFullName, "number", ig.PRNumber, "error", err)
+		}
+		if pr != nil {
+			title = pr.Title
+			author = pr.Author
+		}
+
+		parts := strings.SplitN(ig.RepoFullName, "/", 2)
+		owner := parts[0]
+		repo := ""
+		if len(parts) == 2 {
+			repo = parts[1]
+		}
+
+		vms = append(vms, vm.IgnoredPRViewModel{
+			RepoFullName: ig.RepoFullName,
+			PRNumber:     ig.PRNumber,
+			Title:        title,
+			Author:       author,
+			IgnoredAt:    ig.IgnoredAt.UTC().Format("2006-01-02"),
+			RestorePath:  fmt.Sprintf("/app/prs/%s/%s/%d/ignore", owner, repo, ig.PRNumber),
+		})
+	}
+
+	return vms
+}
+
+// renderPRListRefresh re-fetches PRs (excluding ignored) and renders the PR list partial.
+func (h *Handler) renderPRListRefresh(w http.ResponseWriter, r *http.Request) {
+	prs, err := h.prStore.ListAll(r.Context())
+	if err != nil {
+		h.logger.Error("failed to list PRs for refresh", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	prs, _ = h.filterIgnoredPRs(r.Context(), prs)
+	cards := h.enrichPRCardsWithAttentionSignals(r.Context(), prs)
+	component := partials.PRList(cards)
+
+	if err := component.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render PR list refresh", "error", err)
+	}
+}
+
+// renderIgnoredPRsContent re-renders the ignored PRs list content after an unignore.
+func (h *Handler) renderIgnoredPRsContent(w http.ResponseWriter, r *http.Request) {
+	ignoredVMs := h.buildIgnoredPRViewModels(r.Context())
+	component := pages.IgnoredPRs(ignoredVMs)
+
+	if err := component.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render ignored PRs content", "error", err)
+	}
+}

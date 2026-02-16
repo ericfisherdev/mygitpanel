@@ -32,6 +32,7 @@ templ PRDetail(pr viewmodel.PRDetailViewModel) {
 					</p>
 				</div>
 				<div class="flex items-center gap-2 shrink-0">
+					@IgnoreButton(pr)
 					@DraftToggle(pr)
 					<a
 						href={ templ.SafeURL(pr.URL) }

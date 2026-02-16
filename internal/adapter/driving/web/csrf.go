@@ -12,11 +12,13 @@ const (
 	csrfTokenBytes = 32
 )
 
-// csrfToken reads the CSRF token from the request cookie, or generates and
-// sets a new one if absent. Returns the token value for embedding in forms.
-func csrfToken(w http.ResponseWriter, r *http.Request) string {
+// csrfToken ensures a CSRF token cookie is set on the response. If the request
+// already has a valid CSRF cookie, this is a no-op. Otherwise, a new token is
+// generated and set. The token is readable by csrf.js to set X-CSRF-Token on
+// HTMX requests.
+func csrfToken(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(csrfCookieName); err == nil && cookie.Value != "" {
-		return cookie.Value
+		return
 	}
 
 	token := generateToken()
@@ -28,8 +30,6 @@ func csrfToken(w http.ResponseWriter, r *http.Request) string {
 		SameSite: http.SameSiteStrictMode,
 		Secure:   false, // set true when served over HTTPS
 	})
-
-	return token
 }
 
 // validateCSRF checks that the CSRF token (from header or form field) matches

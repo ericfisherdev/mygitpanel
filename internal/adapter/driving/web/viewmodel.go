@@ -72,6 +72,7 @@ func toPRDetailViewModelWithWriteCaps(
 	reviewActionURL := fmt.Sprintf("/app/prs/%s/%d/review", pr.RepoFullName, pr.Number)
 	commentURL := fmt.Sprintf("/app/prs/%s/%d/comment", pr.RepoFullName, pr.Number)
 	draftToggleURL := fmt.Sprintf("/app/prs/%s/%d/draft", pr.RepoFullName, pr.Number)
+	ignoreURL := fmt.Sprintf("/app/prs/%s/%d/ignore", pr.RepoFullName, pr.Number)
 
 	detail := vm.PRDetailViewModel{
 		PRCardViewModel: card,
@@ -95,6 +96,7 @@ func toPRDetailViewModelWithWriteCaps(
 		ReviewActionURL: reviewActionURL,
 		CommentURL:      commentURL,
 		DraftToggleURL:  draftToggleURL,
+		IgnoreURL:       ignoreURL,
 	}
 
 	if summary != nil {
