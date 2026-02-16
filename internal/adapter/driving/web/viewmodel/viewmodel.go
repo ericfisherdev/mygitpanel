@@ -28,6 +28,7 @@ type PRDetailViewModel struct {
 	Branch       string
 	BaseBranch   string
 	HeadSHA      string
+	NodeID       string
 	Additions    int
 	Deletions    int
 	ChangedFiles int
@@ -43,6 +44,16 @@ type PRDetailViewModel struct {
 	AwaitingCoderabbit  bool
 	ResolvedThreads     int
 	UnresolvedThreads   int
+
+	// Write capability flags.
+	CanReview       bool   // true if PR author != current username and credentials configured
+	CanToggleDraft  bool   // true if NodeID is non-empty and credentials configured
+	IsCurrentUser   bool   // true if PR author matches current username
+	RepoFullName    string // "owner/repo" for form action URLs
+	PRNumber        int    // PR number for form action URLs
+	ReviewActionURL string // POST target for review submission
+	CommentURL      string // POST target for PR-level comments
+	DraftToggleURL  string // POST target for draft toggle
 }
 
 // ReviewViewModel holds presentation-ready data for a single review.

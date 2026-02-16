@@ -31,4 +31,10 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	// Credential management routes.
 	mux.HandleFunc("GET /app/credentials", h.GetCredentialForm)
 	mux.HandleFunc("POST /app/credentials", h.SaveCredentials)
+
+	// PR write operation routes.
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/review", h.SubmitReview)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/comment", h.AddComment)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/comments/{id}/reply", h.ReplyToComment)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/draft", h.ToggleDraft)
 }

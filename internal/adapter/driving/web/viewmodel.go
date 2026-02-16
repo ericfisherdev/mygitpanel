@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	vm "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
@@ -43,13 +44,16 @@ func toPRCardViewModel(pr model.PullRequest) vm.PRCardViewModel {
 	}
 }
 
-// toPRDetailViewModel converts domain data into a fully enriched PRDetailViewModel.
-// Review enrichment failure is non-fatal: pass nil for summary/checkRuns if unavailable.
-func toPRDetailViewModel(
+// toPRDetailViewModelWithWriteCaps creates a PR detail view model with write capability flags.
+// username and hasCredentials control whether review/comment/draft-toggle forms are shown.
+// Pass empty username and false for hasCredentials to disable write capabilities.
+func toPRDetailViewModelWithWriteCaps(
 	pr model.PullRequest,
 	summary *application.PRReviewSummary,
 	checkRuns []model.CheckRun,
 	botUsernames []string,
+	username string,
+	hasCredentials bool,
 ) vm.PRDetailViewModel {
 	card := toPRCardViewModel(pr)
 
@@ -61,11 +65,20 @@ func toPRDetailViewModel(
 		shortSHA = shortSHA[:shortSHALength]
 	}
 
+	isCurrentUser := strings.EqualFold(pr.Author, username)
+	canReview := hasCredentials && !isCurrentUser
+	canToggleDraft := hasCredentials && pr.NodeID != ""
+
+	reviewActionURL := fmt.Sprintf("/app/prs/%s/%d/review", pr.RepoFullName, pr.Number)
+	commentURL := fmt.Sprintf("/app/prs/%s/%d/comment", pr.RepoFullName, pr.Number)
+	draftToggleURL := fmt.Sprintf("/app/prs/%s/%d/draft", pr.RepoFullName, pr.Number)
+
 	detail := vm.PRDetailViewModel{
 		PRCardViewModel: card,
 		Branch:          pr.Branch,
 		BaseBranch:      pr.BaseBranch,
 		HeadSHA:         shortSHA,
+		NodeID:          pr.NodeID,
 		Additions:       pr.Additions,
 		Deletions:       pr.Deletions,
 		ChangedFiles:    pr.ChangedFiles,
@@ -74,6 +87,14 @@ func toPRDetailViewModel(
 		IssueComments:   []vm.IssueCommentViewModel{},
 		CheckRuns:       []vm.CheckRunViewModel{},
 		Suggestions:     []vm.SuggestionViewModel{},
+		CanReview:       canReview,
+		CanToggleDraft:  canToggleDraft,
+		IsCurrentUser:   isCurrentUser,
+		RepoFullName:    pr.RepoFullName,
+		PRNumber:        pr.Number,
+		ReviewActionURL: reviewActionURL,
+		CommentURL:      commentURL,
+		DraftToggleURL:  draftToggleURL,
 	}
 
 	if summary != nil {

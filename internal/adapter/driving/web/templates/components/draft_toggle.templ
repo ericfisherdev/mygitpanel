@@ -1,0 +1,41 @@
+package components
+
+import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+
+// DraftToggle renders a button to toggle a PR between draft and ready status.
+// Disabled if NodeID is empty (required for GraphQL mutation).
+templ DraftToggle(pr viewmodel.PRDetailViewModel) {
+	if pr.CanToggleDraft {
+		<form
+			hx-post={ pr.DraftToggleURL }
+			hx-target="#pr-detail"
+			hx-swap="innerHTML"
+			class="inline-flex"
+		>
+			if pr.IsDraft {
+				<button
+					type="submit"
+					class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+					title="Mark this PR as ready for review"
+				>
+					Mark as Ready
+				</button>
+			} else {
+				<button
+					type="submit"
+					class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+					title="Convert this PR to a draft"
+				>
+					Convert to Draft
+				</button>
+			}
+		</form>
+	} else if pr.NodeID == "" {
+		<span
+			class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+			title="Node ID not available, try refreshing PR data"
+		>
+			Draft Toggle Unavailable
+		</span>
+	}
+}

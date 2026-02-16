@@ -174,7 +174,8 @@ func (h *Handler) GetPRDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	detail := toPRDetailViewModel(*pr, summary, checkRuns, botUsernames)
+	hasCredentials := h.provider != nil && h.provider.HasClient()
+	detail := toPRDetailViewModelWithWriteCaps(*pr, summary, checkRuns, botUsernames, h.username, hasCredentials)
 	component := partials.PRDetailContent(detail)
 
 	if err := component.Render(r.Context(), w); err != nil {
@@ -500,5 +501,266 @@ func buildCredentialStatusViewModel(token, username string) vm.CredentialStatusV
 		Configured:  configured,
 		Username:    username,
 		TokenMasked: masked,
+	}
+}
+
+// requireGitHubClient returns the current GitHub client from the provider.
+// If no client is configured, it writes a 403 response and returns nil.
+func (h *Handler) requireGitHubClient(w http.ResponseWriter) driven.GitHubClient {
+	client := h.provider.Get()
+	if client == nil {
+		http.Error(w, "GitHub credentials not configured", http.StatusForbidden)
+		return nil
+	}
+	return client
+}
+
+// SubmitReview submits a review (approve, request changes, or comment) on a PR.
+func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	client := h.requireGitHubClient(w)
+	if client == nil {
+		return
+	}
+
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	repoFullName := owner + "/" + repo
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	event := strings.TrimSpace(r.FormValue("event"))
+	body := strings.TrimSpace(r.FormValue("body"))
+
+	if event == "" {
+		http.Error(w, "review event is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := client.CreateReview(r.Context(), repoFullName, number, event, body); err != nil {
+		h.logger.Error("failed to submit review", "repo", repoFullName, "pr", number, "error", err)
+		http.Error(w, "failed to submit review", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("review submitted", "repo", repoFullName, "pr", number, "event", event)
+	h.renderPRDetailRefresh(w, r, repoFullName, number)
+}
+
+// AddComment adds a PR-level comment via the Issues API.
+func (h *Handler) AddComment(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	client := h.requireGitHubClient(w)
+	if client == nil {
+		return
+	}
+
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	repoFullName := owner + "/" + repo
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	body := strings.TrimSpace(r.FormValue("body"))
+	if body == "" {
+		http.Error(w, "comment body is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := client.CreateIssueComment(r.Context(), repoFullName, number, body); err != nil {
+		h.logger.Error("failed to add comment", "repo", repoFullName, "pr", number, "error", err)
+		http.Error(w, "failed to add comment", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("comment added", "repo", repoFullName, "pr", number)
+	h.renderPRDetailRefresh(w, r, repoFullName, number)
+}
+
+// ReplyToComment replies to an existing review comment thread.
+func (h *Handler) ReplyToComment(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	client := h.requireGitHubClient(w)
+	if client == nil {
+		return
+	}
+
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	commentIDStr := r.PathValue("id")
+	repoFullName := owner + "/" + repo
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	commentID, err := strconv.ParseInt(commentIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid comment ID", http.StatusBadRequest)
+		return
+	}
+
+	body := strings.TrimSpace(r.FormValue("body"))
+	if body == "" {
+		http.Error(w, "reply body is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := client.ReplyToReviewComment(r.Context(), repoFullName, number, commentID, body); err != nil {
+		h.logger.Error("failed to reply to comment", "repo", repoFullName, "pr", number, "comment", commentID, "error", err)
+		http.Error(w, "failed to reply to comment", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("replied to comment", "repo", repoFullName, "pr", number, "comment", commentID)
+	h.renderPRDetailRefresh(w, r, repoFullName, number)
+}
+
+// ToggleDraft toggles a PR's draft status via GraphQL mutation.
+func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	client := h.requireGitHubClient(w)
+	if client == nil {
+		return
+	}
+
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	repoFullName := owner + "/" + repo
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, number)
+	if err != nil {
+		h.logger.Error("failed to get PR for draft toggle", "repo", repoFullName, "number", number, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if pr == nil {
+		http.Error(w, "pull request not found", http.StatusNotFound)
+		return
+	}
+
+	if pr.NodeID == "" {
+		http.Error(w, "Node ID not available, try refreshing PR data", http.StatusBadRequest)
+		return
+	}
+
+	newDraftState := !pr.IsDraft
+	if err := client.SetDraftStatus(r.Context(), repoFullName, number, pr.NodeID, newDraftState); err != nil {
+		h.logger.Error("failed to toggle draft status", "repo", repoFullName, "pr", number, "error", err)
+		http.Error(w, "failed to toggle draft status", http.StatusInternalServerError)
+		return
+	}
+
+	// Trigger a refresh to update stored state.
+	if h.pollSvc != nil {
+		go func() { //nolint:contextcheck // intentional background context for fire-and-forget
+			if refreshErr := h.pollSvc.RefreshPR(context.Background(), repoFullName, number); refreshErr != nil {
+				h.logger.Error("async PR refresh after draft toggle failed", "repo", repoFullName, "pr", number, "error", refreshErr)
+			}
+		}()
+	}
+
+	h.logger.Info("draft status toggled", "repo", repoFullName, "pr", number, "is_draft", newDraftState)
+	h.renderPRDetailRefresh(w, r, repoFullName, number)
+}
+
+// renderPRDetailRefresh re-fetches PR data and renders the PR detail content partial.
+// Used after write operations to show updated state.
+func (h *Handler) renderPRDetailRefresh(w http.ResponseWriter, r *http.Request, repoFullName string, number int) {
+	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, number)
+	if err != nil || pr == nil {
+		h.logger.Error("failed to reload PR after write", "repo", repoFullName, "number", number, "error", err)
+		http.Error(w, "failed to reload PR data", http.StatusInternalServerError)
+		return
+	}
+
+	// Enrich with review data (non-fatal).
+	var summary *application.PRReviewSummary
+	var botUsernames []string
+
+	if h.reviewSvc != nil {
+		summary, err = h.reviewSvc.GetPRReviewSummary(r.Context(), pr.ID, pr.HeadSHA)
+		if err != nil {
+			h.logger.Error("failed to get review summary after write", "error", err)
+		}
+		if summary != nil {
+			botUsernames = summary.BotUsernames
+		}
+	}
+
+	// Enrich with health/CI data (non-fatal).
+	var checkRuns []model.CheckRun
+	if h.healthSvc != nil {
+		healthSummary, healthErr := h.healthSvc.GetPRHealthSummary(r.Context(), pr.ID, pr.RepoFullName, pr.Number)
+		if healthErr != nil {
+			h.logger.Error("failed to get health summary after write", "error", healthErr)
+		}
+		if healthSummary != nil {
+			checkRuns = healthSummary.CheckRuns
+		}
+	}
+
+	hasCredentials := h.provider != nil && h.provider.HasClient()
+	detail := toPRDetailViewModelWithWriteCaps(*pr, summary, checkRuns, botUsernames, h.username, hasCredentials)
+	component := partials.PRDetailContent(detail)
+
+	if err := component.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render PR detail after write", "error", err)
 	}
 }
