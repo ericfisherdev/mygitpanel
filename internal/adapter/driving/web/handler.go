@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	githubadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/pages"
@@ -23,33 +24,45 @@ import (
 
 // Handler is the web GUI driving adapter that serves HTML via templ components.
 type Handler struct {
-	prStore   driven.PRStore
-	repoStore driven.RepoStore
-	reviewSvc *application.ReviewService
-	healthSvc *application.HealthService
-	pollSvc   *application.PollService
-	username  string
-	logger    *slog.Logger
+	prStore         driven.PRStore
+	repoStore       driven.RepoStore
+	credentialStore driven.CredentialStore
+	repoSettings    driven.RepoSettingsStore
+	ignoreStore     driven.IgnoreStore
+	reviewSvc       *application.ReviewService
+	healthSvc       *application.HealthService
+	pollSvc         *application.PollService
+	provider        *application.GitHubClientProvider
+	username        string
+	logger          *slog.Logger
 }
 
 // NewHandler creates a Handler with all required dependencies.
 func NewHandler(
 	prStore driven.PRStore,
 	repoStore driven.RepoStore,
+	credentialStore driven.CredentialStore,
+	repoSettings driven.RepoSettingsStore,
+	ignoreStore driven.IgnoreStore,
 	reviewSvc *application.ReviewService,
 	healthSvc *application.HealthService,
 	pollSvc *application.PollService,
+	provider *application.GitHubClientProvider,
 	username string,
 	logger *slog.Logger,
 ) *Handler {
 	return &Handler{
-		prStore:   prStore,
-		repoStore: repoStore,
-		reviewSvc: reviewSvc,
-		healthSvc: healthSvc,
-		pollSvc:   pollSvc,
-		username:  username,
-		logger:    logger,
+		prStore:         prStore,
+		repoStore:       repoStore,
+		credentialStore: credentialStore,
+		repoSettings:    repoSettings,
+		ignoreStore:     ignoreStore,
+		reviewSvc:       reviewSvc,
+		healthSvc:       healthSvc,
+		pollSvc:         pollSvc,
+		provider:        provider,
+		username:        username,
+		logger:          logger,
 	}
 }
 
@@ -72,7 +85,9 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// Ensure CSRF cookie is set for mutating requests.
 	csrfToken(w, r)
 
-	data := buildDashboardViewModel(prs, repos)
+	credStatus := h.loadCredentialStatus(r.Context())
+
+	data := buildDashboardViewModel(prs, repos, credStatus)
 	component := pages.Dashboard(data)
 	layout := templates.Layout("ReviewHub", component)
 
@@ -341,12 +356,34 @@ func isValidRepoChar(ch rune) bool {
 		ch == '-' || ch == '.' || ch == '_'
 }
 
+// loadCredentialStatus fetches credential state from the store and returns a view model.
+func (h *Handler) loadCredentialStatus(ctx context.Context) vm.CredentialStatusViewModel {
+	if h.credentialStore == nil {
+		return vm.CredentialStatusViewModel{}
+	}
+
+	creds, err := h.credentialStore.GetAll(ctx, "github")
+	if err != nil {
+		h.logger.Error("failed to load credentials for dashboard", "error", err)
+		return vm.CredentialStatusViewModel{}
+	}
+
+	token := creds["token"]
+	username := creds["username"]
+	if username == "" {
+		username = h.username
+	}
+
+	return buildCredentialStatusViewModel(token, username)
+}
+
 // buildDashboardViewModel constructs the full view model for the dashboard page.
-func buildDashboardViewModel(prs []model.PullRequest, repos []model.Repository) vm.DashboardViewModel {
+func buildDashboardViewModel(prs []model.PullRequest, repos []model.Repository, credStatus vm.CredentialStatusViewModel) vm.DashboardViewModel {
 	return vm.DashboardViewModel{
-		Cards:     toPRCardViewModels(prs),
-		Repos:     toRepoViewModels(repos),
-		RepoNames: extractRepoNames(repos),
+		Cards:            toPRCardViewModels(prs),
+		Repos:            toRepoViewModels(repos),
+		RepoNames:        extractRepoNames(repos),
+		CredentialStatus: credStatus,
 	}
 }
 
@@ -371,4 +408,97 @@ func extractRepoNames(repos []model.Repository) []string {
 		names = append(names, r.FullName)
 	}
 	return names
+}
+
+// GetCredentialForm renders the credential form partial for HTMX swap.
+// Loads current credentials to pre-fill form fields (token masked to last 4 chars).
+func (h *Handler) GetCredentialForm(w http.ResponseWriter, r *http.Request) {
+	creds, err := h.credentialStore.GetAll(r.Context(), "github")
+	if err != nil {
+		h.logger.Error("failed to get credentials", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	token := creds["token"]
+	username := creds["username"]
+
+	// If no stored creds, fall back to handler username for display.
+	if username == "" {
+		username = h.username
+	}
+
+	status := buildCredentialStatusViewModel(token, username)
+
+	component := components.CredentialForm(status)
+	if err := component.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render credential form", "error", err)
+	}
+}
+
+// SaveCredentials processes the credential form submission, saves to SQLite,
+// and hot-swaps the GitHub client in the provider.
+func (h *Handler) SaveCredentials(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	token := strings.TrimSpace(r.FormValue("token"))
+	username := strings.TrimSpace(r.FormValue("username"))
+
+	if token == "" || username == "" {
+		http.Error(w, "token and username are required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	if err := h.credentialStore.Set(ctx, "github", "token", token); err != nil {
+		h.logger.Error("failed to save token", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.credentialStore.Set(ctx, "github", "username", username); err != nil {
+		h.logger.Error("failed to save username", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Hot-swap the GitHub client.
+	newClient := githubadapter.NewClient(token, username)
+	h.provider.Replace(newClient)
+
+	h.logger.Info("github credentials updated", "username", username)
+
+	status := buildCredentialStatusViewModel(token, username)
+	component := components.CredentialStatus(status)
+	if err := component.Render(ctx, w); err != nil {
+		h.logger.Error("failed to render credential status", "error", err)
+	}
+}
+
+// buildCredentialStatusViewModel creates a CredentialStatusViewModel from raw credentials.
+func buildCredentialStatusViewModel(token, username string) vm.CredentialStatusViewModel {
+	configured := token != "" && username != ""
+	masked := ""
+	if token != "" {
+		if len(token) > 4 {
+			masked = "****" + token[len(token)-4:]
+		} else {
+			masked = "****"
+		}
+	}
+
+	return vm.CredentialStatusViewModel{
+		Configured:  configured,
+		Username:    username,
+		TokenMasked: masked,
+	}
 }

@@ -68,18 +68,40 @@ func run() error {
 	reviewStore := sqliteadapter.NewReviewRepo(db)
 	checkStore := sqliteadapter.NewCheckRepo(db)
 	botConfigStore := sqliteadapter.NewBotConfigRepo(db)
+	credentialStore := sqliteadapter.NewCredentialRepo(db)
+	repoSettingsStore := sqliteadapter.NewRepoSettingsRepo(db)
+	ignoreStore := sqliteadapter.NewIgnoreRepo(db)
 
-	// 6. Create GitHub client.
-	ghClient := githubadapter.NewClient(cfg.GitHubToken, cfg.GitHubUsername)
+	// 6. Create GitHub client (may be nil if no credentials configured).
+	// Resolve credentials: stored credentials take priority over env vars.
+	ghToken := cfg.GitHubToken
+	ghUsername := cfg.GitHubUsername
+	if storedToken, err := credentialStore.Get(ctx, "github", "token"); err == nil && storedToken != "" {
+		ghToken = storedToken
+	}
+	if storedUsername, err := credentialStore.Get(ctx, "github", "username"); err == nil && storedUsername != "" {
+		ghUsername = storedUsername
+	}
+
+	var ghClient *githubadapter.Client
+	if ghToken != "" && ghUsername != "" {
+		ghClient = githubadapter.NewClient(ghToken, ghUsername)
+		slog.Info("github client created", "username", ghUsername)
+	} else {
+		slog.Info("no github credentials configured, polling disabled until credentials are provided via GUI")
+	}
+
+	// 6b. Create GitHubClientProvider for hot-swap.
+	provider := application.NewGitHubClientProvider(ghClient)
 
 	// 7. Create and start poll service.
 	pollSvc := application.NewPollService(
-		ghClient,
+		provider,
 		prStore,
 		repoStore,
 		reviewStore,
 		checkStore,
-		cfg.GitHubUsername,
+		ghUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,
 	)
@@ -97,7 +119,7 @@ func run() error {
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
 	// 7.6. Create web handler and register GUI routes.
-	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
+	webHandler := webhandler.NewHandler(prStore, repoStore, credentialStore, repoSettingsStore, ignoreStore, reviewSvc, healthSvc, pollSvc, provider, ghUsername, slog.Default())
 	webhandler.RegisterRoutes(mux, webHandler)
 
 	// Apply middleware.

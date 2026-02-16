@@ -22,7 +22,7 @@ type refreshRequest struct {
 // PollService orchestrates periodic GitHub polling, PR discovery,
 // and persistence.
 type PollService struct {
-	ghClient    driven.GitHubClient
+	ghClient    *GitHubClientProvider
 	prStore     driven.PRStore
 	repoStore   driven.RepoStore
 	reviewStore driven.ReviewStore
@@ -47,8 +47,10 @@ type PollService struct {
 }
 
 // NewPollService creates a new PollService with all required dependencies.
+// The provider may hold a nil client if no credentials are configured at startup;
+// polling is skipped until credentials are provided via the GUI.
 func NewPollService(
-	ghClient driven.GitHubClient,
+	provider *GitHubClientProvider,
 	prStore driven.PRStore,
 	repoStore driven.RepoStore,
 	reviewStore driven.ReviewStore,
@@ -58,7 +60,7 @@ func NewPollService(
 	interval time.Duration,
 ) *PollService {
 	return &PollService{
-		ghClient:    ghClient,
+		ghClient:    provider,
 		prStore:     prStore,
 		repoStore:   repoStore,
 		reviewStore: reviewStore,
@@ -171,7 +173,14 @@ func (s *PollService) RefreshPR(ctx context.Context, repoFullName string, prNumb
 }
 
 // pollAll polls all watched repositories for open PRs.
+// Returns nil without polling if no GitHub client is configured.
 func (s *PollService) pollAll(ctx context.Context) error {
+	client := s.ghClient.Get()
+	if client == nil {
+		slog.Info("no GitHub credentials configured, skipping poll")
+		return nil
+	}
+
 	start := time.Now()
 
 	// Reset per-cycle branch protection cache.
@@ -209,7 +218,13 @@ func (s *PollService) pollAll(ctx context.Context) error {
 // It fetches all PRs (open, closed, merged) and stores them unconditionally.
 // NeedsReview is still computed to flag PRs where the user is a requested reviewer.
 func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
-	prs, err := s.ghClient.FetchPullRequests(ctx, repoFullName, "all")
+	client := s.ghClient.Get()
+	if client == nil {
+		slog.Info("no GitHub credentials configured, skipping repo poll", "repo", repoFullName)
+		return nil
+	}
+
+	prs, err := client.FetchPullRequests(ctx, repoFullName, "all")
 	if err != nil {
 		return err
 	}
@@ -304,7 +319,12 @@ func IsReviewRequestedFrom(pr model.PullRequest, username string, teamSlugs []st
 // resolution for a PR and stores them via ReviewStore. Each fetch step is
 // independent -- partial failures are logged but do not abort the overall operation.
 func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest) {
-	reviews, err := s.ghClient.FetchReviews(ctx, pr.RepoFullName, pr.Number)
+	client := s.ghClient.Get()
+	if client == nil {
+		return
+	}
+
+	reviews, err := client.FetchReviews(ctx, pr.RepoFullName, pr.Number)
 	if err != nil {
 		slog.Error("fetch reviews failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 	} else {
@@ -316,7 +336,7 @@ func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest)
 		}
 	}
 
-	comments, err := s.ghClient.FetchReviewComments(ctx, pr.RepoFullName, pr.Number)
+	comments, err := client.FetchReviewComments(ctx, pr.RepoFullName, pr.Number)
 	if err != nil {
 		slog.Error("fetch review comments failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 	} else {
@@ -328,7 +348,7 @@ func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest)
 		}
 	}
 
-	issueComments, err := s.ghClient.FetchIssueComments(ctx, pr.RepoFullName, pr.Number)
+	issueComments, err := client.FetchIssueComments(ctx, pr.RepoFullName, pr.Number)
 	if err != nil {
 		slog.Error("fetch issue comments failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 	} else {
@@ -340,7 +360,7 @@ func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest)
 		}
 	}
 
-	resolutionMap, err := s.ghClient.FetchThreadResolution(ctx, pr.RepoFullName, pr.Number)
+	resolutionMap, err := client.FetchThreadResolution(ctx, pr.RepoFullName, pr.Number)
 	if err != nil {
 		slog.Error("fetch thread resolution failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 	} else {
@@ -364,8 +384,13 @@ func (s *PollService) fetchReviewData(ctx context.Context, pr model.PullRequest)
 // status checks for a PR and persists them. Each fetch step is independent --
 // partial failures are logged but do not abort the overall operation.
 func (s *PollService) fetchHealthData(ctx context.Context, pr model.PullRequest) {
+	client := s.ghClient.Get()
+	if client == nil {
+		return
+	}
+
 	// Step 1: Fetch PR detail (diff stats + mergeable status).
-	detail, err := s.ghClient.FetchPRDetail(ctx, pr.RepoFullName, pr.Number)
+	detail, err := client.FetchPRDetail(ctx, pr.RepoFullName, pr.Number)
 	if err != nil {
 		slog.Error("fetch PR detail failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 	} else if detail != nil {
@@ -379,7 +404,7 @@ func (s *PollService) fetchHealthData(ctx context.Context, pr model.PullRequest)
 	}
 
 	// Step 2: Fetch check runs.
-	checkRuns, err := s.ghClient.FetchCheckRuns(ctx, pr.RepoFullName, pr.HeadSHA)
+	checkRuns, err := client.FetchCheckRuns(ctx, pr.RepoFullName, pr.HeadSHA)
 	if err != nil {
 		slog.Error("fetch check runs failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 		return // Skip remaining check processing without check runs.
@@ -387,7 +412,7 @@ func (s *PollService) fetchHealthData(ctx context.Context, pr model.PullRequest)
 
 	// Step 3: Fetch combined status (may fail independently).
 	var combinedStatus *model.CombinedStatus
-	combinedStatus, err = s.ghClient.FetchCombinedStatus(ctx, pr.RepoFullName, pr.HeadSHA)
+	combinedStatus, err = client.FetchCombinedStatus(ctx, pr.RepoFullName, pr.HeadSHA)
 	if err != nil {
 		slog.Error("fetch combined status failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 		// Continue with nil combined status.
@@ -397,7 +422,7 @@ func (s *PollService) fetchHealthData(ctx context.Context, pr model.PullRequest)
 	cacheKey := pr.RepoFullName + "/" + pr.BaseBranch
 	requiredContexts, cached := s.branchProtectionCache[cacheKey]
 	if !cached {
-		requiredContexts, err = s.ghClient.FetchRequiredStatusChecks(ctx, pr.RepoFullName, pr.BaseBranch)
+		requiredContexts, err = client.FetchRequiredStatusChecks(ctx, pr.RepoFullName, pr.BaseBranch)
 		if err != nil {
 			slog.Error("fetch required status checks failed", "repo", pr.RepoFullName, "pr", pr.Number, "error", err)
 			// Continue with nil requiredContexts -- all checks default to not required.

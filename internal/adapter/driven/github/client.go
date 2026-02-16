@@ -323,6 +323,7 @@ func mapPullRequest(pr *gh.PullRequest, repoFullName string) model.PullRequest {
 		Branch:             pr.GetHead().GetRef(),
 		BaseBranch:         pr.GetBase().GetRef(),
 		HeadSHA:            pr.GetHead().GetSHA(),
+		NodeID:             pr.GetNodeID(),
 		Labels:             labels,
 		OpenedAt:           pr.GetCreatedAt().Time,
 		UpdatedAt:          pr.GetUpdatedAt().Time,

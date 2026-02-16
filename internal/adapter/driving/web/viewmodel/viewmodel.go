@@ -126,9 +126,17 @@ type RepoViewModel struct {
 	DeletePath string // computed: /app/repos/{owner}/{repo}
 }
 
+// CredentialStatusViewModel holds presentation data for the credential status indicator.
+type CredentialStatusViewModel struct {
+	Configured  bool
+	Username    string
+	TokenMasked string
+}
+
 // DashboardViewModel holds all data needed to render the dashboard page.
 type DashboardViewModel struct {
-	Cards     []PRCardViewModel
-	Repos     []RepoViewModel
-	RepoNames []string // distinct repo names for search bar filter
+	Cards            []PRCardViewModel
+	Repos            []RepoViewModel
+	RepoNames        []string // distinct repo names for search bar filter
+	CredentialStatus CredentialStatusViewModel
 }
