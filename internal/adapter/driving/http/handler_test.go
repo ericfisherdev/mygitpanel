@@ -148,7 +148,7 @@ var (
 
 // setupMux creates a mux with nil reviewSvc, nil healthSvc, and nil botConfigStore (backward compat).
 func setupMux(prStore *mockPRStore, repoStore *mockRepoStore) http.Handler {
-	h := httphandler.NewHandler(prStore, repoStore, nil, nil, nil, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, nil, nil, nil, nil, slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 
@@ -160,13 +160,13 @@ func setupMuxWithReview(
 	reviewStore driven.ReviewStore,
 ) http.Handler {
 	reviewSvc := application.NewReviewService(reviewStore, botConfigStore)
-	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, nil, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, nil, nil, slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 
 // setupMuxWithBots creates a mux for bot config endpoint tests.
 func setupMuxWithBots(botStore *mockBotConfigStore) http.Handler {
-	h := httphandler.NewHandler(&mockPRStore{}, &mockRepoStore{}, botStore, nil, nil, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(&mockPRStore{}, &mockRepoStore{}, botStore, nil, nil, nil, slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 
@@ -177,7 +177,7 @@ func setupMuxWithHealth(
 	checkStore driven.CheckStore,
 ) http.Handler {
 	healthSvc := application.NewHealthService(checkStore, prStore)
-	h := httphandler.NewHandler(prStore, repoStore, nil, nil, healthSvc, nil, "testuser", slog.Default())
+	h := httphandler.NewHandler(prStore, repoStore, nil, nil, healthSvc, nil, slog.Default())
 	return httphandler.NewServeMux(h, slog.Default())
 }
 

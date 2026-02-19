@@ -461,6 +461,12 @@ func (h *Handler) loadPRDetailViewModel(ctx context.Context, repoFullName string
 // GetCredentialForm renders the credential form partial for HTMX swap.
 // Loads current credentials to pre-fill form fields (token masked to last 4 chars).
 func (h *Handler) GetCredentialForm(w http.ResponseWriter, r *http.Request) {
+	if h.credentialStore == nil {
+		h.logger.Error("credentialStore is nil in GetCredentialForm")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	creds, err := h.credentialStore.GetAll(r.Context(), "github")
 	if err != nil {
 		h.logger.Error("failed to get credentials", "error", err)
@@ -509,6 +515,17 @@ func (h *Handler) SaveCredentials(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.credentialStore.Set(ctx, "github", "username", username); err != nil {
 		h.logger.Error("failed to save username", "error", err)
+		// Compensating rollback: remove the token we just stored so credentials
+		// don't end up in a partially-written state (token present, username absent).
+		if deleteErr := h.credentialStore.Delete(ctx, "github", "token"); deleteErr != nil {
+			h.logger.Error("failed to roll back token after username save failure", "error", deleteErr)
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if h.provider == nil {
+		h.logger.Error("provider is nil in SaveCredentials")
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}

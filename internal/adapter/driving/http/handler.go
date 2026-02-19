@@ -24,7 +24,6 @@ type Handler struct {
 	reviewSvc      *application.ReviewService
 	healthSvc      *application.HealthService
 	pollSvc        *application.PollService
-	username       string
 	logger         *slog.Logger
 }
 
@@ -36,7 +35,6 @@ func NewHandler(
 	reviewSvc *application.ReviewService,
 	healthSvc *application.HealthService,
 	pollSvc *application.PollService,
-	username string,
 	logger *slog.Logger,
 ) *Handler {
 	return &Handler{
@@ -46,7 +44,6 @@ func NewHandler(
 		reviewSvc:      reviewSvc,
 		healthSvc:      healthSvc,
 		pollSvc:        pollSvc,
-		username:       username,
 		logger:         logger,
 	}
 }

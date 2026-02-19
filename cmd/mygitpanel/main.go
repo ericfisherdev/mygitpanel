@@ -118,7 +118,7 @@ func run() error {
 	healthSvc := application.NewHealthService(checkStore, prStore)
 
 	// 7.5. Create HTTP handler and register API routes.
-	apiHandler := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, ghUsername, slog.Default())
+	apiHandler := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, slog.Default())
 	mux := http.NewServeMux()
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
