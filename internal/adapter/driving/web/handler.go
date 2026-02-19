@@ -173,7 +173,7 @@ func (h *Handler) GetPRDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	detail := toPRDetailViewModel(*pr, summary, checkRuns, botUsernames)
+	detail := toPRDetailViewModel(*pr, summary, checkRuns, botUsernames, h.authenticatedUsername(r.Context()))
 	component := partials.PRDetailContent(detail)
 
 	if err := component.Render(r.Context(), w); err != nil {
@@ -571,7 +571,7 @@ func (h *Handler) renderThreadAfterReply(w http.ResponseWriter, r *http.Request,
 		botUsernames = summary.BotUsernames
 	}
 
-	detail := toPRDetailViewModel(*pr, summary, nil, botUsernames)
+	detail := toPRDetailViewModel(*pr, summary, nil, botUsernames, h.authenticatedUsername(r.Context()))
 
 	// Find the specific thread to re-render.
 	for _, thread := range detail.Threads {
@@ -720,6 +720,97 @@ func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
 	h.renderReviewsSectionForPR(w, r, repoFullName, number, owner, repo)
 }
 
+// ToggleDraftStatus handles POST /app/prs/{owner}/{repo}/{number}/draft-toggle.
+// It converts a ready-for-review PR to draft (or vice-versa) and morphs the header section.
+func (h *Handler) ToggleDraftStatus(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	// Authenticate: check for GitHub token.
+	if h.credStore == nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to toggle draft status.</p>`)
+		return
+	}
+
+	token, err := h.credStore.Get(r.Context(), "github_token")
+	if err != nil || token == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to toggle draft status.</p>`)
+		return
+	}
+
+	repoFullName := owner + "/" + repo
+
+	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, number)
+	if err != nil {
+		h.logger.Error("failed to get PR for draft toggle", "repo", repoFullName, "number", number, "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: failed to load PR data</p>`)
+		return
+	}
+	if pr == nil {
+		http.Error(w, "pull request not found", http.StatusNotFound)
+		return
+	}
+
+	// Server-side author check: only the PR author can toggle draft status.
+	authUser := h.authenticatedUsername(r.Context())
+	if authUser == "" || pr.Author != authUser {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: only the PR author can toggle draft status</p>`)
+		return
+	}
+
+	// Execute the appropriate mutation based on current draft state.
+	if pr.IsDraft {
+		err = h.ghWriter.MarkPullRequestReadyForReview(r.Context(), repoFullName, number)
+	} else {
+		err = h.ghWriter.ConvertPullRequestToDraft(r.Context(), repoFullName, number)
+	}
+	if err != nil {
+		h.logger.Error("failed to toggle draft status", "repo", repoFullName, "pr", number, "error", err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		return
+	}
+
+	// Fire-and-forget background refresh so the DB catches up with new draft state.
+	if h.pollSvc != nil {
+		go func() { //nolint:contextcheck // intentional background context for fire-and-forget
+			if err := h.pollSvc.RefreshRepo(context.Background(), repoFullName); err != nil {
+				h.logger.Error("async repo refresh after draft toggle failed", "repo", repoFullName, "error", err)
+			}
+		}()
+	}
+
+	// Re-fetch PR for rendering (optimistically flip draft state since refresh is async).
+	updatedPR, err := h.prStore.GetByNumber(r.Context(), repoFullName, number)
+	if err != nil || updatedPR == nil {
+		updatedPR = pr // Fallback to pre-toggle PR if re-fetch fails.
+	}
+
+	// Optimistically flip the draft state in the view model so the UI reflects
+	// the change immediately without waiting for the async poll to complete.
+	flipped := *updatedPR
+	if flipped.IsDraft == pr.IsDraft {
+		flipped.IsDraft = !pr.IsDraft
+	}
+
+	detail := toPRDetailViewModel(flipped, nil, nil, nil, authUser)
+	comp := components.PRDetailHeader(detail)
+	if err := comp.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render PR detail header after draft toggle", "error", err)
+	}
+}
+
 // renderReviewsSectionForPR fetches the PR and its review data, then renders
 // the full PRReviewsSection component for a morph swap targeting #pr-reviews-section.
 func (h *Handler) renderReviewsSectionForPR(w http.ResponseWriter, r *http.Request, repoFullName string, prNumber int, owner, repo string) {
@@ -743,8 +834,21 @@ func (h *Handler) renderReviewsSectionForPR(w http.ResponseWriter, r *http.Reque
 		botUsernames = summary.BotUsernames
 	}
 
-	detail := toPRDetailViewModel(*pr, summary, nil, botUsernames)
+	detail := toPRDetailViewModel(*pr, summary, nil, botUsernames, h.authenticatedUsername(r.Context()))
 	h.renderReviewsSection(w, r, detail, owner, repo)
+}
+
+// authenticatedUsername returns the currently authenticated GitHub username.
+// It checks the credential store first (dynamic credentials set via GUI), then
+// falls back to the static username from configuration.
+func (h *Handler) authenticatedUsername(ctx context.Context) string {
+	if h.credStore != nil {
+		username, err := h.credStore.Get(ctx, "github_username")
+		if err == nil && username != "" {
+			return username
+		}
+	}
+	return h.username
 }
 
 // renderReviewsSection renders the PRReviewsSection component to the response writer.

@@ -34,6 +34,8 @@ type PRDetailViewModel struct {
 	Deletions    int
 	ChangedFiles int
 
+	IsOwnPR bool // True when the PR author matches the authenticated user.
+
 	Reviews       []ReviewViewModel
 	Threads       []ThreadViewModel
 	IssueComments []IssueCommentViewModel
