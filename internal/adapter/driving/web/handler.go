@@ -322,6 +322,10 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 // IgnorePR handles POST /app/prs/{id}/ignore.
 // It marks a PR as ignored and returns an OOB swap to refresh the PR list.
 func (h *Handler) IgnorePR(w http.ResponseWriter, r *http.Request) {
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -343,6 +347,10 @@ func (h *Handler) IgnorePR(w http.ResponseWriter, r *http.Request) {
 // UnignorePR handles POST /app/prs/{id}/unignore.
 // It removes a PR from the ignore list and returns an OOB swap to refresh the PR list.
 func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -366,6 +374,11 @@ func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SaveGlobalThresholds(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: invalid form data</span>`)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
 
@@ -410,6 +423,11 @@ func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	repoFullName := strings.TrimSpace(r.FormValue("repo_full_name"))
 	if repoFullName == "" {
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: repo name required</span>`)
@@ -448,6 +466,10 @@ func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
 // DeleteRepoThreshold handles DELETE /app/settings/thresholds/repo/{owner}/{repo}.
 // It removes the per-repo override and returns a success fragment + OOB PR list swap.
 func (h *Handler) DeleteRepoThreshold(w http.ResponseWriter, r *http.Request) {
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
 	owner := r.PathValue("owner")
 	repo := r.PathValue("repo")
 	repoFullName := owner + "/" + repo
@@ -632,6 +654,11 @@ func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	token := strings.TrimSpace(r.FormValue("github_token"))
 	username := strings.TrimSpace(r.FormValue("github_username"))
 
@@ -690,6 +717,11 @@ func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	jiraURL := strings.TrimSpace(r.FormValue("jira_url"))
 	jiraEmail := strings.TrimSpace(r.FormValue("jira_email"))
 	jiraToken := strings.TrimSpace(r.FormValue("jira_token"))
@@ -744,6 +776,11 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid form data</p>`)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
 
@@ -843,6 +880,11 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	body := r.FormValue("body")
 	event := r.FormValue("event")
 	commitSHA := r.FormValue("commit_sha")
@@ -922,6 +964,11 @@ func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	body := strings.TrimSpace(r.FormValue("body"))
 	if body == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -966,6 +1013,11 @@ func (h *Handler) ToggleDraftStatus(w http.ResponseWriter, r *http.Request) {
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
 		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
 
