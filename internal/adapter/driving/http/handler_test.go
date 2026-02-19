@@ -43,6 +43,9 @@ func (m *mockPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) {
 func (m *mockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
 	return m.prs, m.err
 }
+func (m *mockPRStore) ListIgnoredWithPRData(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
 func (m *mockPRStore) Delete(_ context.Context, _ string, _ int) error { return nil }
 
 type mockRepoStore struct {

@@ -113,7 +113,9 @@ func run() error {
 
 	// 7.6. Create web handler and register GUI routes.
 	// ghClient implements driven.GitHubWriter (writer.go adds the interface satisfaction).
+	attentionSvc := application.NewAttentionService(thresholdStore, reviewStore, cfg.GitHubUsername)
 	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, ghClient)
+	webHandler.WithAttentionService(attentionSvc)
 	webhandler.RegisterRoutes(mux, webHandler)
 
 	// Apply middleware.

@@ -1,6 +1,7 @@
 package components
 
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+import "fmt"
 
 // Sidebar renders the collapsible sidebar with search, PR list, and repo manager.
 templ Sidebar(data viewmodel.DashboardViewModel) {
@@ -70,6 +71,7 @@ templ Sidebar(data viewmodel.DashboardViewModel) {
 			if len(data.Cards) == 0 {
 				<p class="p-4 text-sm text-gray-400 dark:text-gray-500">No pull requests found</p>
 			}
+			@sidebarIgnoredSection(data.IgnoredPRs)
 		</div>
 		<!-- Repo manager -->
 		<div x-show="!collapsed" x-transition>
@@ -77,3 +79,44 @@ templ Sidebar(data viewmodel.DashboardViewModel) {
 		</div>
 	</aside>
 }
+
+// sidebarIgnoredSection renders the collapsible "Show ignored (N)" section
+// inside the sidebar PR list (used on initial page load).
+templ sidebarIgnoredSection(ignoredPRs []viewmodel.PRCardViewModel) {
+	if len(ignoredPRs) > 0 {
+		<div x-data="{ ignoredOpen: false }" class="mt-4 border-t border-gray-200 dark:border-gray-700 pt-2">
+			<button
+				@click="ignoredOpen = !ignoredOpen"
+				class="w-full text-left text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 px-2 py-1 flex items-center justify-between"
+				type="button"
+			>
+				<span>{ fmt.Sprintf("Show ignored (%d)", len(ignoredPRs)) }</span>
+				<svg
+					x-bind:class="ignoredOpen ? 'rotate-180' : ''"
+					class="w-3 h-3 transition-transform"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+				</svg>
+			</button>
+			<div x-show="ignoredOpen" x-transition class="mt-1 space-y-1">
+				for _, pr := range ignoredPRs {
+					<div class="flex items-center justify-between px-2 py-1 rounded text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50">
+						<span class="truncate text-xs">{ pr.Repository } #{ fmt.Sprint(pr.Number) } { pr.Title }</span>
+						<button
+							hx-post={ fmt.Sprintf("/app/prs/%d/unignore", pr.ID) }
+							hx-target="#pr-list"
+							hx-swap="morph"
+							hx-ext="alpine-morph"
+							class="ml-2 shrink-0 text-xs text-indigo-500 hover:underline"
+							type="button"
+						>Restore</button>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
