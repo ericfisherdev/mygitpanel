@@ -3,6 +3,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -482,4 +483,274 @@ func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Jira credentials saved</span>`)
+}
+
+// CreateReplyComment handles POST /app/prs/{owner}/{repo}/{number}/comments/{rootID}/reply.
+// It creates a reply to an existing review thread and re-renders the thread via morph swap.
+func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	rootIDStr := r.PathValue("rootID")
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	rootID, err := strconv.ParseInt(rootIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid comment ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid form data</p>`)
+		return
+	}
+
+	body := strings.TrimSpace(r.FormValue("body"))
+	commitSHA := r.FormValue("commit_sha")
+	filePath := r.FormValue("path")
+
+	if body == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: reply body cannot be empty</p>`)
+		return
+	}
+
+	// Authenticate: check for GitHub token.
+	if h.credStore == nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to reply to comments.</p>`)
+		return
+	}
+
+	token, err := h.credStore.Get(r.Context(), "github_token")
+	if err != nil || token == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to reply to comments.</p>`)
+		return
+	}
+
+	repoFullName := owner + "/" + repo
+
+	if err := h.ghWriter.CreateReplyComment(r.Context(), repoFullName, number, rootID, body, filePath, commitSHA); err != nil {
+		h.logger.Error("failed to create reply comment", "repo", repoFullName, "pr", number, "error", err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		return
+	}
+
+	// Re-fetch PR and render the updated thread for morph swap targeting #thread-{rootID}.
+	h.renderThreadAfterReply(w, r, repoFullName, number, rootID, owner, repo)
+}
+
+// renderThreadAfterReply fetches updated PR review data and renders just the
+// updated thread component for morph swap targeting #thread-{rootID}.
+func (h *Handler) renderThreadAfterReply(w http.ResponseWriter, r *http.Request, repoFullName string, prNumber int, rootID int64, owner, repo string) {
+	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, prNumber)
+	if err != nil || pr == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: failed to load PR after reply</p>`)
+		return
+	}
+
+	var summary *application.PRReviewSummary
+	if h.reviewSvc != nil {
+		summary, err = h.reviewSvc.GetPRReviewSummary(r.Context(), pr.ID, pr.HeadSHA)
+		if err != nil {
+			h.logger.Error("failed to get review summary after reply", "error", err)
+		}
+	}
+
+	var botUsernames []string
+	if summary != nil {
+		botUsernames = summary.BotUsernames
+	}
+
+	detail := toPRDetailViewModel(*pr, summary, nil, botUsernames)
+
+	// Find the specific thread to re-render.
+	for _, thread := range detail.Threads {
+		if thread.RootComment.ID == rootID {
+			comp := components.ReviewThread(thread, owner, repo, prNumber)
+			if err := comp.Render(r.Context(), w); err != nil {
+				h.logger.Error("failed to render review thread", "error", err)
+			}
+			return
+		}
+	}
+
+	// Thread not found — fallback: re-render the whole reviews section.
+	h.renderReviewsSection(w, r, detail, owner, repo)
+}
+
+// SubmitReview handles POST /app/prs/{owner}/{repo}/{number}/review.
+// It submits a pull request review and re-renders the full reviews section.
+func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid form data</p>`)
+		return
+	}
+
+	body := r.FormValue("body")
+	event := r.FormValue("event")
+	commitSHA := r.FormValue("commit_sha")
+	commentsJSON := r.FormValue("comments")
+
+	// Validate event.
+	switch event {
+	case "APPROVE", "REQUEST_CHANGES", "COMMENT":
+		// valid
+	default:
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid review event; must be APPROVE, REQUEST_CHANGES, or COMMENT</p>`)
+		return
+	}
+
+	// Decode pending line comments (empty array and empty string are both valid).
+	var lineComments []driven.DraftLineComment
+	if commentsJSON != "" && commentsJSON != "null" {
+		if err := json.Unmarshal([]byte(commentsJSON), &lineComments); err != nil {
+			h.logger.Error("failed to decode line comments JSON", "error", err)
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid pending comments format</p>`)
+			return
+		}
+	}
+
+	// Authenticate: check for GitHub token.
+	if h.credStore == nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to submit reviews.</p>`)
+		return
+	}
+
+	token, err := h.credStore.Get(r.Context(), "github_token")
+	if err != nil || token == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to submit reviews.</p>`)
+		return
+	}
+
+	repoFullName := owner + "/" + repo
+
+	req := driven.ReviewRequest{
+		CommitID: commitSHA,
+		Event:    event,
+		Body:     body,
+		Comments: lineComments,
+	}
+
+	if err := h.ghWriter.SubmitReview(r.Context(), repoFullName, number, req); err != nil {
+		h.logger.Error("failed to submit review", "repo", repoFullName, "pr", number, "error", err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		return
+	}
+
+	// Re-fetch and re-render the full reviews section for morph swap.
+	h.renderReviewsSectionForPR(w, r, repoFullName, number, owner, repo)
+}
+
+// CreateIssueComment handles POST /app/prs/{owner}/{repo}/{number}/issue-comments.
+// It creates a general PR comment and re-renders the full reviews section.
+func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid form data</p>`)
+		return
+	}
+
+	body := strings.TrimSpace(r.FormValue("body"))
+	if body == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: comment body cannot be empty</p>`)
+		return
+	}
+
+	// Authenticate: check for GitHub token.
+	if h.credStore == nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to post comments.</p>`)
+		return
+	}
+
+	token, err := h.credStore.Get(r.Context(), "github_token")
+	if err != nil || token == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to post comments.</p>`)
+		return
+	}
+
+	repoFullName := owner + "/" + repo
+
+	if err := h.ghWriter.CreateIssueComment(r.Context(), repoFullName, number, body); err != nil {
+		h.logger.Error("failed to create issue comment", "repo", repoFullName, "pr", number, "error", err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		return
+	}
+
+	// Re-fetch and re-render the full reviews section for morph swap.
+	h.renderReviewsSectionForPR(w, r, repoFullName, number, owner, repo)
+}
+
+// renderReviewsSectionForPR fetches the PR and its review data, then renders
+// the full PRReviewsSection component for a morph swap targeting #pr-reviews-section.
+func (h *Handler) renderReviewsSectionForPR(w http.ResponseWriter, r *http.Request, repoFullName string, prNumber int, owner, repo string) {
+	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, prNumber)
+	if err != nil || pr == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: failed to load PR data</p>`)
+		return
+	}
+
+	var summary *application.PRReviewSummary
+	if h.reviewSvc != nil {
+		summary, err = h.reviewSvc.GetPRReviewSummary(r.Context(), pr.ID, pr.HeadSHA)
+		if err != nil {
+			h.logger.Error("failed to get review summary after submit", "error", err)
+		}
+	}
+
+	var botUsernames []string
+	if summary != nil {
+		botUsernames = summary.BotUsernames
+	}
+
+	detail := toPRDetailViewModel(*pr, summary, nil, botUsernames)
+	h.renderReviewsSection(w, r, detail, owner, repo)
+}
+
+// renderReviewsSection renders the PRReviewsSection component to the response writer.
+func (h *Handler) renderReviewsSection(w http.ResponseWriter, r *http.Request, detail vm.PRDetailViewModel, owner, repo string) {
+	comp := components.PRReviewsSection(detail, owner, repo)
+	if err := comp.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render reviews section", "error", err)
+	}
 }

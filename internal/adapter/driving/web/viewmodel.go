@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	vm "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
@@ -61,8 +62,16 @@ func toPRDetailViewModel(
 		shortSHA = shortSHA[:shortSHALength]
 	}
 
+	repoParts := strings.SplitN(pr.RepoFullName, "/", 2)
+	owner, repoName := "", pr.RepoFullName
+	if len(repoParts) == 2 {
+		owner, repoName = repoParts[0], repoParts[1]
+	}
+
 	detail := vm.PRDetailViewModel{
 		PRCardViewModel: card,
+		Owner:           owner,
+		RepoName:        repoName,
 		Branch:          pr.Branch,
 		BaseBranch:      pr.BaseBranch,
 		HeadSHA:         shortSHA,

@@ -31,4 +31,9 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	// Settings / credential management routes.
 	mux.HandleFunc("POST /app/settings/github", h.SaveGitHubCredentials)
 	mux.HandleFunc("POST /app/settings/jira", h.SaveJiraCredentials)
+
+	// Review write routes.
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/comments/{rootID}/reply", h.CreateReplyComment)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/review", h.SubmitReview)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/issue-comments", h.CreateIssueComment)
 }
