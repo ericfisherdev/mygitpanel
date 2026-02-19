@@ -62,7 +62,7 @@ Plans:
   3. User can toggle a PR between active and draft status from the PR detail view
   4. User can configure per-repo review count thresholds and age-based urgency days, and PRs are visually flagged when they exceed these thresholds
   5. User can ignore a PR to hide it from the feed, view the ignore list, and re-add previously ignored PRs
-**Plans:** 5 plans
+**Plans:** 4/5 plans executed
 
 Plans:
 - [x] 08-01-PLAN.md — Data foundation: domain models, port interfaces, migrations 000010-000012, SQLite repos (credentials, thresholds, ignore list)
@@ -99,5 +99,5 @@ Phases execute in numeric order: 7 → 8 → 9
 | 5. PR Health Signals | v1.0 | 3/3 | Complete | 2026-02-13 |
 | 6. Docker Deployment | v1.0 | 2/2 | Complete | 2026-02-14 |
 | 7. GUI Foundation | 2026.2.0 | 3/3 | Complete | 2026-02-15 |
-| 8. Review Workflows and Attention Signals | 2026.2.0 | 2/5 | In progress | - |
+| 8. Review Workflows and Attention Signals | 4/5 | In Progress|  | - |
 | 9. Jira Integration | 2026.2.0 | 0/TBD | Not started | - |

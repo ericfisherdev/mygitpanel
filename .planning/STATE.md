@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 
 Milestone: 2026.2.0 Web GUI
 Phase: 8 of 9 (Review Workflows and Attention Signals) — IN PROGRESS
-Plan: 4 of 5
+Plan: 5 of 5
 Status: In progress
-Last activity: 2026-02-19 — Completed 08-03-PLAN.md (review workflows: threaded display, inline reply, review submit)
+Last activity: 2026-02-19 — Completed 08-04-PLAN.md (draft status toggle: GraphQL mutations, toggle button, IsOwnPR)
 
-Progress: [============        ] 60% (3/5 plans)
+Progress: [================    ] 80% (4/5 plans)
 
 ## Performance Metrics
 
@@ -31,7 +31,7 @@ Progress: [============        ] 60% (3/5 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
-| 08-review-workflows-and-attention-signals | 2/5 | 29min | 14.5min |
+| 08-review-workflows-and-attention-signals | 4/5 | 33min | 8.25min |
 
 ## Accumulated Context
 
@@ -67,6 +67,10 @@ Recent decisions (2026.2.0):
 - ReviewThread component receives owner/repo/prNumber as separate args to keep view model clean
 - CreateReplyComment morphs only the affected #thread-{rootID}; SubmitReview/CreateIssueComment morph #pr-reviews-section
 - Write handlers auth-gate via credStore.Get before calling ghWriter; missing token returns 422 with actionable HTML fragment
+- Draft toggle GraphQL mutations use pullRequestId variable (not id) per GitHub API spec; node_id fetched on-demand via REST
+- Optimistic draft flip in ToggleDraftStatus handler: UI updates immediately, background poll brings DB to consistency
+- PRDetailHeader extracted as named templ component with id=pr-detail-header for morph swap on toggle response
+- authenticatedUsername helper: checks credStore github_username first, falls back to static config username
 
 ### Pending Todos
 
@@ -74,11 +78,10 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 8: Draft-to-ready is GraphQL-only — extend hand-rolled graphql.go client (research confirmed this is the right approach)
 - Phase 9: Jira rate limiting is opaque — plan for research-phase during Phase 9 planning
 
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 08-03-PLAN.md (review workflows: threaded display, inline reply, review submit)
-Resume file: Ready for 08-04-PLAN.md
+Stopped at: Completed 08-04-PLAN.md (draft status toggle: GraphQL mutations, toggle button, IsOwnPR)
+Resume file: Ready for 08-05-PLAN.md
