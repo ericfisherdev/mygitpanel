@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
-**Current focus:** Phase 8 — Review Workflows and Attention Signals
+**Current focus:** Phase 9 — Jira Integration
 
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
-Phase: 8 of 9 (Review Workflows and Attention Signals) — IN PROGRESS
+Phase: 8 of 9 (Review Workflows and Attention Signals) — COMPLETE
 Plan: 5 of 5
-Status: In progress
-Last activity: 2026-02-19 — Completed 08-04-PLAN.md (draft status toggle: GraphQL mutations, toggle button, IsOwnPR)
+Status: Complete
+Last activity: 2026-02-19 — Completed 08-05-PLAN.md (attention signals, ignore workflow, threshold UI)
 
-Progress: [================    ] 80% (4/5 plans)
+Progress: [====================] 100% (5/5 plans)
 
 ## Performance Metrics
 
@@ -31,7 +31,7 @@ Progress: [================    ] 80% (4/5 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
-| 08-review-workflows-and-attention-signals | 4/5 | 33min | 8.25min |
+| 08-review-workflows-and-attention-signals | 5/5 | 54min | 10.8min |
 
 ## Accumulated Context
 
@@ -71,6 +71,9 @@ Recent decisions (2026.2.0):
 - Optimistic draft flip in ToggleDraftStatus handler: UI updates immediately, background poll brings DB to consistency
 - PRDetailHeader extracted as named templ component with id=pr-detail-header for morph swap on toggle response
 - authenticatedUsername helper: checks credStore github_username first, falls back to static config username
+- [Phase 08-review-workflows-and-attention-signals]: PRListOOB passes []model.PullRequest for ignored section; sidebar uses []vm.PRCardViewModel — no conversion in OOB path
+- [Phase 08-review-workflows-and-attention-signals]: WithAttentionService post-construction injection avoids circular dependency between Handler and AttentionService
+- [Phase 08-review-workflows-and-attention-signals]: Layout.templ accepts GlobalSettings to pre-populate threshold form in SettingsDrawer
 
 ### Pending Todos
 
@@ -83,5 +86,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 08-04-PLAN.md (draft status toggle: GraphQL mutations, toggle button, IsOwnPR)
-Resume file: Ready for 08-05-PLAN.md
+Stopped at: Completed 08-05-PLAN.md (attention signals, ignore workflow, threshold UI) — Phase 8 complete
+Resume file: Ready for Phase 9 planning
