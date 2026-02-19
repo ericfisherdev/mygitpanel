@@ -726,11 +726,17 @@ func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
 	// Update stored state so the re-render reflects the new draft status.
 	// When pollSvc is available, a full GitHub re-fetch keeps the store authoritative.
 	// When pollSvc is absent, apply an optimistic local update so the UI isn't stale.
+	// Update stored state so the re-render reflects the new draft status.
+	// Prefer a full GitHub re-fetch via pollSvc; fall back to an optimistic local
+	// upsert when pollSvc is absent or the refresh fails.
+	needsOptimisticUpdate := h.pollSvc == nil
 	if h.pollSvc != nil {
 		if refreshErr := h.pollSvc.RefreshPR(r.Context(), repoFullName, number); refreshErr != nil {
 			h.logger.Error("PR refresh after draft toggle failed", "repo", repoFullName, "pr", number, "error", refreshErr)
+			needsOptimisticUpdate = true
 		}
-	} else {
+	}
+	if needsOptimisticUpdate {
 		pr.IsDraft = newDraftState
 		if upsertErr := h.prStore.Upsert(r.Context(), *pr); upsertErr != nil {
 			h.logger.Error("optimistic draft state upsert failed", "repo", repoFullName, "pr", number, "error", upsertErr)
