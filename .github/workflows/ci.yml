@@ -19,6 +19,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.977
+
+      - name: Generate templ
+        run: templ generate
+
       - name: Run go fmt
         run: |
           fmt_output=$(gofmt -l .)
@@ -49,6 +55,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.977
+
+      - name: Generate templ
+        run: templ generate
+
       - name: Download dependencies
         run: go mod download
 
@@ -73,6 +85,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.977
+
+      - name: Generate templ
+        run: templ generate
+
       - name: Build
         run: go build -v ./...
 
@@ -87,6 +105,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.977
+
+      - name: Generate templ
+        run: templ generate
 
       - name: Cache govulncheck
         uses: actions/cache@v4
