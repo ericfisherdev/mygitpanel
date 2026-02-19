@@ -123,14 +123,38 @@ func (c *Client) CreateIssueComment(ctx context.Context, repoFullName string, pr
 	return nil
 }
 
-// ConvertPullRequestToDraft converts a ready-for-review PR to draft status.
-// Full implementation in Plan 04.
-func (c *Client) ConvertPullRequestToDraft(_ context.Context, _ string, _ int) error {
-	return fmt.Errorf("not yet implemented")
+// ConvertPullRequestToDraft converts a ready-for-review PR to draft status using
+// the GitHub GraphQL API. The PR node ID is fetched on-demand via REST.
+func (c *Client) ConvertPullRequestToDraft(ctx context.Context, repoFullName string, prNumber int) error {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return err
+	}
+	pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		return fmt.Errorf("fetching PR node ID: %w", err)
+	}
+	nodeID := pr.GetNodeID()
+	if nodeID == "" {
+		return fmt.Errorf("PR node ID is empty — cannot execute GraphQL mutation")
+	}
+	return c.executeDraftMutation(ctx, convertToDraftMutation, nodeID)
 }
 
-// MarkPullRequestReadyForReview converts a draft PR to ready-for-review status.
-// Full implementation in Plan 04.
-func (c *Client) MarkPullRequestReadyForReview(_ context.Context, _ string, _ int) error {
-	return fmt.Errorf("not yet implemented")
+// MarkPullRequestReadyForReview converts a draft PR to ready-for-review status using
+// the GitHub GraphQL API. The PR node ID is fetched on-demand via REST.
+func (c *Client) MarkPullRequestReadyForReview(ctx context.Context, repoFullName string, prNumber int) error {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return err
+	}
+	pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		return fmt.Errorf("fetching PR node ID: %w", err)
+	}
+	nodeID := pr.GetNodeID()
+	if nodeID == "" {
+		return fmt.Errorf("PR node ID is empty — cannot execute GraphQL mutation")
+	}
+	return c.executeDraftMutation(ctx, markReadyMutation, nodeID)
 }
