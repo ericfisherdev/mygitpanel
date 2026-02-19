@@ -723,10 +723,17 @@ func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Refresh stored state synchronously so the re-render reflects the new draft status.
+	// Update stored state so the re-render reflects the new draft status.
+	// When pollSvc is available, a full GitHub re-fetch keeps the store authoritative.
+	// When pollSvc is absent, apply an optimistic local update so the UI isn't stale.
 	if h.pollSvc != nil {
 		if refreshErr := h.pollSvc.RefreshPR(r.Context(), repoFullName, number); refreshErr != nil {
 			h.logger.Error("PR refresh after draft toggle failed", "repo", repoFullName, "pr", number, "error", refreshErr)
+		}
+	} else {
+		pr.IsDraft = newDraftState
+		if upsertErr := h.prStore.Upsert(r.Context(), *pr); upsertErr != nil {
+			h.logger.Error("optimistic draft state upsert failed", "repo", repoFullName, "pr", number, "error", upsertErr)
 		}
 	}
 
@@ -737,6 +744,12 @@ func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
 // GetRepoSettings renders the per-repo settings form partial.
 func (h *Handler) GetRepoSettings(w http.ResponseWriter, r *http.Request) {
 	owner, repo, repoFullName := parseRepoParams(r)
+
+	if h.repoSettings == nil {
+		h.logger.Error("repoSettings is nil in GetRepoSettings", "repo", repoFullName)
+		http.Error(w, "repo settings not available", http.StatusInternalServerError)
+		return
+	}
 
 	settings, err := h.repoSettings.GetSettings(r.Context(), repoFullName)
 	if err != nil {
@@ -760,6 +773,12 @@ func (h *Handler) SaveRepoSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	owner, repo, repoFullName := parseRepoParams(r)
+
+	if h.repoSettings == nil {
+		h.logger.Error("repoSettings is nil in SaveRepoSettings", "repo", repoFullName)
+		http.Error(w, "repo settings not available", http.StatusInternalServerError)
+		return
+	}
 
 	requiredReviewCount, err := strconv.Atoi(r.FormValue("required_review_count"))
 	if err != nil || requiredReviewCount < 0 {
@@ -934,6 +953,12 @@ func (h *Handler) IgnorePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.ignoreStore == nil {
+		h.logger.Error("ignoreStore is nil in IgnorePR", "repo", repoFullName, "number", number)
+		http.Error(w, "ignore feature not available", http.StatusInternalServerError)
+		return
+	}
+
 	if err := h.ignoreStore.Ignore(r.Context(), repoFullName, number); err != nil {
 		h.logger.Error("failed to ignore PR", "repo", repoFullName, "number", number, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -955,6 +980,12 @@ func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
 
 	repoFullName, number, ok := parsePRParams(w, r)
 	if !ok {
+		return
+	}
+
+	if h.ignoreStore == nil {
+		h.logger.Error("ignoreStore is nil in UnignorePR", "repo", repoFullName, "number", number)
+		http.Error(w, "ignore feature not available", http.StatusInternalServerError)
 		return
 	}
 
@@ -995,6 +1026,10 @@ func (h *Handler) ListIgnoredPRs(w http.ResponseWriter, r *http.Request) {
 
 // buildIgnoredPRViewModels loads ignored PRs and enriches with basic PR data.
 func (h *Handler) buildIgnoredPRViewModels(ctx context.Context) []vm.IgnoredPRViewModel {
+	if h.ignoreStore == nil {
+		return nil
+	}
+
 	ignored, err := h.ignoreStore.ListIgnored(ctx)
 	if err != nil {
 		h.logger.Error("failed to list ignored PRs", "error", err)
