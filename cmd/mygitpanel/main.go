@@ -18,6 +18,7 @@ import (
 	webhandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web"
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/config"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 func main() {
@@ -87,7 +88,7 @@ func run() error {
 		ghUsername = storedUsername
 	}
 
-	var ghClient *githubadapter.Client
+	var ghClient driven.GitHubClient
 	if ghToken != "" && ghUsername != "" {
 		ghClient = githubadapter.NewClient(ghToken, ghUsername)
 		slog.Info("github client created", "username", ghUsername)
@@ -122,7 +123,7 @@ func run() error {
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
 	// 7.6. Create web handler and register GUI routes.
-	webHandler := webhandler.NewHandler(prStore, repoStore, credentialStore, repoSettingsStore, ignoreStore, reviewStore, reviewSvc, healthSvc, pollSvc, provider, ghUsername, slog.Default())
+	webHandler := webhandler.NewHandler(prStore, repoStore, credentialStore, repoSettingsStore, ignoreStore, reviewStore, reviewSvc, healthSvc, pollSvc, provider, slog.Default())
 	webhandler.RegisterRoutes(mux, webHandler)
 
 	// Apply middleware.

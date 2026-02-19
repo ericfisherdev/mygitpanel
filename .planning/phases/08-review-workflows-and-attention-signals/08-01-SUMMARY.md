@@ -62,7 +62,7 @@ completed: 2026-02-16
 
 - 3 new domain models (Credential, RepoSettings, IgnoredPR) with zero external dependencies
 - 3 new port interfaces (CredentialStore, RepoSettingsStore, IgnoreStore) with documented error contracts
-- 3 new SQLite adapters with compile-time interface checks and 18 passing tests
+- 3 new SQLite adapters with compile-time interface checks and 16 passing tests
 - PullRequest.NodeID field added and integrated into all PR repo queries
 - 4 migration pairs (000010-000013) for credentials, repo_settings, ignored_prs, and node_id
 

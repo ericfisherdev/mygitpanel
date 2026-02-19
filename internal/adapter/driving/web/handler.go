@@ -34,7 +34,6 @@ type Handler struct {
 	healthSvc       *application.HealthService
 	pollSvc         *application.PollService
 	provider        *application.GitHubClientProvider
-	username        string
 	logger          *slog.Logger
 }
 
@@ -50,7 +49,6 @@ func NewHandler(
 	healthSvc *application.HealthService,
 	pollSvc *application.PollService,
 	provider *application.GitHubClientProvider,
-	username string,
 	logger *slog.Logger,
 ) *Handler {
 	return &Handler{
@@ -64,7 +62,6 @@ func NewHandler(
 		healthSvc:       healthSvc,
 		pollSvc:         pollSvc,
 		provider:        provider,
-		username:        username,
 		logger:          logger,
 	}
 }
@@ -344,8 +341,8 @@ func (h *Handler) loadCredentialStatus(ctx context.Context) vm.CredentialStatusV
 
 	token := creds["token"]
 	username := creds["username"]
-	if username == "" {
-		username = h.username
+	if username == "" && h.provider != nil {
+		username = h.provider.Username()
 	}
 
 	return buildCredentialStatusViewModel(token, username)
@@ -453,7 +450,11 @@ func (h *Handler) loadPRDetailViewModel(ctx context.Context, repoFullName string
 	}
 
 	hasCredentials := h.provider != nil && h.provider.HasClient()
-	detail := toPRDetailViewModelWithWriteCaps(*pr, summary, checkRuns, botUsernames, h.username, hasCredentials)
+	currentUsername := ""
+	if h.provider != nil {
+		currentUsername = h.provider.Username()
+	}
+	detail := toPRDetailViewModelWithWriteCaps(*pr, summary, checkRuns, botUsernames, currentUsername, hasCredentials)
 	return &detail, nil
 }
 
@@ -470,9 +471,9 @@ func (h *Handler) GetCredentialForm(w http.ResponseWriter, r *http.Request) {
 	token := creds["token"]
 	username := creds["username"]
 
-	// If no stored creds, fall back to handler username for display.
-	if username == "" {
-		username = h.username
+	// If no stored creds, fall back to provider username for display.
+	if username == "" && h.provider != nil {
+		username = h.provider.Username()
 	}
 
 	status := buildCredentialStatusViewModel(token, username)
@@ -699,13 +700,11 @@ func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trigger a refresh to update stored state.
+	// Refresh stored state synchronously so the re-render reflects the new draft status.
 	if h.pollSvc != nil {
-		go func() { //nolint:contextcheck // intentional background context for fire-and-forget
-			if refreshErr := h.pollSvc.RefreshPR(context.Background(), repoFullName, number); refreshErr != nil {
-				h.logger.Error("async PR refresh after draft toggle failed", "repo", repoFullName, "pr", number, "error", refreshErr)
-			}
-		}()
+		if refreshErr := h.pollSvc.RefreshPR(r.Context(), repoFullName, number); refreshErr != nil {
+			h.logger.Error("PR refresh after draft toggle failed", "repo", repoFullName, "pr", number, "error", refreshErr)
+		}
 	}
 
 	h.logger.Info("draft status toggled", "repo", repoFullName, "pr", number, "is_draft", newDraftState)
