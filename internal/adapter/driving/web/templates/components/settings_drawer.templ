@@ -1,0 +1,205 @@
+package components
+
+// SettingsDrawer renders the slide-in settings drawer controlled by Alpine $store.drawer.
+// The drawer is always present in the DOM (rendered outside any HTMX swap target in
+// the layout) so that Alpine state survives morph swaps.
+templ SettingsDrawer() {
+	<!-- Settings drawer backdrop -->
+	<div
+		x-show="$store.drawer.open"
+		x-transition:enter="transition ease-out duration-200"
+		x-transition:enter-start="opacity-0"
+		x-transition:enter-end="opacity-100"
+		x-transition:leave="transition ease-in duration-150"
+		x-transition:leave-start="opacity-100"
+		x-transition:leave-end="opacity-0"
+		class="fixed inset-0 bg-black/40 z-40"
+		@click="$store.drawer.hide()"
+		aria-hidden="true"
+	></div>
+	<!-- Settings drawer panel -->
+	<div
+		x-show="$store.drawer.open"
+		x-transition:enter="transition ease-out duration-200"
+		x-transition:enter-start="translate-x-full"
+		x-transition:enter-end="translate-x-0"
+		x-transition:leave="transition ease-in duration-150"
+		x-transition:leave-start="translate-x-0"
+		x-transition:leave-end="translate-x-full"
+		class="fixed right-0 top-0 h-full w-96 bg-white dark:bg-gray-800 shadow-xl z-50 overflow-y-auto flex flex-col"
+		role="dialog"
+		aria-label="Settings"
+		aria-modal="true"
+	>
+		<!-- Panel header -->
+		<div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+			<h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Settings</h2>
+			<button
+				type="button"
+				@click="$store.drawer.hide()"
+				class="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+				aria-label="Close settings"
+			>
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
+		<!-- Sections navigation tabs -->
+		<div class="flex border-b border-gray-200 dark:border-gray-700">
+			<button
+				type="button"
+				@click="$store.drawer.section = 'credentials'"
+				:class="$store.drawer.section === 'credentials' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+				class="px-4 py-2 text-sm font-medium transition-colors"
+			>
+				Credentials
+			</button>
+			<button
+				type="button"
+				@click="$store.drawer.section = 'thresholds'"
+				:class="$store.drawer.section === 'thresholds' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+				class="px-4 py-2 text-sm font-medium transition-colors"
+			>
+				Thresholds
+			</button>
+		</div>
+		<!-- Credentials section -->
+		<div x-show="$store.drawer.section === 'credentials'" class="flex-1 p-4 space-y-6">
+			<!-- GitHub subsection -->
+			<div>
+				<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">GitHub</h3>
+				<form
+					hx-post="/app/settings/github"
+					hx-target="#cred-github-status"
+					hx-swap="innerHTML"
+					hx-indicator="#cred-github-spinner"
+					class="space-y-3"
+				>
+					<div>
+						<label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1" for="github_token">
+							Personal Access Token
+						</label>
+						<input
+							id="github_token"
+							type="password"
+							name="github_token"
+							placeholder="ghp_..."
+							autocomplete="current-password"
+							class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+						/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1" for="github_username">
+							Username
+						</label>
+						<input
+							id="github_username"
+							type="text"
+							name="github_username"
+							placeholder="octocat"
+							autocomplete="username"
+							class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+						/>
+					</div>
+					<div class="flex items-center gap-2">
+						<button
+							type="submit"
+							class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors"
+						>
+							Save
+						</button>
+						<span
+							id="cred-github-spinner"
+							class="htmx-indicator"
+						>
+							<svg class="w-4 h-4 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+							</svg>
+						</span>
+					</div>
+					<div id="cred-github-status" class="text-sm"></div>
+				</form>
+			</div>
+			<!-- Divider -->
+			<div class="border-t border-gray-200 dark:border-gray-700"></div>
+			<!-- Jira subsection -->
+			<div>
+				<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+					Jira
+					<span class="ml-1 text-xs font-normal text-gray-400 dark:text-gray-500">(Phase 9)</span>
+				</h3>
+				<p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Fields stored now; Jira integration available in a future update.</p>
+				<form
+					hx-post="/app/settings/jira"
+					hx-target="#cred-jira-status"
+					hx-swap="innerHTML"
+					hx-indicator="#cred-jira-spinner"
+					class="space-y-3"
+				>
+					<div>
+						<label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1" for="jira_url">
+							Jira URL
+						</label>
+						<input
+							id="jira_url"
+							type="url"
+							name="jira_url"
+							placeholder="https://yourcompany.atlassian.net"
+							class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+						/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1" for="jira_email">
+							Email
+						</label>
+						<input
+							id="jira_email"
+							type="email"
+							name="jira_email"
+							placeholder="you@company.com"
+							autocomplete="email"
+							class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+						/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1" for="jira_token">
+							API Token
+						</label>
+						<input
+							id="jira_token"
+							type="password"
+							name="jira_token"
+							placeholder="Jira API token"
+							autocomplete="current-password"
+							class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+						/>
+					</div>
+					<div class="flex items-center gap-2">
+						<button
+							type="submit"
+							class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors"
+						>
+							Save
+						</button>
+						<span
+							id="cred-jira-spinner"
+							class="htmx-indicator"
+						>
+							<svg class="w-4 h-4 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+							</svg>
+						</span>
+					</div>
+					<div id="cred-jira-status" class="text-sm"></div>
+				</form>
+			</div>
+		</div>
+		<!-- Thresholds section -->
+		<div x-show="$store.drawer.section === 'thresholds'" class="flex-1 p-4">
+			<p class="text-gray-500 dark:text-gray-400 text-sm">Threshold configuration coming in a later step.</p>
+		</div>
+	</div>
+}

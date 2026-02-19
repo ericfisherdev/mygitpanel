@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	sqliteadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/sqlite"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/pages"
@@ -383,4 +384,102 @@ func extractRepoNames(repos []model.Repository) []string {
 		names = append(names, r.FullName)
 	}
 	return names
+}
+
+// SaveGitHubCredentials handles POST /app/settings/github.
+// It validates the provided token against the GitHub API before storing it.
+// The response is an HTML fragment injected into #cred-github-status by HTMX.
+func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: invalid form data</span>`)
+		return
+	}
+
+	token := strings.TrimSpace(r.FormValue("github_token"))
+	username := strings.TrimSpace(r.FormValue("github_username"))
+
+	if token == "" {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: GitHub token is required</span>`)
+		return
+	}
+
+	if h.ghWriter == nil || h.credStore == nil {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: credential storage is not configured</span>`)
+		return
+	}
+
+	// Validate the token against the GitHub API.
+	validatedUsername, err := h.ghWriter.ValidateToken(r.Context(), token)
+	if err != nil {
+		if errors.Is(err, sqliteadapter.ErrEncryptionKeyNotSet) {
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
+			return
+		}
+		h.logger.Error("github token validation failed", "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: %s</span>`, err.Error())
+		return
+	}
+
+	// Store the validated token.
+	if err := h.credStore.Set(r.Context(), "github_token", token); err != nil {
+		if errors.Is(err, sqliteadapter.ErrEncryptionKeyNotSet) {
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
+			return
+		}
+		h.logger.Error("failed to store github token", "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save token</span>`)
+		return
+	}
+
+	// Store the username (provided or from validation).
+	storedUsername := validatedUsername
+	if username != "" {
+		storedUsername = username
+	}
+	if err := h.credStore.Set(r.Context(), "github_username", storedUsername); err != nil {
+		h.logger.Error("failed to store github username", "error", err)
+		// Non-fatal: token was saved successfully; username storage failure is logged.
+	}
+
+	fmt.Fprintf(w, `<span class="text-green-600 text-sm">GitHub token: configured (%s)</span>`, validatedUsername)
+}
+
+// SaveJiraCredentials handles POST /app/settings/jira.
+// It stores Jira credentials without validation (Phase 9 will add validation).
+// The response is an HTML fragment injected into #cred-jira-status by HTMX.
+func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: invalid form data</span>`)
+		return
+	}
+
+	jiraURL := strings.TrimSpace(r.FormValue("jira_url"))
+	jiraEmail := strings.TrimSpace(r.FormValue("jira_email"))
+	jiraToken := strings.TrimSpace(r.FormValue("jira_token"))
+
+	if h.credStore == nil {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: credential storage is not configured</span>`)
+		return
+	}
+
+	// Store all three Jira fields without validation.
+	if err := h.credStore.Set(r.Context(), "jira_url", jiraURL); err != nil {
+		if errors.Is(err, sqliteadapter.ErrEncryptionKeyNotSet) {
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
+			return
+		}
+		h.logger.Error("failed to store jira_url", "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
+		return
+	}
+
+	if err := h.credStore.Set(r.Context(), "jira_email", jiraEmail); err != nil {
+		h.logger.Error("failed to store jira_email", "error", err)
+	}
+
+	if err := h.credStore.Set(r.Context(), "jira_token", jiraToken); err != nil {
+		h.logger.Error("failed to store jira_token", "error", err)
+	}
+
+	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Jira credentials saved</span>`)
 }

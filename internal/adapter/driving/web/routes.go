@@ -27,4 +27,8 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	// Repo management routes.
 	mux.HandleFunc("POST /app/repos", h.AddRepo)
 	mux.HandleFunc("DELETE /app/repos/{owner}/{repo}", h.RemoveRepo)
+
+	// Settings / credential management routes.
+	mux.HandleFunc("POST /app/settings/github", h.SaveGitHubCredentials)
+	mux.HandleFunc("POST /app/settings/jira", h.SaveJiraCredentials)
 }

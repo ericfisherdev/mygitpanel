@@ -5,4 +5,11 @@ document.addEventListener('alpine:init', function() {
     Alpine.store('theme', {
         dark: Alpine.$persist(false).as('darkMode')
     });
+
+    Alpine.store('drawer', {
+        open: false,
+        section: 'credentials',
+        show(section) { this.section = section || 'credentials'; this.open = true; },
+        hide() { this.open = false; }
+    });
 });
