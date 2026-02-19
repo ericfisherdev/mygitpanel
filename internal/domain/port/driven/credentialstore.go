@@ -1,0 +1,26 @@
+package driven
+
+import (
+	"context"
+
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+)
+
+// CredentialStore defines the driven port for encrypted credential persistence.
+// The adapter layer is responsible for encryption/decryption; this interface
+// operates on plaintext values at the domain boundary.
+type CredentialStore interface {
+	// Set stores or replaces the credential for the given service with the
+	// provided plaintext value.
+	Set(ctx context.Context, service, plaintext string) error
+
+	// Get retrieves the plaintext credential for the given service.
+	// Returns ("", nil) if no credential exists for that service.
+	Get(ctx context.Context, service string) (string, error)
+
+	// List returns all stored credentials. Values are decrypted plaintext.
+	List(ctx context.Context) ([]model.Credential, error)
+
+	// Delete removes the credential for the given service.
+	Delete(ctx context.Context, service string) error
+}
