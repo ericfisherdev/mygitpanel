@@ -18,6 +18,7 @@ import (
 	webhandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web"
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/config"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 func main() {
@@ -68,9 +69,21 @@ func run() error {
 	reviewStore := sqliteadapter.NewReviewRepo(db)
 	checkStore := sqliteadapter.NewCheckRepo(db)
 	botConfigStore := sqliteadapter.NewBotConfigRepo(db)
+	credStore := sqliteadapter.NewCredentialRepo(db, cfg.SecretKey)
+	thresholdStore := sqliteadapter.NewThresholdRepo(db)
+	ignoreStore := sqliteadapter.NewIgnoreRepo(db)
 
 	// 6. Create GitHub client.
 	ghClient := githubadapter.NewClient(cfg.GitHubToken, cfg.GitHubUsername)
+
+	// 6a. Wire credential token provider for PollService hot-swap.
+	// The closure reads from the credential store each cycle; env var token is the fallback.
+	tokenProvider := func(ctx context.Context) (string, error) {
+		return credStore.Get(ctx, "github_token")
+	}
+	clientFactory := func(token string) driven.GitHubClient {
+		return githubadapter.NewClient(token, cfg.GitHubUsername)
+	}
 
 	// 7. Create and start poll service.
 	pollSvc := application.NewPollService(
@@ -82,6 +95,8 @@ func run() error {
 		cfg.GitHubUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,
+		tokenProvider,
+		clientFactory,
 	)
 	go pollSvc.Start(ctx)
 
@@ -97,7 +112,8 @@ func run() error {
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
 	// 7.6. Create web handler and register GUI routes.
-	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
+	// ghClient implements driven.GitHubWriter (writer.go adds the interface satisfaction).
+	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, ghClient)
 	webhandler.RegisterRoutes(mux, webHandler)
 
 	// Apply middleware.
