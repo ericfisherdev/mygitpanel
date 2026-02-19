@@ -507,6 +507,12 @@ func (h *Handler) SaveCredentials(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	if h.credentialStore == nil {
+		h.logger.Error("credentialStore is nil in SaveCredentials")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	if err := h.credentialStore.Set(ctx, "github", "token", token); err != nil {
 		h.logger.Error("failed to save token", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
