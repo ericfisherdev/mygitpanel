@@ -25,6 +25,8 @@ type PRCardViewModel struct {
 type PRDetailViewModel struct {
 	PRCardViewModel
 
+	Owner        string // Repository owner (e.g. "octocat")
+	RepoName     string // Repository name without owner (e.g. "hello-world")
 	Branch       string
 	BaseBranch   string
 	HeadSHA      string

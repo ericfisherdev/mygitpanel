@@ -1,8 +1,8 @@
 package components
 
 import (
-	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 	"fmt"
+	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 )
 
 func formatDaysAgo(days int) string {
@@ -145,14 +145,9 @@ templ PRDetail(pr viewmodel.PRDetailViewModel) {
 				@ReviewCard(review)
 			}
 		</div>
-		<!-- Threads tab -->
+		<!-- Threads tab (interactive: threads + issue comments + review submit) -->
 		<div x-show="tab === 'threads'" role="tabpanel" aria-labelledby="tab-threads">
-			if len(pr.Threads) == 0 {
-				<p class="text-sm text-gray-400 dark:text-gray-500 py-4">No review threads</p>
-			}
-			for _, thread := range pr.Threads {
-				@ThreadCard(thread)
-			}
+			@PRReviewsSection(pr, pr.Owner, pr.RepoName)
 		</div>
 		<!-- Comments tab -->
 		<div x-show="tab === 'comments'" role="tabpanel" aria-labelledby="tab-comments">
