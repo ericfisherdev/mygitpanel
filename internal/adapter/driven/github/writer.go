@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	gh "github.com/google/go-github/v82/github"
 
@@ -19,7 +20,8 @@ var _ driven.GitHubWriter = (*Client)(nil)
 // and returns the authenticated username on success. It creates a one-shot
 // client with the provided token to avoid mutating the receiver's state.
 func (c *Client) ValidateToken(ctx context.Context, token string) (string, error) {
-	tempClient := gh.NewClient(http.DefaultClient).WithAuthToken(token)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	tempClient := gh.NewClient(httpClient).WithAuthToken(token)
 	user, _, err := tempClient.Users.Get(ctx, "")
 	if err != nil {
 		return "", fmt.Errorf("token validation failed: %w", err)
