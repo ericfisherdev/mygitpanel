@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
-**Current focus:** Phase 8 — GitHub Write Operations (planning needed)
+**Current focus:** Phase 8 — Review Workflows and Attention Signals
 
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
-Phase: 7 of 9 (GUI Foundation) — COMPLETE
-Plan: 3 of 3
-Status: Phase complete
-Last activity: 2026-02-14 — Completed 07-03-PLAN.md (interactive features: search, theme, repo mgmt, animations)
+Phase: 8 of 9 (Review Workflows and Attention Signals) — IN PROGRESS
+Plan: 2 of 5
+Status: In progress
+Last activity: 2026-02-19 — Completed 08-01-PLAN.md (domain models, port interfaces, migrations, SQLite repos)
 
-Progress: [====================] 100% (3/3 plans)
+Progress: [====                ] 20% (1/5 plans)
 
 ## Performance Metrics
 
@@ -31,6 +31,7 @@ Progress: [====================] 100% (3/3 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
+| 08-review-workflows-and-attention-signals | 1/5 | 22min | 22min |
 
 ## Accumulated Context
 
@@ -52,6 +53,11 @@ Recent decisions (2026.2.0):
 - In-memory PR filtering for search — appropriate for expected scale, no new DB queries needed
 - htmx:afterSettle for GSAP animations — morph swaps settle after DOM morphing completes
 - OOB swap pattern: repo mutations render primary target + PRListOOB + RepoFilterOptions
+- MYGITPANEL_GITHUB_TOKEN demoted from required to optional (warn-not-fail) to enable credential-via-GUI flow
+- MYGITPANEL_SECRET_KEY: optional at startup (nil = credential storage disabled); present-but-malformed = error
+- IgnoredPR type defined in port/driven package (not model/) — persistence concern, not pure domain entity
+- DraftLineComment and ReviewRequest defined in githubwriter.go alongside the interface (port-layer input types)
+- Nil-pointer semantics for RepoThreshold: nil field = inherit global default
 
 ### Pending Todos
 
@@ -59,11 +65,11 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 8: Draft-to-ready is GraphQL-only — needs spike to decide approach (shurcooL/githubv4 vs gh CLI vs defer)
+- Phase 8: Draft-to-ready is GraphQL-only — extend hand-rolled graphql.go client (research confirmed this is the right approach)
 - Phase 9: Jira rate limiting is opaque — plan for research-phase during Phase 9 planning
 
 ## Session Continuity
 
-Last session: 2026-02-14
-Stopped at: Completed Phase 7 (GUI Foundation) — all 3 plans done
-Resume file: Ready for Phase 8 planning
+Last session: 2026-02-19
+Stopped at: Completed 08-01-PLAN.md (data foundation: models, ports, migrations, repos)
+Resume file: Ready for 08-02-PLAN.md
