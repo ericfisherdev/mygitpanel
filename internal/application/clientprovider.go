@@ -7,18 +7,21 @@ import (
 )
 
 // GitHubClientProvider enables runtime hot-swap of the GitHub client.
-// It holds a mutex-protected reference to the current driven.GitHubClient,
-// allowing credential updates to take effect without restarting the application.
+// It holds a mutex-protected reference to the current driven.GitHubClient
+// and associated username, allowing credential updates to take effect
+// without restarting the application.
 type GitHubClientProvider struct {
-	mu     sync.RWMutex
-	client driven.GitHubClient
+	mu       sync.RWMutex
+	client   driven.GitHubClient
+	username string
 }
 
-// NewGitHubClientProvider creates a new provider with the given initial client.
-// client may be nil if no credentials are available at startup.
-func NewGitHubClientProvider(client driven.GitHubClient) *GitHubClientProvider {
+// NewGitHubClientProvider creates a new provider with the given initial client
+// and username. client may be nil if no credentials are available at startup.
+func NewGitHubClientProvider(client driven.GitHubClient, username string) *GitHubClientProvider {
 	return &GitHubClientProvider{
-		client: client,
+		client:   client,
+		username: username,
 	}
 }
 
@@ -30,13 +33,21 @@ func (p *GitHubClientProvider) Get() driven.GitHubClient {
 	return p.client
 }
 
-// Replace swaps the current client with a new one. This is used when
-// credentials are updated via the GUI. The next caller of Get() will
-// receive the new client.
-func (p *GitHubClientProvider) Replace(client driven.GitHubClient) {
+// Username returns the current GitHub username associated with the client.
+func (p *GitHubClientProvider) Username() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.username
+}
+
+// Replace swaps the current client and username with new ones. This is used
+// when credentials are updated via the GUI. The next caller of Get() or
+// Username() will receive the new values.
+func (p *GitHubClientProvider) Replace(client driven.GitHubClient, username string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.client = client
+	p.username = username
 }
 
 // HasClient returns true if a non-nil client is currently held.

@@ -12,30 +12,32 @@ import (
 
 func TestGitHubClientProvider_GetReturnsInitialClient(t *testing.T) {
 	client := &mockGitHubClient{}
-	provider := application.NewGitHubClientProvider(client)
+	provider := application.NewGitHubClientProvider(client, "testuser")
 
 	got := provider.Get()
 	assert.Same(t, client, got)
+	assert.Equal(t, "testuser", provider.Username())
 }
 
 func TestGitHubClientProvider_ReplaceSwapsClient(t *testing.T) {
 	original := &mockGitHubClient{}
 	replacement := &mockGitHubClient{}
 
-	provider := application.NewGitHubClientProvider(original)
+	provider := application.NewGitHubClientProvider(original, "user1")
 	assert.Same(t, original, provider.Get())
 
-	provider.Replace(replacement)
+	provider.Replace(replacement, "user2")
 	assert.Same(t, replacement, provider.Get())
+	assert.Equal(t, "user2", provider.Username())
 }
 
 func TestGitHubClientProvider_HasClientReturnsFalseForNil(t *testing.T) {
-	provider := application.NewGitHubClientProvider(nil)
+	provider := application.NewGitHubClientProvider(nil, "")
 
 	require.False(t, provider.HasClient())
 
 	client := &mockGitHubClient{}
-	provider.Replace(client)
+	provider.Replace(client, "testuser")
 
 	require.True(t, provider.HasClient())
 }
@@ -43,7 +45,7 @@ func TestGitHubClientProvider_HasClientReturnsFalseForNil(t *testing.T) {
 func TestGitHubClientProvider_ConcurrentGetReplaceSafety(t *testing.T) {
 	client1 := &mockGitHubClient{}
 	client2 := &mockGitHubClient{}
-	provider := application.NewGitHubClientProvider(client1)
+	provider := application.NewGitHubClientProvider(client1, "user1")
 
 	const goroutines = 100
 	var wg sync.WaitGroup
@@ -59,7 +61,7 @@ func TestGitHubClientProvider_ConcurrentGetReplaceSafety(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			provider.Replace(client2)
+			provider.Replace(client2, "user2")
 		}()
 	}
 
@@ -67,4 +69,5 @@ func TestGitHubClientProvider_ConcurrentGetReplaceSafety(t *testing.T) {
 
 	// After all goroutines finish, client should be client2.
 	assert.Same(t, client2, provider.Get())
+	assert.Equal(t, "user2", provider.Username())
 }

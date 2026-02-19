@@ -27,7 +27,6 @@ type PollService struct {
 	repoStore   driven.RepoStore
 	reviewStore driven.ReviewStore
 	checkStore  driven.CheckStore
-	username    string
 	teamSlugs   []string
 	interval    time.Duration
 	refreshCh   chan refreshRequest
@@ -55,7 +54,6 @@ func NewPollService(
 	repoStore driven.RepoStore,
 	reviewStore driven.ReviewStore,
 	checkStore driven.CheckStore,
-	username string,
 	teamSlugs []string,
 	interval time.Duration,
 ) *PollService {
@@ -65,7 +63,6 @@ func NewPollService(
 		repoStore:   repoStore,
 		reviewStore: reviewStore,
 		checkStore:  checkStore,
-		username:    username,
 		teamSlugs:   teamSlugs,
 		interval:    interval,
 		refreshCh:   make(chan refreshRequest),
@@ -245,7 +242,7 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 	for _, pr := range prs {
 		fetchedNumbers[pr.Number] = true
 
-		pr.NeedsReview = IsReviewRequestedFrom(pr, s.username, s.teamSlugs)
+		pr.NeedsReview = IsReviewRequestedFrom(pr, s.ghClient.Username(), s.teamSlugs)
 
 		if stored, ok := storedByNumber[pr.Number]; ok {
 			if stored.UpdatedAt.Equal(pr.UpdatedAt) && stored.NeedsReview == pr.NeedsReview {

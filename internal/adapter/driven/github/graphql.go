@@ -7,7 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 )
+
+// graphqlHTTPClient is the HTTP client used for GraphQL requests.
+// It enforces a 30-second timeout as a safety net alongside context cancellation.
+var graphqlHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 const markReadyMutation = `mutation($id: ID!) {
 	markPullRequestReadyForReview(input: {pullRequestId: $id}) {
@@ -112,7 +117,7 @@ func (c *Client) FetchThreadResolution(ctx context.Context, repoFullName string,
 	httpReq.Header.Set("Authorization", fmt.Sprintf("bearer %s", c.token))
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := graphqlHTTPClient.Do(httpReq)
 	if err != nil {
 		slog.Warn("graphql: request failed", "error", err, "repo", repoFullName, "pr", prNumber)
 		return map[int64]bool{}, nil
@@ -198,7 +203,7 @@ func (c *Client) SetDraftStatus(ctx context.Context, repoFullName string, _ int,
 	httpReq.Header.Set("Authorization", fmt.Sprintf("bearer %s", c.token))
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := graphqlHTTPClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("draft status mutation for %s: %w", repoFullName, err)
 	}

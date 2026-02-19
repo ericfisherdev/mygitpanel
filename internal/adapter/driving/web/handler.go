@@ -512,9 +512,9 @@ func (h *Handler) SaveCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hot-swap the GitHub client.
+	// Hot-swap the GitHub client and username.
 	newClient := githubadapter.NewClient(token, username)
-	h.provider.Replace(newClient)
+	h.provider.Replace(newClient, username)
 
 	h.logger.Info("github credentials updated", "username", username)
 
@@ -545,14 +545,13 @@ func buildCredentialStatusViewModel(token, username string) vm.CredentialStatusV
 }
 
 // requireGitHubClient returns the current GitHub client from the provider.
-// If no client is configured, it writes a 403 response and returns nil.
+// If no provider or client is configured, it writes a 403 response and returns nil.
 func (h *Handler) requireGitHubClient(w http.ResponseWriter) driven.GitHubClient {
-	client := h.provider.Get()
-	if client == nil {
+	if h.provider == nil || !h.provider.HasClient() {
 		http.Error(w, "GitHub credentials not configured", http.StatusForbidden)
 		return nil
 	}
-	return client
+	return h.provider.Get()
 }
 
 // SubmitReview submits a review (approve, request changes, or comment) on a PR.
@@ -884,8 +883,13 @@ func (h *Handler) enrichPRCardsWithAttentionSignals(ctx context.Context, prs []m
 // Used after write operations to show updated state.
 func (h *Handler) renderPRDetailRefresh(w http.ResponseWriter, r *http.Request, repoFullName string, number int) {
 	detail, err := h.loadPRDetailViewModel(r.Context(), repoFullName, number)
-	if err != nil || detail == nil {
+	if err != nil {
 		h.logger.Error("failed to reload PR after write", "repo", repoFullName, "number", number, "error", err)
+		http.Error(w, "failed to reload PR data", http.StatusInternalServerError)
+		return
+	}
+	if detail == nil {
+		h.logger.Error("PR not found after write", "repo", repoFullName, "number", number)
 		http.Error(w, "failed to reload PR data", http.StatusInternalServerError)
 		return
 	}

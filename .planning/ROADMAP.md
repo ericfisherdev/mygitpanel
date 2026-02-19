@@ -48,9 +48,9 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 **Plans:** 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Scaffolding: vendored JS, Tailwind, templ layout, web adapter skeleton, Dockerfile update
-- [ ] 07-02-PLAN.md — PR feed sidebar + PR detail panel with reviews, threads, CI checks, collapsible sidebar
-- [ ] 07-03-PLAN.md — Search/filter, theme toggle, repo management, GSAP animations
+- [x] 07-01-PLAN.md — Scaffolding: vendored JS, Tailwind, templ layout, web adapter skeleton, Dockerfile update
+- [x] 07-02-PLAN.md — PR feed sidebar + PR detail panel with reviews, threads, CI checks, collapsible sidebar
+- [x] 07-03-PLAN.md — Search/filter, theme toggle, repo management, GSAP animations
 
 ### Phase 8: Review Workflows and Attention Signals
 **Goal:** User can review PRs, manage attention priorities, and configure urgency thresholds entirely from the dashboard
@@ -65,10 +65,10 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Domain models, ports, migrations, SQLite adapters for credentials, repo settings, ignore list, and PR node ID
-- [ ] 08-02-PLAN.md — GitHub write methods (review, comment, reply, draft toggle), GitHubClientProvider hot-swap, config fallback
-- [ ] 08-03-PLAN.md — Credential management UI, composition root rewire, review submission/comment reply/draft toggle UI
-- [ ] 08-04-PLAN.md — Per-repo attention thresholds with visual flags, PR ignore/restore with ignore list page
+- [x] 08-01-PLAN.md — Domain models, ports, migrations, SQLite adapters for credentials, repo settings, ignore list, and PR node ID
+- [x] 08-02-PLAN.md — GitHub write methods (review, comment, reply, draft toggle), GitHubClientProvider hot-swap, config fallback
+- [x] 08-03-PLAN.md — Credential management UI, composition root rewire, review submission/comment reply/draft toggle UI
+- [x] 08-04-PLAN.md — Per-repo attention thresholds with visual flags, PR ignore/restore with ignore list page
 
 ### Phase 9: Jira Integration
 **Goal:** User can see linked Jira issue context alongside PRs and post comments to Jira without leaving the dashboard

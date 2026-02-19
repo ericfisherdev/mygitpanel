@@ -12,6 +12,7 @@ must_haves:
     - "User can toggle a PR between active and draft status from the PR detail view"
     - "User can configure per-repo review count thresholds and age-based urgency days, and PRs are visually flagged when they exceed these thresholds"
     - "User can ignore a PR to hide it from the feed, view the ignore list, and re-add previously ignored PRs"
+    - "Composition root wires all stores, provider, and poll service correctly"
   artifacts:
     - path: "internal/domain/model/credential.go"
       provides: "Credential entity"
@@ -127,7 +128,7 @@ must_haves:
 |------|-----|-----|--------|---------|
 | cmd/mygitpanel/main.go | application/clientprovider.go | NewGitHubClientProvider constructor | ✓ WIRED | Line 95: provider := application.NewGitHubClientProvider(ghClient) |
 | web/handler.go | application/clientprovider.go | provider.Replace on credential save | ✓ WIRED | Line 486: h.provider.Replace(newClient) |
-| web/handler.go | github write methods | CreateReview, CreateIssueComment, ReplyToReviewComment, SetDraftStatus | ✓ WIRED | Lines 563, 607, 658, 713 call respective methods |
+| web/handler.go | GitHub write methods | CreateReview, CreateIssueComment, ReplyToReviewComment, SetDraftStatus | ✓ WIRED | Lines 563, 607, 658, 713 call respective methods |
 | web/routes.go | credential/review/ignore handlers | POST /app/credentials, POST review, POST ignore, GET ignored | ✓ WIRED | Lines 33, 36, 46, 50 register routes |
 | web/handler.go | reposettingsstore | GetSettings/SetSettings | ✓ WIRED | SaveRepoSettings handler uses repoSettingsStore.SetSettings |
 | web/handler.go | ignorestore | Ignore/Unignore/ListIgnored | ✓ WIRED | IgnorePR, UnignorePR, ListIgnoredPRs handlers use ignoreStore, filterIgnoredPRs calls ListIgnored |

@@ -76,10 +76,14 @@ func run() error {
 	// Resolve credentials: stored credentials take priority over env vars.
 	ghToken := cfg.GitHubToken
 	ghUsername := cfg.GitHubUsername
-	if storedToken, err := credentialStore.Get(ctx, "github", "token"); err == nil && storedToken != "" {
+	if storedToken, err := credentialStore.Get(ctx, "github", "token"); err != nil {
+		slog.Warn("failed to read stored GitHub token", "error", err)
+	} else if storedToken != "" {
 		ghToken = storedToken
 	}
-	if storedUsername, err := credentialStore.Get(ctx, "github", "username"); err == nil && storedUsername != "" {
+	if storedUsername, err := credentialStore.Get(ctx, "github", "username"); err != nil {
+		slog.Warn("failed to read stored GitHub username", "error", err)
+	} else if storedUsername != "" {
 		ghUsername = storedUsername
 	}
 
@@ -92,7 +96,7 @@ func run() error {
 	}
 
 	// 6b. Create GitHubClientProvider for hot-swap.
-	provider := application.NewGitHubClientProvider(ghClient)
+	provider := application.NewGitHubClientProvider(ghClient, ghUsername)
 
 	// 7. Create and start poll service.
 	pollSvc := application.NewPollService(
@@ -101,7 +105,6 @@ func run() error {
 		repoStore,
 		reviewStore,
 		checkStore,
-		ghUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,
 	)
@@ -114,7 +117,7 @@ func run() error {
 	healthSvc := application.NewHealthService(checkStore, prStore)
 
 	// 7.5. Create HTTP handler and register API routes.
-	apiHandler := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
+	apiHandler := httphandler.NewHandler(prStore, repoStore, botConfigStore, reviewSvc, healthSvc, pollSvc, ghUsername, slog.Default())
 	mux := http.NewServeMux()
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
