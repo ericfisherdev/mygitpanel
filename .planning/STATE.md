@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 
 Milestone: 2026.2.0 Web GUI
 Phase: 8 of 9 (Review Workflows and Attention Signals) — IN PROGRESS
-Plan: 3 of 5
+Plan: 4 of 5
 Status: In progress
-Last activity: 2026-02-19 — Completed 08-02-PLAN.md (settings drawer, credential management, PollService hot-swap)
+Last activity: 2026-02-19 — Completed 08-03-PLAN.md (review workflows: threaded display, inline reply, review submit)
 
-Progress: [========            ] 40% (2/5 plans)
+Progress: [============        ] 60% (3/5 plans)
 
 ## Performance Metrics
 
@@ -62,6 +62,11 @@ Recent decisions (2026.2.0):
 - GitHubWriter stubs satisfy compile-time check immediately; real implementations in Plans 03 and 04
 - Token validated before storing to prevent silently-broken polling from invalid tokens
 - Drawer rendered in layout.templ outside @contents — Alpine state survives HTMX morph swaps
+- PRReviewsSection placed in components package (not partials) to avoid components<->partials import cycle
+- Owner and RepoName added to PRDetailViewModel for URL construction in templates (templ has no string splitting)
+- ReviewThread component receives owner/repo/prNumber as separate args to keep view model clean
+- CreateReplyComment morphs only the affected #thread-{rootID}; SubmitReview/CreateIssueComment morph #pr-reviews-section
+- Write handlers auth-gate via credStore.Get before calling ghWriter; missing token returns 422 with actionable HTML fragment
 
 ### Pending Todos
 
@@ -75,5 +80,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 08-02-PLAN.md (settings drawer, credential management, PollService hot-swap)
-Resume file: Ready for 08-03-PLAN.md
+Stopped at: Completed 08-03-PLAN.md (review workflows: threaded display, inline reply, review submit)
+Resume file: Ready for 08-04-PLAN.md
