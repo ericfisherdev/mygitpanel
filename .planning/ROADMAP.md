@@ -66,7 +66,7 @@ Plans:
 
 Plans:
 - [x] 08-01-PLAN.md — Data foundation: domain models, port interfaces, migrations 000010-000012, SQLite repos (credentials, thresholds, ignore list)
-- [ ] 08-02-PLAN.md — TBD
+- [x] 08-02-PLAN.md — Settings drawer UI, credential management (GitHub token validation + Jira storage), PollService hot-swap
 - [ ] 08-03-PLAN.md — TBD
 - [ ] 08-04-PLAN.md — TBD
 - [ ] 08-05-PLAN.md — TBD
@@ -99,5 +99,5 @@ Phases execute in numeric order: 7 → 8 → 9
 | 5. PR Health Signals | v1.0 | 3/3 | Complete | 2026-02-13 |
 | 6. Docker Deployment | v1.0 | 2/2 | Complete | 2026-02-14 |
 | 7. GUI Foundation | 2026.2.0 | 3/3 | Complete | 2026-02-15 |
-| 8. Review Workflows and Attention Signals | 2026.2.0 | 1/5 | In progress | - |
+| 8. Review Workflows and Attention Signals | 2026.2.0 | 2/5 | In progress | - |
 | 9. Jira Integration | 2026.2.0 | 0/TBD | Not started | - |
