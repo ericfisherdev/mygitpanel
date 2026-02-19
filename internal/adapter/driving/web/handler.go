@@ -137,62 +137,24 @@ func (h *Handler) SearchPRs(w http.ResponseWriter, r *http.Request) {
 // GetPRDetail renders the PR detail partial for HTMX swap into the main panel.
 // Enrichment failures (review, health) are non-fatal: basic PR data is always shown.
 func (h *Handler) GetPRDetail(w http.ResponseWriter, r *http.Request) {
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+	repoFullName, number, ok := parsePRParams(w, r)
+	if !ok {
 		return
 	}
 
-	repoFullName := owner + "/" + repo
-
-	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, number)
+	detail, err := h.loadPRDetailViewModel(r.Context(), repoFullName, number)
 	if err != nil {
 		h.logger.Error("failed to get PR", "repo", repoFullName, "number", number, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	if pr == nil {
+	if detail == nil {
 		http.Error(w, "pull request not found", http.StatusNotFound)
 		return
 	}
 
-	// Enrich with review data (non-fatal).
-	var summary *application.PRReviewSummary
-	var botUsernames []string
-
-	if h.reviewSvc != nil {
-		summary, err = h.reviewSvc.GetPRReviewSummary(r.Context(), pr.ID, pr.HeadSHA)
-		if err != nil {
-			h.logger.Error("failed to get review summary", "error", err)
-		}
-
-		if summary != nil {
-			botUsernames = summary.BotUsernames
-		}
-	}
-
-	// Enrich with health/CI data (non-fatal).
-	var checkRuns []model.CheckRun
-
-	if h.healthSvc != nil {
-		healthSummary, healthErr := h.healthSvc.GetPRHealthSummary(r.Context(), pr.ID, pr.RepoFullName, pr.Number)
-		if healthErr != nil {
-			h.logger.Error("failed to get health summary", "error", healthErr)
-		}
-
-		if healthSummary != nil {
-			checkRuns = healthSummary.CheckRuns
-		}
-	}
-
-	hasCredentials := h.provider != nil && h.provider.HasClient()
-	detail := toPRDetailViewModelWithWriteCaps(*pr, summary, checkRuns, botUsernames, h.username, hasCredentials)
-	component := partials.PRDetailContent(detail)
+	component := partials.PRDetailContent(*detail)
 
 	if err := component.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render PR detail", "error", err)
@@ -201,13 +163,7 @@ func (h *Handler) GetPRDetail(w http.ResponseWriter, r *http.Request) {
 
 // AddRepo adds a repo to the watch list via the GUI form and returns updated partials.
 func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
@@ -255,9 +211,7 @@ func (h *Handler) RemoveRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	fullName := owner + "/" + repo
+	_, _, fullName := parseRepoParams(r)
 
 	if err := h.repoStore.Remove(r.Context(), fullName); err != nil {
 		if errors.Is(err, driven.ErrRepoNotFound) {
@@ -420,6 +374,89 @@ func extractRepoNames(repos []model.Repository) []string {
 	return names
 }
 
+// parsePRParams extracts owner/repo/number path parameters and validates the PR number.
+// Returns repoFullName, number, and true on success. On failure, writes a 400 response
+// and returns false — the caller should return immediately.
+func parsePRParams(w http.ResponseWriter, r *http.Request) (string, int, bool) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+	repoFullName := owner + "/" + repo
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return "", 0, false
+	}
+
+	return repoFullName, number, true
+}
+
+// parseRepoParams extracts owner/repo path parameters and builds the full name.
+func parseRepoParams(r *http.Request) (owner, repo, repoFullName string) {
+	owner = r.PathValue("owner")
+	repo = r.PathValue("repo")
+	repoFullName = owner + "/" + repo
+	return owner, repo, repoFullName
+}
+
+// parseFormWithCSRF parses the request form and validates the CSRF token.
+// Returns true on success. On failure, writes an appropriate error response
+// and returns false — the caller should return immediately.
+func parseFormWithCSRF(w http.ResponseWriter, r *http.Request) bool {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return false
+	}
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
+// loadPRDetailViewModel fetches a PR and enriches it with review summary and health/CI data.
+// Returns nil view model (without error) when the PR is not found — the caller decides
+// whether that's a 404 or 500.
+func (h *Handler) loadPRDetailViewModel(ctx context.Context, repoFullName string, number int) (*vm.PRDetailViewModel, error) {
+	pr, err := h.prStore.GetByNumber(ctx, repoFullName, number)
+	if err != nil {
+		return nil, fmt.Errorf("get PR: %w", err)
+	}
+	if pr == nil {
+		return nil, nil
+	}
+
+	var summary *application.PRReviewSummary
+	var botUsernames []string
+
+	if h.reviewSvc != nil {
+		summary, err = h.reviewSvc.GetPRReviewSummary(ctx, pr.ID, pr.HeadSHA)
+		if err != nil {
+			h.logger.Error("failed to get review summary", "error", err)
+		}
+		if summary != nil {
+			botUsernames = summary.BotUsernames
+		}
+	}
+
+	var checkRuns []model.CheckRun
+
+	if h.healthSvc != nil {
+		healthSummary, healthErr := h.healthSvc.GetPRHealthSummary(ctx, pr.ID, pr.RepoFullName, pr.Number)
+		if healthErr != nil {
+			h.logger.Error("failed to get health summary", "error", healthErr)
+		}
+		if healthSummary != nil {
+			checkRuns = healthSummary.CheckRuns
+		}
+	}
+
+	hasCredentials := h.provider != nil && h.provider.HasClient()
+	detail := toPRDetailViewModelWithWriteCaps(*pr, summary, checkRuns, botUsernames, h.username, hasCredentials)
+	return &detail, nil
+}
+
 // GetCredentialForm renders the credential form partial for HTMX swap.
 // Loads current credentials to pre-fill form fields (token masked to last 4 chars).
 func (h *Handler) GetCredentialForm(w http.ResponseWriter, r *http.Request) {
@@ -449,13 +486,7 @@ func (h *Handler) GetCredentialForm(w http.ResponseWriter, r *http.Request) {
 // SaveCredentials processes the credential form submission, saves to SQLite,
 // and hot-swaps the GitHub client in the provider.
 func (h *Handler) SaveCredentials(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
@@ -526,13 +557,7 @@ func (h *Handler) requireGitHubClient(w http.ResponseWriter) driven.GitHubClient
 
 // SubmitReview submits a review (approve, request changes, or comment) on a PR.
 func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
@@ -541,14 +566,8 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-	repoFullName := owner + "/" + repo
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+	repoFullName, number, ok := parsePRParams(w, r)
+	if !ok {
 		return
 	}
 
@@ -572,13 +591,7 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 
 // AddComment adds a PR-level comment via the Issues API.
 func (h *Handler) AddComment(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
@@ -587,14 +600,8 @@ func (h *Handler) AddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-	repoFullName := owner + "/" + repo
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+	repoFullName, number, ok := parsePRParams(w, r)
+	if !ok {
 		return
 	}
 
@@ -616,13 +623,7 @@ func (h *Handler) AddComment(w http.ResponseWriter, r *http.Request) {
 
 // ReplyToComment replies to an existing review comment thread.
 func (h *Handler) ReplyToComment(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
@@ -631,17 +632,12 @@ func (h *Handler) ReplyToComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-	commentIDStr := r.PathValue("id")
-	repoFullName := owner + "/" + repo
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+	repoFullName, number, ok := parsePRParams(w, r)
+	if !ok {
 		return
 	}
+
+	commentIDStr := r.PathValue("id")
 
 	commentID, err := strconv.ParseInt(commentIDStr, 10, 64)
 	if err != nil {
@@ -667,13 +663,7 @@ func (h *Handler) ReplyToComment(w http.ResponseWriter, r *http.Request) {
 
 // ToggleDraft toggles a PR's draft status via GraphQL mutation.
 func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
@@ -682,14 +672,8 @@ func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-	repoFullName := owner + "/" + repo
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+	repoFullName, number, ok := parsePRParams(w, r)
+	if !ok {
 		return
 	}
 
@@ -731,9 +715,7 @@ func (h *Handler) ToggleDraft(w http.ResponseWriter, r *http.Request) {
 
 // GetRepoSettings renders the per-repo settings form partial.
 func (h *Handler) GetRepoSettings(w http.ResponseWriter, r *http.Request) {
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	repoFullName := owner + "/" + repo
+	owner, repo, repoFullName := parseRepoParams(r)
 
 	settings, err := h.repoSettings.GetSettings(r.Context(), repoFullName)
 	if err != nil {
@@ -752,19 +734,11 @@ func (h *Handler) GetRepoSettings(w http.ResponseWriter, r *http.Request) {
 
 // SaveRepoSettings processes the repo settings form submission.
 func (h *Handler) SaveRepoSettings(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
-
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	repoFullName := owner + "/" + repo
+	owner, repo, repoFullName := parseRepoParams(r)
 
 	requiredReviewCount, err := strconv.Atoi(r.FormValue("required_review_count"))
 	if err != nil || requiredReviewCount < 0 {
@@ -909,42 +883,14 @@ func (h *Handler) enrichPRCardsWithAttentionSignals(ctx context.Context, prs []m
 // renderPRDetailRefresh re-fetches PR data and renders the PR detail content partial.
 // Used after write operations to show updated state.
 func (h *Handler) renderPRDetailRefresh(w http.ResponseWriter, r *http.Request, repoFullName string, number int) {
-	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, number)
-	if err != nil || pr == nil {
+	detail, err := h.loadPRDetailViewModel(r.Context(), repoFullName, number)
+	if err != nil || detail == nil {
 		h.logger.Error("failed to reload PR after write", "repo", repoFullName, "number", number, "error", err)
 		http.Error(w, "failed to reload PR data", http.StatusInternalServerError)
 		return
 	}
 
-	// Enrich with review data (non-fatal).
-	var summary *application.PRReviewSummary
-	var botUsernames []string
-
-	if h.reviewSvc != nil {
-		summary, err = h.reviewSvc.GetPRReviewSummary(r.Context(), pr.ID, pr.HeadSHA)
-		if err != nil {
-			h.logger.Error("failed to get review summary after write", "error", err)
-		}
-		if summary != nil {
-			botUsernames = summary.BotUsernames
-		}
-	}
-
-	// Enrich with health/CI data (non-fatal).
-	var checkRuns []model.CheckRun
-	if h.healthSvc != nil {
-		healthSummary, healthErr := h.healthSvc.GetPRHealthSummary(r.Context(), pr.ID, pr.RepoFullName, pr.Number)
-		if healthErr != nil {
-			h.logger.Error("failed to get health summary after write", "error", healthErr)
-		}
-		if healthSummary != nil {
-			checkRuns = healthSummary.CheckRuns
-		}
-	}
-
-	hasCredentials := h.provider != nil && h.provider.HasClient()
-	detail := toPRDetailViewModelWithWriteCaps(*pr, summary, checkRuns, botUsernames, h.username, hasCredentials)
-	component := partials.PRDetailContent(detail)
+	component := partials.PRDetailContent(*detail)
 
 	if err := component.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render PR detail after write", "error", err)
@@ -953,24 +899,12 @@ func (h *Handler) renderPRDetailRefresh(w http.ResponseWriter, r *http.Request, 
 
 // IgnorePR adds a PR to the ignore list and re-renders the PR list sidebar.
 func (h *Handler) IgnorePR(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
+	if !parseFormWithCSRF(w, r) {
 		return
 	}
 
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
-
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-	repoFullName := owner + "/" + repo
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+	repoFullName, number, ok := parsePRParams(w, r)
+	if !ok {
 		return
 	}
 
@@ -993,14 +927,8 @@ func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-	repoFullName := owner + "/" + repo
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+	repoFullName, number, ok := parsePRParams(w, r)
+	if !ok {
 		return
 	}
 
