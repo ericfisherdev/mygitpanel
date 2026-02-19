@@ -23,13 +23,17 @@ import (
 
 // Handler is the web GUI driving adapter that serves HTML via templ components.
 type Handler struct {
-	prStore   driven.PRStore
-	repoStore driven.RepoStore
-	reviewSvc *application.ReviewService
-	healthSvc *application.HealthService
-	pollSvc   *application.PollService
-	username  string
-	logger    *slog.Logger
+	prStore        driven.PRStore
+	repoStore      driven.RepoStore
+	reviewSvc      *application.ReviewService
+	healthSvc      *application.HealthService
+	pollSvc        *application.PollService
+	username       string
+	logger         *slog.Logger
+	credStore      driven.CredentialStore
+	thresholdStore driven.ThresholdStore
+	ignoreStore    driven.IgnoreStore
+	ghWriter       driven.GitHubWriter
 }
 
 // NewHandler creates a Handler with all required dependencies.
@@ -41,15 +45,23 @@ func NewHandler(
 	pollSvc *application.PollService,
 	username string,
 	logger *slog.Logger,
+	credStore driven.CredentialStore,
+	thresholdStore driven.ThresholdStore,
+	ignoreStore driven.IgnoreStore,
+	ghWriter driven.GitHubWriter,
 ) *Handler {
 	return &Handler{
-		prStore:   prStore,
-		repoStore: repoStore,
-		reviewSvc: reviewSvc,
-		healthSvc: healthSvc,
-		pollSvc:   pollSvc,
-		username:  username,
-		logger:    logger,
+		prStore:        prStore,
+		repoStore:      repoStore,
+		reviewSvc:      reviewSvc,
+		healthSvc:      healthSvc,
+		pollSvc:        pollSvc,
+		username:       username,
+		logger:         logger,
+		credStore:      credStore,
+		thresholdStore: thresholdStore,
+		ignoreStore:    ignoreStore,
+		ghWriter:       ghWriter,
 	}
 }
 

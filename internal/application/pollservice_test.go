@@ -299,7 +299,7 @@ func pollRepoViaFull(t *testing.T, ghClient *mockGitHubClient, prStore *mockPRSt
 		repos: []model.Repository{{FullName: repoFullName}},
 	}
 
-	svc := application.NewPollService(ghClient, prStore, repoStore, reviewStore, checkStore, username, teamSlugs, 1*time.Hour)
+	svc := application.NewPollService(ghClient, prStore, repoStore, reviewStore, checkStore, username, teamSlugs, 1*time.Hour, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -796,7 +796,7 @@ func TestAdaptiveScheduling(t *testing.T) {
 	svc := application.NewPollService(
 		ghClient, prStore, repoStore,
 		newMockReviewStore(), newMockCheckStore(),
-		"testuser", nil, 5*time.Minute,
+		"testuser", nil, 5*time.Minute, nil, nil,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
