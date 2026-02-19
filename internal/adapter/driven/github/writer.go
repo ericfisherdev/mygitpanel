@@ -3,6 +3,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -27,21 +28,99 @@ func (c *Client) ValidateToken(ctx context.Context, token string) (string, error
 }
 
 // SubmitReview creates a pull request review with optional inline comments.
-// Full implementation in Plan 03.
-func (c *Client) SubmitReview(_ context.Context, _ string, _ int, _ driven.ReviewRequest) error {
-	return fmt.Errorf("not yet implemented")
+// If the CommitID in req is empty, the current PR head SHA is fetched first
+// to avoid submitting against a stale commit.
+func (c *Client) SubmitReview(ctx context.Context, repoFullName string, prNumber int, req driven.ReviewRequest) error {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return err
+	}
+
+	// Re-fetch the head SHA if not provided to avoid 422 "commit not found" errors.
+	commitID := req.CommitID
+	if commitID == "" {
+		pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, prNumber)
+		if err != nil {
+			return fmt.Errorf("fetching PR head SHA before review submit: %w", err)
+		}
+		commitID = pr.GetHead().GetSHA()
+	}
+
+	// Map DraftLineComments to GitHub API types.
+	var draftComments []*gh.DraftReviewComment
+	for _, dlc := range req.Comments {
+		dc := &gh.DraftReviewComment{
+			Path: gh.Ptr(dlc.Path),
+			Body: gh.Ptr(dlc.Body),
+			Line: gh.Ptr(dlc.Line),
+			Side: gh.Ptr(dlc.Side),
+		}
+		if dlc.StartLine > 0 {
+			dc.StartLine = gh.Ptr(dlc.StartLine)
+			dc.StartSide = gh.Ptr(dlc.StartSide)
+		}
+		draftComments = append(draftComments, dc)
+	}
+
+	reviewReq := &gh.PullRequestReviewRequest{
+		CommitID: gh.Ptr(commitID),
+		Event:    gh.Ptr(req.Event),
+		Comments: draftComments,
+	}
+
+	// Only set Body if non-empty or event requires it (not APPROVE with empty body).
+	if req.Body != "" || req.Event != "APPROVE" {
+		reviewReq.Body = gh.Ptr(req.Body)
+	}
+
+	_, _, err = c.gh.PullRequests.CreateReview(ctx, owner, repo, prNumber, reviewReq)
+	if err != nil {
+		var ghErr *gh.ErrorResponse
+		if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
+			return fmt.Errorf("PR was updated since you started reviewing; refresh and try again: %w", err)
+		}
+		return fmt.Errorf("submitting review for %s#%d: %w", repoFullName, prNumber, err)
+	}
+
+	return nil
 }
 
 // CreateReplyComment creates a reply to an existing review thread.
-// Full implementation in Plan 03.
-func (c *Client) CreateReplyComment(_ context.Context, _ string, _ int, _ int64, _, _, _ string) error {
-	return fmt.Errorf("not yet implemented")
+func (c *Client) CreateReplyComment(ctx context.Context, repoFullName string, prNumber int, inReplyTo int64, body, path, commitSHA string) error {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = c.gh.PullRequests.CreateComment(ctx, owner, repo, prNumber, &gh.PullRequestComment{
+		Body:        gh.Ptr(body),
+		InReplyTo:   gh.Ptr(inReplyTo),
+		CommitID:    gh.Ptr(commitSHA),
+		Path:        gh.Ptr(path),
+		SubjectType: gh.Ptr("line"),
+	})
+	if err != nil {
+		return fmt.Errorf("creating reply comment on %s#%d: %w", repoFullName, prNumber, err)
+	}
+
+	return nil
 }
 
 // CreateIssueComment creates a top-level (non-diff) comment on a pull request.
-// Full implementation in Plan 03.
-func (c *Client) CreateIssueComment(_ context.Context, _ string, _ int, _ string) error {
-	return fmt.Errorf("not yet implemented")
+func (c *Client) CreateIssueComment(ctx context.Context, repoFullName string, prNumber int, body string) error {
+	owner, repo, err := splitRepo(repoFullName)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = c.gh.Issues.CreateComment(ctx, owner, repo, prNumber, &gh.IssueComment{
+		Body: gh.Ptr(body),
+	})
+	if err != nil {
+		return fmt.Errorf("creating issue comment on %s#%d: %w", repoFullName, prNumber, err)
+	}
+
+	return nil
 }
 
 // ConvertPullRequestToDraft converts a ready-for-review PR to draft status.
