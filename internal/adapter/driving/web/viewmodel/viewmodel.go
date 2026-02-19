@@ -132,3 +132,11 @@ type DashboardViewModel struct {
 	Repos     []RepoViewModel
 	RepoNames []string // distinct repo names for search bar filter
 }
+
+// CredentialStatusViewModel is the response payload for credential save handlers.
+// It is rendered as an inline HTML fragment in the settings drawer status divs.
+type CredentialStatusViewModel struct {
+	Success  bool
+	Message  string
+	Username string // populated on successful GitHub token validation
+}
