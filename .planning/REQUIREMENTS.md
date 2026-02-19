@@ -29,7 +29,7 @@ Requirements for the Web GUI milestone. Each maps to roadmap phases.
 - [x] **REV-01**: User can view PR comments and change requests in a threaded conversation view
 - [x] **REV-02**: User can reply to PR comments from the GUI
 - [x] **REV-03**: User can submit a review on others' PRs (approve, request changes, or comment)
-- [ ] **REV-04**: User can toggle a PR between active and draft status
+- [x] **REV-04**: User can toggle a PR between active and draft status
 
 ### Attention Signals
 
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REV-01 | Phase 8 | Complete |
 | REV-02 | Phase 8 | Complete |
 | REV-03 | Phase 8 | Complete |
-| REV-04 | Phase 8 | Pending |
+| REV-04 | Phase 8 | Complete |
 | ATT-01 | Phase 8 | Complete |
 | ATT-02 | Phase 8 | Complete |
 | ATT-03 | Phase 8 | Complete |
