@@ -149,6 +149,10 @@ func (m *mockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest,
 	return nil, nil
 }
 
+func (m *mockPRStore) ListIgnoredWithPRData(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
+
 func (m *mockPRStore) Delete(_ context.Context, repoFullName string, number int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -877,6 +881,10 @@ func (m *adaptiveMockPRStore) ListAll(_ context.Context) ([]model.PullRequest, e
 }
 
 func (m *adaptiveMockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
+
+func (m *adaptiveMockPRStore) ListIgnoredWithPRData(_ context.Context) ([]model.PullRequest, error) {
 	return nil, nil
 }
 

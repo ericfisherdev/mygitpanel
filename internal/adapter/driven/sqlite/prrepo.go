@@ -151,14 +151,17 @@ func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number in
 }
 
 // ListAll returns all pull requests ordered by updated_at descending.
+// Ignored PRs (those with a matching ignored_prs record) are excluded automatically.
 func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 	const query = `
-		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, head_sha,
-		       additions, deletions, changed_files, mergeable_status, ci_status,
-		       opened_at, updated_at, last_activity_at
-		FROM pull_requests
-		ORDER BY updated_at DESC
+		SELECT pr.id, pr.number, pr.repo_full_name, pr.title, pr.author, pr.status, pr.is_draft, pr.needs_review,
+		       pr.url, pr.branch, pr.base_branch, pr.labels, pr.head_sha,
+		       pr.additions, pr.deletions, pr.changed_files, pr.mergeable_status, pr.ci_status,
+		       pr.opened_at, pr.updated_at, pr.last_activity_at
+		FROM pull_requests pr
+		LEFT JOIN ignored_prs ip ON ip.pr_id = pr.id
+		WHERE ip.pr_id IS NULL
+		ORDER BY pr.updated_at DESC
 	`
 
 	return r.queryPRs(ctx, query)
@@ -166,15 +169,34 @@ func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 
 // ListNeedingReview returns all pull requests where needs_review is true,
 // ordered by updated_at descending.
+// Ignored PRs are excluded automatically.
 func (r *PRRepo) ListNeedingReview(ctx context.Context) ([]model.PullRequest, error) {
 	const query = `
-		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
-		       url, branch, base_branch, labels, head_sha,
-		       additions, deletions, changed_files, mergeable_status, ci_status,
-		       opened_at, updated_at, last_activity_at
-		FROM pull_requests
-		WHERE needs_review = 1
-		ORDER BY updated_at DESC
+		SELECT pr.id, pr.number, pr.repo_full_name, pr.title, pr.author, pr.status, pr.is_draft, pr.needs_review,
+		       pr.url, pr.branch, pr.base_branch, pr.labels, pr.head_sha,
+		       pr.additions, pr.deletions, pr.changed_files, pr.mergeable_status, pr.ci_status,
+		       pr.opened_at, pr.updated_at, pr.last_activity_at
+		FROM pull_requests pr
+		LEFT JOIN ignored_prs ip ON ip.pr_id = pr.id
+		WHERE pr.needs_review = 1
+		  AND ip.pr_id IS NULL
+		ORDER BY pr.updated_at DESC
+	`
+
+	return r.queryPRs(ctx, query)
+}
+
+// ListIgnoredWithPRData returns all ignored PRs with their pull request data.
+// Used for the ignore list UI. Ordered by ignored_at DESC.
+func (r *PRRepo) ListIgnoredWithPRData(ctx context.Context) ([]model.PullRequest, error) {
+	const query = `
+		SELECT pr.id, pr.number, pr.repo_full_name, pr.title, pr.author, pr.status, pr.is_draft, pr.needs_review,
+		       pr.url, pr.branch, pr.base_branch, pr.labels, pr.head_sha,
+		       pr.additions, pr.deletions, pr.changed_files, pr.mergeable_status, pr.ci_status,
+		       pr.opened_at, pr.updated_at, pr.last_activity_at
+		FROM pull_requests pr
+		INNER JOIN ignored_prs ip ON ip.pr_id = pr.id
+		ORDER BY ip.ignored_at DESC
 	`
 
 	return r.queryPRs(ctx, query)

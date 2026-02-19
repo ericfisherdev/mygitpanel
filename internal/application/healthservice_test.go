@@ -229,6 +229,9 @@ func (s *testPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) { 
 func (s *testPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
 	return nil, nil
 }
+func (s *testPRStore) ListIgnoredWithPRData(_ context.Context) ([]model.PullRequest, error) {
+	return nil, nil
+}
 func (s *testPRStore) Delete(_ context.Context, _ string, _ int) error { return nil }
 
 func TestGetPRHealthSummary(t *testing.T) {

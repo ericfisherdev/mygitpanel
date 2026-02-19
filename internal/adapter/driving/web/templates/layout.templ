@@ -1,8 +1,11 @@
 package templates
 
-import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
+import (
+	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+)
 
-templ Layout(title string, contents templ.Component) {
+templ Layout(title string, contents templ.Component, globalSettings model.GlobalSettings) {
 	<!DOCTYPE html>
 	<html lang="en" x-data x-bind:class="$store.theme.dark ? 'dark' : ''">
 	<head>
@@ -13,7 +16,7 @@ templ Layout(title string, contents templ.Component) {
 	</head>
 	<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen" hx-ext="alpine-morph">
 		@contents
-		@components.SettingsDrawer()
+		@components.SettingsDrawer(globalSettings)
 		<!-- Script loading order: htmx -> htmx-ext-alpine-morph -> alpine plugins -> stores -> alpine core -->
 		<script src="/static/vendor/htmx.min.js"></script>
 		<script src="/static/vendor/htmx-ext-alpine-morph.js"></script>

@@ -10,23 +10,26 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
-// toPRCardViewModels converts a slice of domain PullRequests to PRCardViewModels.
+// toPRCardViewModels converts a slice of domain PullRequests to PRCardViewModels
+// with zero-value attention signals.
 func toPRCardViewModels(prs []model.PullRequest) []vm.PRCardViewModel {
 	cards := make([]vm.PRCardViewModel, 0, len(prs))
 	for _, pr := range prs {
-		cards = append(cards, toPRCardViewModel(pr))
+		cards = append(cards, toPRCardViewModel(pr, model.AttentionSignals{}))
 	}
 	return cards
 }
 
 // toPRCardViewModel converts a single domain PullRequest to a PRCardViewModel.
-func toPRCardViewModel(pr model.PullRequest) vm.PRCardViewModel {
+// Pass model.AttentionSignals{} for zero-value signals (no signals active).
+func toPRCardViewModel(pr model.PullRequest, signals model.AttentionSignals) vm.PRCardViewModel {
 	labels := pr.Labels
 	if labels == nil {
 		labels = []string{}
 	}
 
 	return vm.PRCardViewModel{
+		ID:                    pr.ID,
 		Number:                pr.Number,
 		Repository:            pr.RepoFullName,
 		Title:                 pr.Title,
@@ -41,6 +44,7 @@ func toPRCardViewModel(pr model.PullRequest) vm.PRCardViewModel {
 		Labels:                labels,
 		URL:                   pr.URL,
 		DetailPath:            fmt.Sprintf("/app/prs/%s/%d", pr.RepoFullName, pr.Number),
+		Attention:             signals,
 	}
 }
 
@@ -54,7 +58,7 @@ func toPRDetailViewModel(
 	botUsernames []string,
 	authenticatedUser string,
 ) vm.PRDetailViewModel {
-	card := toPRCardViewModel(pr)
+	card := toPRCardViewModel(pr, model.AttentionSignals{})
 
 	const shortSHALength = 7
 

@@ -30,6 +30,7 @@ type Handler struct {
 	reviewSvc      *application.ReviewService
 	healthSvc      *application.HealthService
 	pollSvc        *application.PollService
+	attentionSvc   *application.AttentionService
 	username       string
 	logger         *slog.Logger
 	credStore      driven.CredentialStore
@@ -67,6 +68,13 @@ func NewHandler(
 	}
 }
 
+// WithAttentionService sets the attention service on the handler after construction.
+// This avoids a circular dependency between Handler and AttentionService.
+func (h *Handler) WithAttentionService(svc *application.AttentionService) *Handler {
+	h.attentionSvc = svc
+	return h
+}
+
 // Dashboard renders the main dashboard page with PR list in the sidebar.
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	prs, err := h.prStore.ListAll(r.Context())
@@ -83,12 +91,21 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ignoredPRs, err := h.prStore.ListIgnoredWithPRData(r.Context())
+	if err != nil {
+		h.logger.Warn("failed to list ignored PRs", "error", err)
+		ignoredPRs = nil
+	}
+
+	globalSettings := h.getGlobalSettings(r.Context())
+
 	// Ensure CSRF cookie is set for mutating requests.
 	csrfToken(w, r)
 
-	data := buildDashboardViewModel(prs, repos)
+	cards := h.toPRCardViewModelsWithSignals(r.Context(), prs)
+	data := buildDashboardViewModel(cards, repos, ignoredPRs, globalSettings)
 	component := pages.Dashboard(data)
-	layout := templates.Layout("ReviewHub", component)
+	layout := templates.Layout("ReviewHub", component, globalSettings)
 
 	if err := layout.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render dashboard", "error", err)
@@ -109,8 +126,8 @@ func (h *Handler) SearchPRs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filtered := filterPRs(prs, query, status, repo)
-	cards := toPRCardViewModels(filtered)
-	component := partials.PRList(cards)
+	cards := h.toPRCardViewModelsWithSignals(r.Context(), filtered)
+	component := partials.PRList(cards, nil)
 
 	if err := component.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render search results", "error", err)
@@ -272,8 +289,14 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 	}
 
 	repoVMs := toRepoViewModels(repos)
-	cards := toPRCardViewModels(prs)
+	cards := h.toPRCardViewModelsWithSignals(r.Context(), prs)
 	repoNames := extractRepoNames(repos)
+
+	ignoredPRs, ignoredErr := h.prStore.ListIgnoredWithPRData(r.Context())
+	if ignoredErr != nil {
+		h.logger.Warn("failed to list ignored PRs for OOB swap", "error", ignoredErr)
+		ignoredPRs = nil
+	}
 
 	// Primary target: repo list.
 	repoListComp := partials.RepoList(repoVMs)
@@ -283,7 +306,7 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 	}
 
 	// OOB swap: PR list.
-	prListComp := partials.PRListOOB(cards)
+	prListComp := partials.PRListOOB(cards, ignoredPRs)
 	if err := prListComp.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render OOB PR list", "error", err)
 		return
@@ -293,6 +316,180 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 	filterComp := components.RepoFilterOptions(repoNames)
 	if err := filterComp.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render OOB repo filter", "error", err)
+	}
+}
+
+// IgnorePR handles POST /app/prs/{id}/ignore.
+// It marks a PR as ignored and returns an OOB swap to refresh the PR list.
+func (h *Handler) IgnorePR(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid PR ID", http.StatusBadRequest)
+		return
+	}
+
+	if h.ignoreStore != nil {
+		if err := h.ignoreStore.Ignore(r.Context(), id); err != nil {
+			h.logger.Error("failed to ignore PR", "pr_id", id, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	h.renderPRListOOBResponse(w, r)
+}
+
+// UnignorePR handles POST /app/prs/{id}/unignore.
+// It removes a PR from the ignore list and returns an OOB swap to refresh the PR list.
+func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid PR ID", http.StatusBadRequest)
+		return
+	}
+
+	if h.ignoreStore != nil {
+		if err := h.ignoreStore.Unignore(r.Context(), id); err != nil {
+			h.logger.Error("failed to unignore PR", "pr_id", id, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	h.renderPRListOOBResponse(w, r)
+}
+
+// SaveGlobalThresholds handles POST /app/settings/thresholds/global.
+// It parses and persists global threshold settings, then returns an OOB PR list refresh.
+func (h *Handler) SaveGlobalThresholds(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: invalid form data</span>`)
+		return
+	}
+
+	reviewCount, _ := strconv.Atoi(r.FormValue("review_count_threshold"))
+	if reviewCount < 0 {
+		reviewCount = 0
+	}
+	ageDays, _ := strconv.Atoi(r.FormValue("age_urgency_days"))
+	if ageDays < 0 {
+		ageDays = 0
+	}
+	staleEnabled := r.FormValue("stale_review_enabled") == "on" || r.FormValue("stale_review_enabled") == "1"
+	ciEnabled := r.FormValue("ci_failure_enabled") == "on" || r.FormValue("ci_failure_enabled") == "1"
+
+	settings := model.GlobalSettings{
+		ReviewCountThreshold: reviewCount,
+		AgeUrgencyDays:       ageDays,
+		StaleReviewEnabled:   staleEnabled,
+		CIFailureEnabled:     ciEnabled,
+	}
+
+	if h.thresholdStore != nil {
+		if err := h.thresholdStore.SetGlobalSettings(r.Context(), settings); err != nil {
+			h.logger.Error("failed to save global thresholds", "error", err)
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save settings</span>`)
+			return
+		}
+	}
+
+	// Status fragment for hx-target="#threshold-status".
+	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Thresholds saved</span>`)
+
+	// OOB swap: refresh PR list with updated signals.
+	h.renderPRListOOB(w, r)
+}
+
+// SaveRepoThreshold handles POST /app/settings/thresholds/repo.
+// It parses and persists per-repo threshold overrides.
+func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: invalid form data</span>`)
+		return
+	}
+
+	repoFullName := strings.TrimSpace(r.FormValue("repo_full_name"))
+	if repoFullName == "" {
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: repo name required</span>`)
+		return
+	}
+
+	threshold := model.RepoThreshold{RepoFullName: repoFullName}
+
+	if v := r.FormValue("review_count"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err == nil && n >= 0 {
+			threshold.ReviewCount = &n
+		}
+	}
+	if v := r.FormValue("age_urgency_days"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err == nil && n >= 0 {
+			threshold.AgeUrgencyDays = &n
+		}
+	}
+
+	if h.thresholdStore != nil {
+		if err := h.thresholdStore.SetRepoThreshold(r.Context(), threshold); err != nil {
+			h.logger.Error("failed to save repo threshold", "repo", repoFullName, "error", err)
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save settings</span>`)
+			return
+		}
+	}
+
+	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Saved</span>`)
+
+	// OOB swap: refresh PR list with updated signals.
+	h.renderPRListOOB(w, r)
+}
+
+// DeleteRepoThreshold handles DELETE /app/settings/thresholds/repo/{owner}/{repo}.
+// It removes the per-repo override and returns a success fragment + OOB PR list swap.
+func (h *Handler) DeleteRepoThreshold(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	repoFullName := owner + "/" + repo
+
+	if h.thresholdStore != nil {
+		if err := h.thresholdStore.DeleteRepoThreshold(r.Context(), repoFullName); err != nil {
+			h.logger.Error("failed to delete repo threshold", "repo", repoFullName, "error", err)
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to reset</span>`)
+			return
+		}
+	}
+
+	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Reset to global defaults</span>`)
+
+	// OOB swap: refresh PR list with updated signals.
+	h.renderPRListOOB(w, r)
+}
+
+// renderPRListOOBResponse renders just the PR list OOB swap after an ignore/unignore.
+// The primary response is the empty OOB swap itself (no separate primary target).
+func (h *Handler) renderPRListOOBResponse(w http.ResponseWriter, r *http.Request) {
+	h.renderPRListOOB(w, r)
+}
+
+// renderPRListOOB fetches the current PR list and ignored PRs and writes an OOB swap.
+func (h *Handler) renderPRListOOB(w http.ResponseWriter, r *http.Request) {
+	prs, err := h.prStore.ListAll(r.Context())
+	if err != nil {
+		h.logger.Error("failed to list PRs for OOB swap", "error", err)
+		return
+	}
+
+	ignoredPRs, err := h.prStore.ListIgnoredWithPRData(r.Context())
+	if err != nil {
+		h.logger.Warn("failed to list ignored PRs for OOB swap", "error", err)
+		ignoredPRs = nil
+	}
+
+	cards := h.toPRCardViewModelsWithSignals(r.Context(), prs)
+	prListComp := partials.PRListOOB(cards, ignoredPRs)
+	if err := prListComp.Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render OOB PR list", "error", err)
 	}
 }
 
@@ -356,12 +553,51 @@ func isValidRepoChar(ch rune) bool {
 }
 
 // buildDashboardViewModel constructs the full view model for the dashboard page.
-func buildDashboardViewModel(prs []model.PullRequest, repos []model.Repository) vm.DashboardViewModel {
-	return vm.DashboardViewModel{
-		Cards:     toPRCardViewModels(prs),
-		Repos:     toRepoViewModels(repos),
-		RepoNames: extractRepoNames(repos),
+func buildDashboardViewModel(cards []vm.PRCardViewModel, repos []model.Repository, ignoredPRs []model.PullRequest, globalSettings model.GlobalSettings) vm.DashboardViewModel {
+	ignoredCards := make([]vm.PRCardViewModel, 0, len(ignoredPRs))
+	for _, pr := range ignoredPRs {
+		// Ignored PRs show with zero-value attention signals in the ignore list.
+		ignoredCards = append(ignoredCards, toPRCardViewModel(pr, model.AttentionSignals{}))
 	}
+
+	return vm.DashboardViewModel{
+		Cards:          cards,
+		Repos:          toRepoViewModels(repos),
+		RepoNames:      extractRepoNames(repos),
+		IgnoredPRs:     ignoredCards,
+		GlobalSettings: globalSettings,
+	}
+}
+
+// toPRCardViewModelsWithSignals converts PRs to card view models, computing attention signals for each.
+// On signal computation failure, falls back to zero-value signals (non-fatal).
+func (h *Handler) toPRCardViewModelsWithSignals(ctx context.Context, prs []model.PullRequest) []vm.PRCardViewModel {
+	cards := make([]vm.PRCardViewModel, 0, len(prs))
+	for _, pr := range prs {
+		var signals model.AttentionSignals
+		if h.attentionSvc != nil {
+			var err error
+			signals, err = h.attentionSvc.SignalsForPR(ctx, pr)
+			if err != nil {
+				h.logger.Warn("failed to compute attention signals, using zero-value", "pr_id", pr.ID, "error", err)
+			}
+		}
+		cards = append(cards, toPRCardViewModel(pr, signals))
+	}
+	return cards
+}
+
+// getGlobalSettings fetches global settings from the threshold store, returning defaults on error.
+func (h *Handler) getGlobalSettings(ctx context.Context) model.GlobalSettings {
+	if h.thresholdStore == nil {
+		return model.DefaultGlobalSettings()
+	}
+	settings, err := h.thresholdStore.GetGlobalSettings(ctx)
+	if err != nil {
+		h.logger.Warn("failed to get global settings, using defaults", "error", err)
+		return model.DefaultGlobalSettings()
+	}
+	return settings
 }
 
 // toRepoViewModels converts domain repos to presentation view models.
