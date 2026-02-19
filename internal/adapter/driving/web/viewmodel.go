@@ -46,11 +46,13 @@ func toPRCardViewModel(pr model.PullRequest) vm.PRCardViewModel {
 
 // toPRDetailViewModel converts domain data into a fully enriched PRDetailViewModel.
 // Review enrichment failure is non-fatal: pass nil for summary/checkRuns if unavailable.
+// authenticatedUser is used to set IsOwnPR; pass empty string if unauthenticated.
 func toPRDetailViewModel(
 	pr model.PullRequest,
 	summary *application.PRReviewSummary,
 	checkRuns []model.CheckRun,
 	botUsernames []string,
+	authenticatedUser string,
 ) vm.PRDetailViewModel {
 	card := toPRCardViewModel(pr)
 
@@ -78,6 +80,7 @@ func toPRDetailViewModel(
 		Additions:       pr.Additions,
 		Deletions:       pr.Deletions,
 		ChangedFiles:    pr.ChangedFiles,
+		IsOwnPR:         authenticatedUser != "" && pr.Author == authenticatedUser,
 		Reviews:         []vm.ReviewViewModel{},
 		Threads:         []vm.ThreadViewModel{},
 		IssueComments:   []vm.IssueCommentViewModel{},

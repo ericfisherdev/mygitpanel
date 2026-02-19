@@ -16,56 +16,90 @@ func formatDaysAgo(days int) string {
 	}
 }
 
+// PRDetailHeader renders the PR header section including title, badges, and draft toggle.
+// It is also used as the morph swap target (#pr-detail-header) for ToggleDraftStatus responses.
+templ PRDetailHeader(pr viewmodel.PRDetailViewModel) {
+	<div id="pr-detail-header" class="mb-6">
+		<div class="flex items-start justify-between gap-4">
+			<div>
+				<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+					{ pr.Title }
+					<span class="text-gray-400 font-normal">#{ fmt.Sprint(pr.Number) }</span>
+				</h2>
+				<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+					{ pr.Repository } &middot; { pr.Author }
+				</p>
+			</div>
+			<a
+				href={ templ.SafeURL(pr.URL) }
+				target="_blank"
+				rel="noopener noreferrer"
+				class="shrink-0 inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+			>
+				GitHub &nearr;
+			</a>
+		</div>
+		<!-- Status badges and draft toggle -->
+		<div class="flex items-center gap-2 mt-3 flex-wrap">
+			if pr.Status == "open" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Open</span>
+			} else if pr.Status == "merged" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">Merged</span>
+			} else if pr.Status == "closed" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">Closed</span>
+			}
+			if pr.IsDraft {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">Draft</span>
+			}
+			if pr.CIStatus == "passing" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">CI Passing</span>
+			} else if pr.CIStatus == "failing" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">CI Failing</span>
+			} else if pr.CIStatus == "pending" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">CI Pending</span>
+			}
+			if pr.MergeableStatus == "conflicted" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">Conflicts</span>
+			} else if pr.MergeableStatus == "mergeable" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Mergeable</span>
+			}
+			if pr.IsOwnPR && pr.Status == "open" {
+				<button
+					hx-post={ fmt.Sprintf("/app/prs/%s/%s/%d/draft-toggle", pr.Owner, pr.RepoName, pr.Number) }
+					hx-target="#pr-detail-header"
+					hx-swap="morph"
+					hx-indicator="this"
+					x-data="{ loading: false }"
+					@htmx:before-request.camel="loading = true"
+					@htmx:after-request.camel="loading = false"
+					:disabled="loading"
+					class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+				>
+					<span x-show="!loading">
+						if pr.IsDraft {
+							Mark Ready for Review
+						} else {
+							Convert to Draft
+						}
+					</span>
+					<span x-show="loading" class="inline-flex items-center gap-1">
+						<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						</svg>
+						Working...
+					</span>
+				</button>
+			}
+		</div>
+	</div>
+}
+
 // PRDetail renders the full PR detail panel with tabbed content.
 templ PRDetail(pr viewmodel.PRDetailViewModel) {
 	<div class="max-w-4xl mx-auto" x-data="{ tab: 'reviews' }">
 		<!-- Header -->
-		<div class="mb-6">
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-						{ pr.Title }
-						<span class="text-gray-400 font-normal">#{ fmt.Sprint(pr.Number) }</span>
-					</h2>
-					<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-						{ pr.Repository } &middot; { pr.Author }
-					</p>
-				</div>
-				<a
-					href={ templ.SafeURL(pr.URL) }
-					target="_blank"
-					rel="noopener noreferrer"
-					class="shrink-0 inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-				>
-					GitHub &nearr;
-				</a>
-			</div>
-			<!-- Status badges -->
-			<div class="flex items-center gap-2 mt-3 flex-wrap">
-				if pr.Status == "open" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Open</span>
-				} else if pr.Status == "merged" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">Merged</span>
-				} else if pr.Status == "closed" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">Closed</span>
-				}
-				if pr.IsDraft {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">Draft</span>
-				}
-				if pr.CIStatus == "passing" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">CI Passing</span>
-				} else if pr.CIStatus == "failing" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">CI Failing</span>
-				} else if pr.CIStatus == "pending" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">CI Pending</span>
-				}
-				if pr.MergeableStatus == "conflicted" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">Conflicts</span>
-				} else if pr.MergeableStatus == "mergeable" {
-					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Mergeable</span>
-				}
-			</div>
-		</div>
+		@PRDetailHeader(pr)
 		<!-- Info section -->
 		<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-6">
 			<div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
