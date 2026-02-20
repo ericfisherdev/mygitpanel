@@ -61,8 +61,8 @@ func NewAttentionService(ts driven.ThresholdStore, rs driven.ReviewStore, userna
 }
 
 // EffectiveThresholdsFor returns the resolved thresholds for a repo (global + per-repo merge).
-// On error, falls back to defaults (non-fatal).
-func (s *AttentionService) EffectiveThresholdsFor(ctx context.Context, repoFullName string) (model.EffectiveThresholds, error) {
+// Errors from the store are logged and fall back to defaults (non-fatal).
+func (s *AttentionService) EffectiveThresholdsFor(ctx context.Context, repoFullName string) model.EffectiveThresholds {
 	global, err := s.thresholdStore.GetGlobalSettings(ctx)
 	if err != nil {
 		s.logger.Warn("failed to get global settings, using defaults", "error", err)
@@ -91,13 +91,13 @@ func (s *AttentionService) EffectiveThresholdsFor(ctx context.Context, repoFullN
 		effective.CIFailureEnabled = *repoThreshold.CIFailureEnabled
 	}
 
-	return effective, nil
+	return effective
 }
 
-// SignalsForPR computes attention signals for a single PR. It fetches the required
-// review data from the review store. Returns zero-value AttentionSignals on error
-// (non-fatal — signals degrade gracefully).
-func (s *AttentionService) SignalsForPR(ctx context.Context, pr model.PullRequest) (model.AttentionSignals, error) {
+// SignalsForPR computes attention signals for a single PR using pre-resolved thresholds.
+// Callers should fetch thresholds once per unique repo via EffectiveThresholdsFor to avoid
+// per-PR DB lookups. Returns zero-value AttentionSignals on review store error (non-fatal).
+func (s *AttentionService) SignalsForPR(ctx context.Context, pr model.PullRequest, thresholds model.EffectiveThresholds) (model.AttentionSignals, error) {
 	reviews, err := s.reviewStore.GetReviewsByPR(ctx, pr.ID)
 	if err != nil {
 		s.logger.Warn("failed to get reviews for attention signals", "pr_id", pr.ID, "error", err)
@@ -124,12 +124,6 @@ func (s *AttentionService) SignalsForPR(ctx context.Context, pr model.PullReques
 		if login == s.username {
 			userReviewSHA = r.CommitID
 		}
-	}
-
-	thresholds, err := s.EffectiveThresholdsFor(ctx, pr.RepoFullName)
-	if err != nil {
-		s.logger.Warn("failed to get effective thresholds, using defaults", "repo", pr.RepoFullName, "error", err)
-		thresholds = model.EffectiveThresholds(model.DefaultGlobalSettings())
 	}
 
 	return ComputeAttentionSignals(pr, approvalCount, userReviewSHA, thresholds, s.username), nil

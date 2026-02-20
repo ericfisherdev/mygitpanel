@@ -43,7 +43,7 @@ templ PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) {
 			<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Submit Review</h3>
 			<div
 				x-data="{ pendingComments: [], reviewBody: '', reviewEvent: 'COMMENT' }"
-				x-init="$watch('pendingComments', value => { $refs.commentsInput.value = JSON.stringify(value) })"
+				x-init="$refs.commentsInput.value = JSON.stringify(pendingComments); $watch('pendingComments', value => { $refs.commentsInput.value = JSON.stringify(value) })"
 				class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4"
 			>
 				<!-- Pending line comments list -->
@@ -69,7 +69,7 @@ templ PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) {
 					hx-post={ fmt.Sprintf("/app/prs/%s/%s/%d/review", owner, repo, pr.Number) }
 					hx-target="#pr-reviews-section"
 					hx-swap="morph"
-					@htmx:after-request.camel="if(event.detail.successful){ pendingComments = []; reviewBody = '' }"
+					@htmx:after-request.camel="if(event.detail.successful){ pendingComments = []; reviewBody = ''; reviewEvent = 'COMMENT' }"
 					class="space-y-3"
 				>
 					<input type="hidden" name="commit_sha" value={ pr.HeadSHA }/>
@@ -111,7 +111,7 @@ templ PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) {
 						</button>
 						<span class="htmx-indicator text-xs text-gray-400 dark:text-gray-500">Submitting...</span>
 					</div>
-					<div id="pr-review-error" class="text-sm"></div>
+					<div id="pr-review-error" class="text-sm" aria-live="polite" role="status" aria-atomic="true"></div>
 				</form>
 			</div>
 		</section>

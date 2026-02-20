@@ -2,9 +2,14 @@ package driven
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
+
+// ErrEncryptionKeyNotSet is returned by CredentialStore operations when
+// MYGITPANEL_SECRET_KEY has not been configured.
+var ErrEncryptionKeyNotSet = errors.New("encryption key not configured: set MYGITPANEL_SECRET_KEY")
 
 // CredentialStore defines the driven port for encrypted credential persistence.
 // The adapter layer is responsible for encryption/decryption; this interface

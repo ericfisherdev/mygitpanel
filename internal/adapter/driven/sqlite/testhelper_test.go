@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
+	"net/url"
 	"testing"
 )
 
@@ -14,8 +14,9 @@ import (
 func setupTestDB(t *testing.T) *DB {
 	t.Helper()
 
-	// Sanitize the test name to produce a valid SQLite URI filename component.
-	safeName := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	// Percent-encode the test name so it's a safe SQLite URI filename component
+	// and cannot be misinterpreted as query parameters in the "file:%s?..." DSN.
+	safeName := url.PathEscape(t.Name())
 	// WAL mode is not applicable to in-memory databases; omit journal_mode pragma.
 	dsn := fmt.Sprintf(
 		"file:%s?mode=memory&cache=shared&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-64000)",
