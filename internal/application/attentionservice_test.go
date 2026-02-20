@@ -10,6 +10,9 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
+// testAuthor is the GitHub username used as the authenticated user in test cases.
+const testAuthor = "alice"
+
 // prWithAge returns a PullRequest opened the given number of days ago.
 func prWithAge(days int) model.PullRequest {
 	return model.PullRequest{
@@ -33,26 +36,26 @@ func TestComputeAttentionSignals_NeedsMoreReviews(t *testing.T) {
 	pr.HeadSHA = "abc123"
 
 	t.Run("0 approvals with threshold 1 -> NeedsMoreReviews true", func(t *testing.T) {
-		signals := application.ComputeAttentionSignals(pr, 0, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 0, "", thresholds, testAuthor)
 		assert.True(t, signals.NeedsMoreReviews)
 	})
 
 	t.Run("1 approval with threshold 1 -> NeedsMoreReviews false", func(t *testing.T) {
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.False(t, signals.NeedsMoreReviews)
 	})
 
 	t.Run("2 approvals with threshold 2 -> NeedsMoreReviews false", func(t *testing.T) {
 		thresholds2 := thresholds
 		thresholds2.ReviewCountThreshold = 2
-		signals := application.ComputeAttentionSignals(pr, 2, "", thresholds2, "alice")
+		signals := application.ComputeAttentionSignals(pr, 2, "", thresholds2, testAuthor)
 		assert.False(t, signals.NeedsMoreReviews)
 	})
 
 	t.Run("1 approval with threshold 2 -> NeedsMoreReviews true", func(t *testing.T) {
 		thresholds2 := thresholds
 		thresholds2.ReviewCountThreshold = 2
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds2, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds2, testAuthor)
 		assert.True(t, signals.NeedsMoreReviews)
 	})
 }
@@ -62,19 +65,19 @@ func TestComputeAttentionSignals_IsAgeUrgent(t *testing.T) {
 
 	t.Run("8 days open with threshold 7 -> IsAgeUrgent true", func(t *testing.T) {
 		pr := prWithAge(8)
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.True(t, signals.IsAgeUrgent)
 	})
 
 	t.Run("6 days open with threshold 7 -> IsAgeUrgent false", func(t *testing.T) {
 		pr := prWithAge(6)
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.False(t, signals.IsAgeUrgent)
 	})
 
 	t.Run("exactly 7 days open with threshold 7 -> IsAgeUrgent true (>= comparison)", func(t *testing.T) {
 		pr := prWithAge(7)
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.True(t, signals.IsAgeUrgent)
 	})
 }
@@ -85,24 +88,24 @@ func TestComputeAttentionSignals_HasStaleReview(t *testing.T) {
 	pr.HeadSHA = "newsha123"
 
 	t.Run("different SHAs -> HasStaleReview true", func(t *testing.T) {
-		signals := application.ComputeAttentionSignals(pr, 1, "oldsha456", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "oldsha456", thresholds, testAuthor)
 		assert.True(t, signals.HasStaleReview)
 	})
 
 	t.Run("same SHA -> HasStaleReview false", func(t *testing.T) {
-		signals := application.ComputeAttentionSignals(pr, 1, "newsha123", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "newsha123", thresholds, testAuthor)
 		assert.False(t, signals.HasStaleReview)
 	})
 
 	t.Run("empty reviewSHA (no review yet) -> HasStaleReview false", func(t *testing.T) {
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.False(t, signals.HasStaleReview)
 	})
 
 	t.Run("disabled in thresholds -> HasStaleReview false even with different SHAs", func(t *testing.T) {
 		disabled := thresholds
 		disabled.StaleReviewEnabled = false
-		signals := application.ComputeAttentionSignals(pr, 1, "oldsha456", disabled, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "oldsha456", disabled, testAuthor)
 		assert.False(t, signals.HasStaleReview)
 	})
 }
@@ -112,9 +115,9 @@ func TestComputeAttentionSignals_HasCIFailure(t *testing.T) {
 
 	t.Run("own PR with failing CI -> HasCIFailure true", func(t *testing.T) {
 		pr := prWithAge(0)
-		pr.Author = "alice"
+		pr.Author = testAuthor
 		pr.CIStatus = model.CIStatusFailing
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.True(t, signals.HasCIFailure)
 	})
 
@@ -122,15 +125,15 @@ func TestComputeAttentionSignals_HasCIFailure(t *testing.T) {
 		pr := prWithAge(0)
 		pr.Author = "bob"
 		pr.CIStatus = model.CIStatusFailing
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.False(t, signals.HasCIFailure)
 	})
 
 	t.Run("own PR with passing CI -> HasCIFailure false", func(t *testing.T) {
 		pr := prWithAge(0)
-		pr.Author = "alice"
+		pr.Author = testAuthor
 		pr.CIStatus = model.CIStatusPassing
-		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.False(t, signals.HasCIFailure)
 	})
 
@@ -138,9 +141,9 @@ func TestComputeAttentionSignals_HasCIFailure(t *testing.T) {
 		disabled := thresholds
 		disabled.CIFailureEnabled = false
 		pr := prWithAge(0)
-		pr.Author = "alice"
+		pr.Author = testAuthor
 		pr.CIStatus = model.CIStatusFailing
-		signals := application.ComputeAttentionSignals(pr, 1, "", disabled, "alice")
+		signals := application.ComputeAttentionSignals(pr, 1, "", disabled, testAuthor)
 		assert.False(t, signals.HasCIFailure)
 	})
 }

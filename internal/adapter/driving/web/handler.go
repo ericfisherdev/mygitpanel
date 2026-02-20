@@ -322,31 +322,26 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 // IgnorePR handles POST /app/prs/{id}/ignore.
 // It marks a PR as ignored and returns an OOB swap to refresh the PR list.
 func (h *Handler) IgnorePR(w http.ResponseWriter, r *http.Request) {
-	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
-		return
-	}
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid PR ID", http.StatusBadRequest)
-		return
-	}
-
+	var action func(context.Context, int64) error
 	if h.ignoreStore != nil {
-		if err := h.ignoreStore.Ignore(r.Context(), id); err != nil {
-			h.logger.Error("failed to ignore PR", "pr_id", id, "error", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
+		action = h.ignoreStore.Ignore
 	}
-
-	h.renderPRListOOBResponse(w, r)
+	h.handleIgnoreToggle(w, r, action, "failed to ignore PR")
 }
 
 // UnignorePR handles POST /app/prs/{id}/unignore.
 // It removes a PR from the ignore list and returns an OOB swap to refresh the PR list.
 func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
+	var action func(context.Context, int64) error
+	if h.ignoreStore != nil {
+		action = h.ignoreStore.Unignore
+	}
+	h.handleIgnoreToggle(w, r, action, "failed to unignore PR")
+}
+
+// handleIgnoreToggle is the shared implementation for IgnorePR and UnignorePR.
+// action is called with the parsed PR ID if non-nil; pass nil to skip the store call.
+func (h *Handler) handleIgnoreToggle(w http.ResponseWriter, r *http.Request, action func(context.Context, int64) error, logMsg string) {
 	if !validateCSRF(r) {
 		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
@@ -358,9 +353,9 @@ func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.ignoreStore != nil {
-		if err := h.ignoreStore.Unignore(r.Context(), id); err != nil {
-			h.logger.Error("failed to unignore PR", "pr_id", id, "error", err)
+	if action != nil {
+		if err := action(r.Context(), id); err != nil {
+			h.logger.Error(logMsg, "pr_id", id, "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}

@@ -46,10 +46,13 @@ func Load() (*Config, error) {
 	}
 	cfg.GitHubUsername = username
 
+	// aesKeyHexLen is the required length of the hex-encoded 32-byte AES-256 key.
+	const aesKeyHexLen = 64
+
 	// MYGITPANEL_SECRET_KEY is optional — credential storage is disabled when absent.
 	if keyHex, ok := os.LookupEnv("MYGITPANEL_SECRET_KEY"); ok && keyHex != "" {
-		if len(keyHex) != 64 {
-			return nil, fmt.Errorf("MYGITPANEL_SECRET_KEY must be a 64-character hex string (32 bytes)")
+		if len(keyHex) != aesKeyHexLen {
+			return nil, fmt.Errorf("MYGITPANEL_SECRET_KEY must be a %d-character hex string (32 bytes)", aesKeyHexLen)
 		}
 		key, err := hex.DecodeString(keyHex)
 		if err != nil {

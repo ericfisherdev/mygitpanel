@@ -46,6 +46,8 @@ linters:
         - (*database/sql.Rows).Close
         - (*database/sql.DB).Close
         - (io.Closer).Close
+        - fmt.Fprintf
+        - fmt.Fprintln
     gocyclo:
       min-complexity: 20
     gocognit:
