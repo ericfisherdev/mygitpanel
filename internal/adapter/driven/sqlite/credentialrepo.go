@@ -15,9 +15,10 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
-// ErrEncryptionKeyNotSet is returned when a credential operation requires encryption
-// but MYGITPANEL_SECRET_KEY was not configured.
-var ErrEncryptionKeyNotSet = errors.New("encryption key not configured: set MYGITPANEL_SECRET_KEY")
+// ErrEncryptionKeyNotSet aliases the port-level sentinel so callers import only the driven port.
+//
+// Deprecated: use driven.ErrEncryptionKeyNotSet directly.
+var ErrEncryptionKeyNotSet = driven.ErrEncryptionKeyNotSet
 
 // Compile-time interface satisfaction check.
 var _ driven.CredentialStore = (*CredentialRepo)(nil)

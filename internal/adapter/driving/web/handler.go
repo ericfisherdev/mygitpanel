@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	sqliteadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/sqlite"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/pages"
@@ -70,8 +70,8 @@ func NewHandler(
 	}
 }
 
-// WithAttentionService sets the attention service on the handler after construction.
-// This avoids a circular dependency between Handler and AttentionService.
+// WithAttentionService injects AttentionService after construction to keep NewHandler's
+// parameter list minimal and improve testability by allowing the service to be omitted in tests.
 func (h *Handler) WithAttentionService(svc *application.AttentionService) *Handler {
 	h.attentionSvc = svc
 	return h
@@ -355,15 +355,18 @@ func (h *Handler) handleIgnoreToggle(w http.ResponseWriter, r *http.Request, act
 		return
 	}
 
-	if action != nil {
-		if err := action(r.Context(), id); err != nil {
-			h.logger.Error(logMsg, "pr_id", id, "error", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
+	if action == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
 	}
 
-	h.renderPRListOOBResponse(w, r)
+	if err := action(r.Context(), id); err != nil {
+		h.logger.Error(logMsg, "pr_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.renderPRListOOB(w, r)
 }
 
 // SaveGlobalThresholds handles POST /app/settings/thresholds/global.
@@ -485,12 +488,6 @@ func (h *Handler) DeleteRepoThreshold(w http.ResponseWriter, r *http.Request) {
 	h.renderPRListOOB(w, r)
 }
 
-// renderPRListOOBResponse renders just the PR list OOB swap after an ignore/unignore.
-// The primary response is the empty OOB swap itself (no separate primary target).
-func (h *Handler) renderPRListOOBResponse(w http.ResponseWriter, r *http.Request) {
-	h.renderPRListOOB(w, r)
-}
-
 // renderPRListOOB fetches the current PR list and ignored PRs and writes an OOB swap.
 func (h *Handler) renderPRListOOB(w http.ResponseWriter, r *http.Request) {
 	prs, err := h.prStore.ListAll(r.Context())
@@ -589,14 +586,25 @@ func buildDashboardViewModel(cards []vm.PRCardViewModel, repos []model.Repositor
 }
 
 // toPRCardViewModelsWithSignals converts PRs to card view models, computing attention signals for each.
-// On signal computation failure, falls back to zero-value signals (non-fatal).
+// Thresholds are resolved once per unique repo to avoid N+1 DB lookups. On signal computation
+// failure, falls back to zero-value signals (non-fatal).
 func (h *Handler) toPRCardViewModelsWithSignals(ctx context.Context, prs []model.PullRequest) []vm.PRCardViewModel {
+	// Pre-fetch thresholds once per unique repo.
+	thresholdsByRepo := make(map[string]model.EffectiveThresholds, len(prs))
+	if h.attentionSvc != nil {
+		for _, pr := range prs {
+			if _, seen := thresholdsByRepo[pr.RepoFullName]; !seen {
+				thresholdsByRepo[pr.RepoFullName] = h.attentionSvc.EffectiveThresholdsFor(ctx, pr.RepoFullName)
+			}
+		}
+	}
+
 	cards := make([]vm.PRCardViewModel, 0, len(prs))
 	for _, pr := range prs {
 		var signals model.AttentionSignals
 		if h.attentionSvc != nil {
 			var err error
-			signals, err = h.attentionSvc.SignalsForPR(ctx, pr)
+			signals, err = h.attentionSvc.SignalsForPR(ctx, pr, thresholdsByRepo[pr.RepoFullName])
 			if err != nil {
 				h.logger.Warn("failed to compute attention signals, using zero-value", "pr_id", pr.ID, "error", err)
 			}
@@ -672,18 +680,18 @@ func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) 
 	// A token-less writer is sufficient for validation since we pass the token explicitly.
 	validatedUsername, err := h.writerFactory("").ValidateToken(r.Context(), token)
 	if err != nil {
-		if errors.Is(err, sqliteadapter.ErrEncryptionKeyNotSet) {
+		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
 			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
 			return
 		}
 		h.logger.Error("github token validation failed", "error", err)
-		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: %s</span>`, err.Error())
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: %s</span>`, html.EscapeString(err.Error()))
 		return
 	}
 
 	// Store the validated token.
 	if err := h.credStore.Set(r.Context(), "github_token", token); err != nil {
-		if errors.Is(err, sqliteadapter.ErrEncryptionKeyNotSet) {
+		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
 			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
 			return
 		}
@@ -726,7 +734,7 @@ func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
 
 	// Store all three Jira fields without validation.
 	if err := h.credStore.Set(r.Context(), "jira_url", jiraURL); err != nil {
-		if errors.Is(err, sqliteadapter.ErrEncryptionKeyNotSet) {
+		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
 			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
 			return
 		}
@@ -737,10 +745,14 @@ func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.credStore.Set(r.Context(), "jira_email", jiraEmail); err != nil {
 		h.logger.Error("failed to store jira_email", "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
+		return
 	}
 
 	if err := h.credStore.Set(r.Context(), "jira_token", jiraToken); err != nil {
 		h.logger.Error("failed to store jira_token", "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
+		return
 	}
 
 	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Jira credentials saved</span>`)
@@ -807,7 +819,7 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 	if err := writer.CreateReplyComment(r.Context(), repoFullName, number, rootID, body, filePath, commitSHA); err != nil {
 		h.logger.Error("failed to create reply comment", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, html.EscapeString(err.Error()))
 		return
 	}
 
@@ -932,7 +944,7 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 	if err := writer.SubmitReview(r.Context(), repoFullName, number, req); err != nil {
 		h.logger.Error("failed to submit review", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, html.EscapeString(err.Error()))
 		return
 	}
 
@@ -991,7 +1003,7 @@ func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
 	if err := writer.CreateIssueComment(r.Context(), repoFullName, number, body); err != nil {
 		h.logger.Error("failed to create issue comment", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, html.EscapeString(err.Error()))
 		return
 	}
 
@@ -1063,7 +1075,7 @@ func (h *Handler) ToggleDraftStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to toggle draft status", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, html.EscapeString(err.Error()))
 		return
 	}
 
