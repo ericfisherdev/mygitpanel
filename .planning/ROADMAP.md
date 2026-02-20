@@ -30,7 +30,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 **Milestone Goal:** Add a web GUI that surfaces all existing API capabilities and extends them with full PR review workflows, Jira integration, and customizable attention configuration.
 
 - [x] **Phase 7: GUI Foundation** — Read-only dashboard with templ/HTMX/Alpine.js/Tailwind/GSAP
-- [ ] **Phase 8: Review Workflows and Attention Signals** — Write operations, credential management, configurable thresholds, PR ignore list
+- [x] **Phase 8: Review Workflows and Attention Signals** — Write operations, credential management, configurable thresholds, PR ignore list (completed 2026-02-19)
 - [ ] **Phase 9: Jira Integration** — Jira API adapter, issue viewing, commenting, auto-linking
 
 ## Phase Details
@@ -62,12 +62,14 @@ Plans:
   3. User can toggle a PR between active and draft status from the PR detail view
   4. User can configure per-repo review count thresholds and age-based urgency days, and PRs are visually flagged when they exceed these thresholds
   5. User can ignore a PR to hide it from the feed, view the ignore list, and re-add previously ignored PRs
-**Plans:** TBD
+**Plans:** 5/5 plans complete
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
-- [ ] 08-03: TBD
+- [x] 08-01-PLAN.md — Data foundation: domain models, port interfaces, migrations 000010-000012, SQLite repos (credentials, thresholds, ignore list)
+- [x] 08-02-PLAN.md — Settings drawer UI, credential management (GitHub token validation + Jira storage), PollService hot-swap
+- [ ] 08-03-PLAN.md — TBD
+- [ ] 08-04-PLAN.md — TBD
+- [ ] 08-05-PLAN.md — TBD
 
 ### Phase 9: Jira Integration
 **Goal:** User can see linked Jira issue context alongside PRs and post comments to Jira without leaving the dashboard
@@ -97,5 +99,5 @@ Phases execute in numeric order: 7 → 8 → 9
 | 5. PR Health Signals | v1.0 | 3/3 | Complete | 2026-02-13 |
 | 6. Docker Deployment | v1.0 | 2/2 | Complete | 2026-02-14 |
 | 7. GUI Foundation | 2026.2.0 | 3/3 | Complete | 2026-02-15 |
-| 8. Review Workflows and Attention Signals | 2026.2.0 | 0/TBD | Not started | - |
+| 8. Review Workflows and Attention Signals | 5/5 | Complete   | 2026-02-19 | - |
 | 9. Jira Integration | 2026.2.0 | 0/TBD | Not started | - |

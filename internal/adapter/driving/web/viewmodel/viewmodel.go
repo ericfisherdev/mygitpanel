@@ -2,8 +2,11 @@
 // View models decouple template rendering from domain model types.
 package viewmodel
 
+import "github.com/ericfisherdev/mygitpanel/internal/domain/model"
+
 // PRCardViewModel holds presentation-ready data for a PR card in the sidebar list.
 type PRCardViewModel struct {
+	ID                    int64 // database PR ID (not GitHub number), used for ignore endpoint
 	Number                int
 	Repository            string
 	Title                 string
@@ -19,18 +22,23 @@ type PRCardViewModel struct {
 	Labels                []string
 	URL                   string
 	DetailPath            string
+	Attention             model.AttentionSignals
 }
 
 // PRDetailViewModel holds presentation-ready data for the full PR detail panel.
 type PRDetailViewModel struct {
 	PRCardViewModel
 
+	Owner        string // Repository owner (e.g. "octocat")
+	RepoName     string // Repository name without owner (e.g. "hello-world")
 	Branch       string
 	BaseBranch   string
 	HeadSHA      string
 	Additions    int
 	Deletions    int
 	ChangedFiles int
+
+	IsOwnPR bool // True when the PR author matches the authenticated user.
 
 	Reviews       []ReviewViewModel
 	Threads       []ThreadViewModel
@@ -128,7 +136,17 @@ type RepoViewModel struct {
 
 // DashboardViewModel holds all data needed to render the dashboard page.
 type DashboardViewModel struct {
-	Cards     []PRCardViewModel
-	Repos     []RepoViewModel
-	RepoNames []string // distinct repo names for search bar filter
+	Cards          []PRCardViewModel
+	Repos          []RepoViewModel
+	RepoNames      []string // distinct repo names for search bar filter
+	IgnoredPRs     []PRCardViewModel
+	GlobalSettings model.GlobalSettings
+}
+
+// CredentialStatusViewModel is the response payload for credential save handlers.
+// It is rendered as an inline HTML fragment in the settings drawer status divs.
+type CredentialStatusViewModel struct {
+	Success  bool
+	Message  string
+	Username string // populated on successful GitHub token validation
 }

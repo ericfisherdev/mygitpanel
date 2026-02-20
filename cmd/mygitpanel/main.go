@@ -18,6 +18,7 @@ import (
 	webhandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web"
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/config"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
 func main() {
@@ -68,9 +69,29 @@ func run() error {
 	reviewStore := sqliteadapter.NewReviewRepo(db)
 	checkStore := sqliteadapter.NewCheckRepo(db)
 	botConfigStore := sqliteadapter.NewBotConfigRepo(db)
+	credStore := sqliteadapter.NewCredentialRepo(db, cfg.SecretKey)
+	thresholdStore := sqliteadapter.NewThresholdRepo(db)
+	ignoreStore := sqliteadapter.NewIgnoreRepo(db)
 
 	// 6. Create GitHub client.
 	ghClient := githubadapter.NewClient(cfg.GitHubToken, cfg.GitHubUsername)
+
+	// 6a. Wire credential token provider for PollService hot-swap.
+	// The closure reads from the credential store each cycle, falling back to
+	// the env var token so that the app works on first run before any GUI credential is saved.
+	tokenProvider := func(ctx context.Context) (string, error) {
+		stored, _ := credStore.Get(ctx, "github_token") // fallback to env var on error or empty
+		if stored == "" {
+			return cfg.GitHubToken, nil
+		}
+		return stored, nil
+	}
+	clientFactory := func(token string) driven.GitHubClient {
+		return githubadapter.NewClient(token, cfg.GitHubUsername)
+	}
+	writerFactory := func(token string) driven.GitHubWriter {
+		return githubadapter.NewClient(token, cfg.GitHubUsername)
+	}
 
 	// 7. Create and start poll service.
 	pollSvc := application.NewPollService(
@@ -82,6 +103,8 @@ func run() error {
 		cfg.GitHubUsername,
 		cfg.GitHubTeams,
 		cfg.PollInterval,
+		tokenProvider,
+		clientFactory,
 	)
 	go pollSvc.Start(ctx)
 
@@ -97,7 +120,9 @@ func run() error {
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
 	// 7.6. Create web handler and register GUI routes.
-	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default())
+	attentionSvc := application.NewAttentionService(thresholdStore, reviewStore, cfg.GitHubUsername)
+	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, writerFactory)
+	webHandler.WithAttentionService(attentionSvc)
 	webhandler.RegisterRoutes(mux, webHandler)
 
 	// Apply middleware.

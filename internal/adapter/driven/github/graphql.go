@@ -7,7 +7,22 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 )
+
+const convertToDraftMutation = `
+mutation ConvertToDraft($pullRequestId: ID!) {
+    convertPullRequestToDraft(input: { pullRequestId: $pullRequestId }) {
+        pullRequest { isDraft }
+    }
+}`
+
+const markReadyMutation = `
+mutation MarkReady($pullRequestId: ID!) {
+    markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+        pullRequest { isDraft }
+    }
+}`
 
 const threadResolutionQuery = `query($owner: String!, $repo: String!, $pr: Int!) {
 	repository(owner: $owner, name: $repo) {
@@ -62,6 +77,59 @@ type graphqlResponse struct {
 	} `json:"errors"`
 }
 
+// draftMutationResponse is the minimal struct used to detect errors in draft toggle mutations.
+type draftMutationResponse struct {
+	Data   map[string]any `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// executeDraftMutation sends a draft-toggle GraphQL mutation.
+// It returns nil on success; the caller is responsible for re-fetching PR state.
+func (c *Client) executeDraftMutation(ctx context.Context, mutation, nodeID string) error {
+	reqBody := graphqlRequest{
+		Query: mutation,
+		Variables: map[string]any{
+			"pullRequestId": nodeID,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("graphql draft mutation: marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.graphqlURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("graphql draft mutation: create request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", fmt.Sprintf("bearer %s", c.token))
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("graphql draft mutation: request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("graphql draft mutation: non-200 response: %d", resp.StatusCode)
+	}
+
+	var gqlResp draftMutationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&gqlResp); err != nil {
+		return fmt.Errorf("graphql draft mutation: decode response: %w", err)
+	}
+
+	if len(gqlResp.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", gqlResp.Errors[0].Message)
+	}
+
+	return nil
+}
+
 // FetchThreadResolution queries the GitHub GraphQL API for review thread resolution status.
 // It returns a map of review comment database ID to its resolved status (true = resolved).
 //
@@ -100,7 +168,8 @@ func (c *Client) FetchThreadResolution(ctx context.Context, repoFullName string,
 	httpReq.Header.Set("Authorization", fmt.Sprintf("bearer %s", c.token))
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		slog.Warn("graphql: request failed", "error", err, "repo", repoFullName, "pr", prNumber)
 		return map[int64]bool{}, nil

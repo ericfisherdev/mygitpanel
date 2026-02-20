@@ -2,10 +2,13 @@ package partials
 
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
+import "github.com/ericfisherdev/mygitpanel/internal/domain/model"
+import "fmt"
 
 // PRList renders the PR card list partial for HTMX swap into #pr-list.
 // The outer div must retain id="pr-list" so that subsequent morph swaps can find the target.
-templ PRList(cards []viewmodel.PRCardViewModel) {
+// ignoredPRs is the slice of PRs in the ignore list; pass nil to render no ignored section.
+templ PRList(cards []viewmodel.PRCardViewModel, ignoredPRs []model.PullRequest) {
 	<div id="pr-list" class="flex-1 overflow-y-auto">
 		for _, card := range cards {
 			@components.PRCard(card)
@@ -13,11 +16,13 @@ templ PRList(cards []viewmodel.PRCardViewModel) {
 		if len(cards) == 0 {
 			<p class="p-4 text-sm text-gray-400 dark:text-gray-500">No pull requests found</p>
 		}
+		@ignoredSection(ignoredPRs)
 	</div>
 }
 
 // PRListOOB renders the PR card list with an OOB swap attribute for out-of-band updates.
-templ PRListOOB(cards []viewmodel.PRCardViewModel) {
+// ignoredPRs is the slice of PRs in the ignore list; pass nil to render no ignored section.
+templ PRListOOB(cards []viewmodel.PRCardViewModel, ignoredPRs []model.PullRequest) {
 	<div id="pr-list" class="flex-1 overflow-y-auto" hx-swap-oob="morph">
 		for _, card := range cards {
 			@components.PRCard(card)
@@ -25,5 +30,45 @@ templ PRListOOB(cards []viewmodel.PRCardViewModel) {
 		if len(cards) == 0 {
 			<p class="p-4 text-sm text-gray-400 dark:text-gray-500">No pull requests found</p>
 		}
+		@ignoredSection(ignoredPRs)
 	</div>
+}
+
+// ignoredSection renders the collapsible "Show ignored (N)" section at the bottom of the PR list.
+templ ignoredSection(ignoredPRs []model.PullRequest) {
+	if len(ignoredPRs) > 0 {
+		<div x-data="{ ignoredOpen: false }" class="mt-4 border-t border-gray-200 dark:border-gray-700 pt-2">
+			<button
+				@click="ignoredOpen = !ignoredOpen"
+				class="w-full text-left text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 px-2 py-1 flex items-center justify-between"
+				type="button"
+			>
+				<span>{ fmt.Sprintf("Show ignored (%d)", len(ignoredPRs)) }</span>
+				<svg
+					x-bind:class="ignoredOpen ? 'rotate-180' : ''"
+					class="w-3 h-3 transition-transform"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+				</svg>
+			</button>
+			<div x-show="ignoredOpen" x-transition class="mt-1 space-y-1">
+				for _, pr := range ignoredPRs {
+					<div class="flex items-center justify-between px-2 py-1 rounded text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50">
+						<span class="truncate text-xs">{ pr.RepoFullName } #{ fmt.Sprint(pr.Number) } { pr.Title }</span>
+						<button
+							hx-post={ fmt.Sprintf("/app/prs/%d/unignore", pr.ID) }
+							hx-target="#pr-list"
+							hx-swap="morph"
+							hx-ext="alpine-morph"
+							class="ml-2 shrink-0 text-xs text-indigo-500 hover:underline"
+							type="button"
+						>Restore</button>
+					</div>
+				}
+			</div>
+		</div>
+	}
 }

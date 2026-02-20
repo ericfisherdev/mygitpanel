@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	vm "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
@@ -9,23 +10,16 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
-// toPRCardViewModels converts a slice of domain PullRequests to PRCardViewModels.
-func toPRCardViewModels(prs []model.PullRequest) []vm.PRCardViewModel {
-	cards := make([]vm.PRCardViewModel, 0, len(prs))
-	for _, pr := range prs {
-		cards = append(cards, toPRCardViewModel(pr))
-	}
-	return cards
-}
-
 // toPRCardViewModel converts a single domain PullRequest to a PRCardViewModel.
-func toPRCardViewModel(pr model.PullRequest) vm.PRCardViewModel {
+// Pass model.AttentionSignals{} for zero-value signals (no signals active).
+func toPRCardViewModel(pr model.PullRequest, signals model.AttentionSignals) vm.PRCardViewModel {
 	labels := pr.Labels
 	if labels == nil {
 		labels = []string{}
 	}
 
 	return vm.PRCardViewModel{
+		ID:                    pr.ID,
 		Number:                pr.Number,
 		Repository:            pr.RepoFullName,
 		Title:                 pr.Title,
@@ -40,18 +34,21 @@ func toPRCardViewModel(pr model.PullRequest) vm.PRCardViewModel {
 		Labels:                labels,
 		URL:                   pr.URL,
 		DetailPath:            fmt.Sprintf("/app/prs/%s/%d", pr.RepoFullName, pr.Number),
+		Attention:             signals,
 	}
 }
 
 // toPRDetailViewModel converts domain data into a fully enriched PRDetailViewModel.
 // Review enrichment failure is non-fatal: pass nil for summary/checkRuns if unavailable.
+// authenticatedUser is used to set IsOwnPR; pass empty string if unauthenticated.
 func toPRDetailViewModel(
 	pr model.PullRequest,
 	summary *application.PRReviewSummary,
 	checkRuns []model.CheckRun,
 	botUsernames []string,
+	authenticatedUser string,
 ) vm.PRDetailViewModel {
-	card := toPRCardViewModel(pr)
+	card := toPRCardViewModel(pr, model.AttentionSignals{})
 
 	const shortSHALength = 7
 
@@ -61,14 +58,23 @@ func toPRDetailViewModel(
 		shortSHA = shortSHA[:shortSHALength]
 	}
 
+	repoParts := strings.SplitN(pr.RepoFullName, "/", 2)
+	owner, repoName := "", pr.RepoFullName
+	if len(repoParts) == 2 {
+		owner, repoName = repoParts[0], repoParts[1]
+	}
+
 	detail := vm.PRDetailViewModel{
 		PRCardViewModel: card,
+		Owner:           owner,
+		RepoName:        repoName,
 		Branch:          pr.Branch,
 		BaseBranch:      pr.BaseBranch,
 		HeadSHA:         shortSHA,
 		Additions:       pr.Additions,
 		Deletions:       pr.Deletions,
 		ChangedFiles:    pr.ChangedFiles,
+		IsOwnPR:         authenticatedUser != "" && pr.Author == authenticatedUser,
 		Reviews:         []vm.ReviewViewModel{},
 		Threads:         []vm.ThreadViewModel{},
 		IssueComments:   []vm.IssueCommentViewModel{},

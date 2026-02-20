@@ -1,0 +1,120 @@
+package components
+
+import (
+	"fmt"
+	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+)
+
+// PRReviewsSection renders the complete reviews section for a PR detail panel.
+// It includes all review threads, issue comments, and the review submit form.
+// This component is the morph swap target for reply and review submit responses.
+// The outer div carries id="pr-reviews-section" so HTMX can find it.
+templ PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) {
+	<div id="pr-reviews-section" class="space-y-6">
+		<!-- Review threads -->
+		<section>
+			<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+				Review Threads
+				if pr.UnresolvedThreads > 0 {
+					<span class="ml-2 text-xs font-normal text-yellow-600 dark:text-yellow-400">{ fmt.Sprint(pr.UnresolvedThreads) } unresolved</span>
+				}
+				if pr.ResolvedThreads > 0 {
+					<span class="ml-2 text-xs font-normal text-green-600 dark:text-green-400">{ fmt.Sprint(pr.ResolvedThreads) } resolved</span>
+				}
+			</h3>
+			if len(pr.Threads) == 0 {
+				<p class="text-sm text-gray-400 dark:text-gray-500 py-2">No review threads</p>
+			}
+			for _, thread := range pr.Threads {
+				@ReviewThread(thread, owner, repo, pr.Number)
+			}
+		</section>
+		<!-- Issue comments -->
+		if len(pr.IssueComments) > 0 {
+			<section>
+				<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">General Comments</h3>
+				for _, comment := range pr.IssueComments {
+					@IssueCommentCard(comment)
+				}
+			</section>
+		}
+		<!-- Review submit form -->
+		<section>
+			<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Submit Review</h3>
+			<div
+				x-data="{ pendingComments: [], reviewBody: '', reviewEvent: 'COMMENT' }"
+				x-init="$refs.commentsInput.value = JSON.stringify(pendingComments); $watch('pendingComments', value => { $refs.commentsInput.value = JSON.stringify(value) })"
+				class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4"
+			>
+				<!-- Pending line comments list -->
+				<div x-show="pendingComments.length > 0">
+					<p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Pending line comments (<span x-text="pendingComments.length"></span>):</p>
+					<ul class="space-y-1">
+						<template x-for="(comment, index) in pendingComments" :key="index">
+							<li class="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+								<span class="font-mono text-gray-500" x-text="comment.path + ':' + comment.line"></span>
+								<span class="flex-1 truncate" x-text="comment.body"></span>
+								<button
+									type="button"
+									@click="pendingComments.splice(index, 1)"
+									class="text-red-500 hover:text-red-700 shrink-0"
+									aria-label="Remove pending comment"
+								>&#10005;</button>
+							</li>
+						</template>
+					</ul>
+				</div>
+				<!-- Review form -->
+				<form
+					hx-post={ fmt.Sprintf("/app/prs/%s/%s/%d/review", owner, repo, pr.Number) }
+					hx-target="#pr-reviews-section"
+					hx-swap="morph"
+					@htmx:after-request.camel="if(event.detail.successful){ pendingComments = []; reviewBody = ''; reviewEvent = 'COMMENT' }"
+					hx-on:htmx:response-error="document.getElementById('pr-review-error').textContent = event.detail.xhr.responseText || 'Submission failed. Please try again.'"
+					class="space-y-3"
+				>
+					<input type="hidden" name="commit_sha" value={ pr.HeadSHA }/>
+					<input type="hidden" name="comments" x-ref="commentsInput"/>
+					<div>
+						<label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1" for="review-event">
+							Review type
+						</label>
+						<select
+							id="review-event"
+							name="event"
+							x-model="reviewEvent"
+							class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+						>
+							<option value="COMMENT">Comment</option>
+							<option value="APPROVE">Approve</option>
+							<option value="REQUEST_CHANGES">Request Changes</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1" for="review-body">
+							Review body
+						</label>
+						<textarea
+							id="review-body"
+							name="body"
+							x-model="reviewBody"
+							rows="4"
+							placeholder="Leave a comment..."
+							class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+						></textarea>
+					</div>
+					<div class="flex items-center gap-3">
+						<button
+							type="submit"
+							class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors"
+						>
+							Submit Review
+						</button>
+						<span class="htmx-indicator text-xs text-gray-400 dark:text-gray-500">Submitting...</span>
+					</div>
+					<div id="pr-review-error" class="text-sm" aria-live="polite" role="status" aria-atomic="true"></div>
+				</form>
+			</div>
+		</section>
+	</div>
+}

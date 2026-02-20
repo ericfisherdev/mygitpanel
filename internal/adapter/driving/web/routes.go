@@ -27,4 +27,23 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	// Repo management routes.
 	mux.HandleFunc("POST /app/repos", h.AddRepo)
 	mux.HandleFunc("DELETE /app/repos/{owner}/{repo}", h.RemoveRepo)
+
+	// Settings / credential management routes.
+	mux.HandleFunc("POST /app/settings/github", h.SaveGitHubCredentials)
+	mux.HandleFunc("POST /app/settings/jira", h.SaveJiraCredentials)
+
+	// PR ignore routes.
+	mux.HandleFunc("POST /app/prs/{id}/ignore", h.IgnorePR)
+	mux.HandleFunc("POST /app/prs/{id}/unignore", h.UnignorePR)
+
+	// Threshold settings routes.
+	mux.HandleFunc("POST /app/settings/thresholds/global", h.SaveGlobalThresholds)
+	mux.HandleFunc("POST /app/settings/thresholds/repo", h.SaveRepoThreshold)
+	mux.HandleFunc("DELETE /app/settings/thresholds/repo/{owner}/{repo}", h.DeleteRepoThreshold)
+
+	// Review write routes.
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/comments/{rootID}/reply", h.CreateReplyComment)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/review", h.SubmitReview)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/issue-comments", h.CreateIssueComment)
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/draft-toggle", h.ToggleDraftStatus)
 }

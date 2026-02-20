@@ -22,15 +22,17 @@ type refreshRequest struct {
 // PollService orchestrates periodic GitHub polling, PR discovery,
 // and persistence.
 type PollService struct {
-	ghClient    driven.GitHubClient
-	prStore     driven.PRStore
-	repoStore   driven.RepoStore
-	reviewStore driven.ReviewStore
-	checkStore  driven.CheckStore
-	username    string
-	teamSlugs   []string
-	interval    time.Duration
-	refreshCh   chan refreshRequest
+	ghClient      driven.GitHubClient
+	prStore       driven.PRStore
+	repoStore     driven.RepoStore
+	reviewStore   driven.ReviewStore
+	checkStore    driven.CheckStore
+	username      string
+	teamSlugs     []string
+	interval      time.Duration
+	refreshCh     chan refreshRequest
+	tokenProvider func(ctx context.Context) (string, error) // optional; re-reads token each cycle
+	clientFactory func(token string) driven.GitHubClient    // optional; creates a new GitHub client with the given token
 
 	// branchProtectionCache caches required status check contexts per
 	// "repo/branch" key during a poll cycle. Branch protection rarely changes,
@@ -47,6 +49,12 @@ type PollService struct {
 }
 
 // NewPollService creates a new PollService with all required dependencies.
+// tokenProvider and clientFactory are both optional (may be nil). When both
+// are provided, tokenProvider is called at the start of each poll cycle to
+// obtain the current token; if the token is non-empty, clientFactory creates
+// a new GitHubClient using that token, hot-swapping the GitHub client each cycle.
+// The startup ghClient (created from the env var token) is used as a fallback
+// when tokenProvider returns an empty string or an error.
 func NewPollService(
 	ghClient driven.GitHubClient,
 	prStore driven.PRStore,
@@ -56,18 +64,22 @@ func NewPollService(
 	username string,
 	teamSlugs []string,
 	interval time.Duration,
+	tokenProvider func(ctx context.Context) (string, error), // may be nil
+	clientFactory func(token string) driven.GitHubClient, // may be nil
 ) *PollService {
 	return &PollService{
-		ghClient:    ghClient,
-		prStore:     prStore,
-		repoStore:   repoStore,
-		reviewStore: reviewStore,
-		checkStore:  checkStore,
-		username:    username,
-		teamSlugs:   teamSlugs,
-		interval:    interval,
-		refreshCh:   make(chan refreshRequest),
-		schedules:   make(map[string]repoSchedule),
+		ghClient:      ghClient,
+		prStore:       prStore,
+		repoStore:     repoStore,
+		reviewStore:   reviewStore,
+		checkStore:    checkStore,
+		username:      username,
+		teamSlugs:     teamSlugs,
+		interval:      interval,
+		refreshCh:     make(chan refreshRequest),
+		schedules:     make(map[string]repoSchedule),
+		tokenProvider: tokenProvider,
+		clientFactory: clientFactory,
 	}
 }
 
@@ -170,9 +182,32 @@ func (s *PollService) RefreshPR(ctx context.Context, repoFullName string, prNumb
 	}
 }
 
+// maybeRefreshToken re-reads the GitHub token from the credential store and
+// hot-swaps the GitHub client if a new non-empty token is found. The startup
+// client is retained if tokenProvider is nil, returns an error, or returns
+// an empty string.
+func (s *PollService) maybeRefreshToken(ctx context.Context) {
+	if s.tokenProvider == nil || s.clientFactory == nil {
+		return
+	}
+	token, err := s.tokenProvider(ctx)
+	if err != nil {
+		slog.Debug("token provider error; retaining startup client", "error", err)
+		return
+	}
+	if token == "" {
+		return
+	}
+	s.ghClient = s.clientFactory(token)
+	slog.Debug("github client hot-swapped with token from credential store")
+}
+
 // pollAll polls all watched repositories for open PRs.
 func (s *PollService) pollAll(ctx context.Context) error {
 	start := time.Now()
+
+	// Re-read token from credential store each cycle; env var token is the fallback.
+	s.maybeRefreshToken(ctx)
 
 	// Reset per-cycle branch protection cache.
 	s.branchProtectionCache = make(map[string][]string)
@@ -481,6 +516,9 @@ func (s *PollService) updateSchedule(ctx context.Context, repoFullName string) {
 // pollDueRepos checks each repo's adaptive schedule and polls only those
 // that are due. New repos without a schedule are polled immediately.
 func (s *PollService) pollDueRepos(ctx context.Context) {
+	// Re-read token from credential store each cycle; env var token is the fallback.
+	s.maybeRefreshToken(ctx)
+
 	// Reset per-cycle branch protection cache.
 	s.branchProtectionCache = make(map[string][]string)
 

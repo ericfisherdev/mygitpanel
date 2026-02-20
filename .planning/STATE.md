@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
-**Current focus:** Phase 8 — GitHub Write Operations (planning needed)
+**Current focus:** Phase 9 — Jira Integration
 
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
-Phase: 7 of 9 (GUI Foundation) — COMPLETE
-Plan: 3 of 3
-Status: Phase complete
-Last activity: 2026-02-14 — Completed 07-03-PLAN.md (interactive features: search, theme, repo mgmt, animations)
+Phase: 8 of 9 (Review Workflows and Attention Signals) — COMPLETE
+Plan: 5 of 5
+Status: Complete
+Last activity: 2026-02-19 — Completed 08-05-PLAN.md (attention signals, ignore workflow, threshold UI)
 
-Progress: [====================] 100% (3/3 plans)
+Progress: [====================] 100% (5/5 plans)
 
 ## Performance Metrics
 
@@ -31,6 +31,7 @@ Progress: [====================] 100% (3/3 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
+| 08-review-workflows-and-attention-signals | 5/5 | 54min | 10.8min |
 
 ## Accumulated Context
 
@@ -52,6 +53,27 @@ Recent decisions (2026.2.0):
 - In-memory PR filtering for search — appropriate for expected scale, no new DB queries needed
 - htmx:afterSettle for GSAP animations — morph swaps settle after DOM morphing completes
 - OOB swap pattern: repo mutations render primary target + PRListOOB + RepoFilterOptions
+- MYGITPANEL_GITHUB_TOKEN demoted from required to optional (warn-not-fail) to enable credential-via-GUI flow
+- MYGITPANEL_SECRET_KEY: optional at startup (nil = credential storage disabled); present-but-malformed = error
+- IgnoredPR type defined in port/driven package (not model/) — persistence concern, not pure domain entity
+- DraftLineComment and ReviewRequest defined in githubwriter.go alongside the interface (port-layer input types)
+- Nil-pointer semantics for RepoThreshold: nil field = inherit global default
+- Closure injection (tokenProvider/clientFactory) for PollService hot-swap avoids application-to-adapter import cycle
+- GitHubWriter stubs satisfy compile-time check immediately; real implementations in Plans 03 and 04
+- Token validated before storing to prevent silently-broken polling from invalid tokens
+- Drawer rendered in layout.templ outside @contents — Alpine state survives HTMX morph swaps
+- PRReviewsSection placed in components package (not partials) to avoid components<->partials import cycle
+- Owner and RepoName added to PRDetailViewModel for URL construction in templates (templ has no string splitting)
+- ReviewThread component receives owner/repo/prNumber as separate args to keep view model clean
+- CreateReplyComment morphs only the affected #thread-{rootID}; SubmitReview/CreateIssueComment morph #pr-reviews-section
+- Write handlers auth-gate via credStore.Get before calling ghWriter; missing token returns 422 with actionable HTML fragment
+- Draft toggle GraphQL mutations use pullRequestId variable (not id) per GitHub API spec; node_id fetched on-demand via REST
+- Optimistic draft flip in ToggleDraftStatus handler: UI updates immediately, background poll brings DB to consistency
+- PRDetailHeader extracted as named templ component with id=pr-detail-header for morph swap on toggle response
+- authenticatedUsername helper: checks credStore github_username first, falls back to static config username
+- [Phase 08-review-workflows-and-attention-signals]: PRListOOB passes []model.PullRequest for ignored section; sidebar uses []vm.PRCardViewModel — no conversion in OOB path
+- [Phase 08-review-workflows-and-attention-signals]: WithAttentionService post-construction injection avoids circular dependency between Handler and AttentionService
+- [Phase 08-review-workflows-and-attention-signals]: Layout.templ accepts GlobalSettings to pre-populate threshold form in SettingsDrawer
 
 ### Pending Todos
 
@@ -59,11 +81,10 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 8: Draft-to-ready is GraphQL-only — needs spike to decide approach (shurcooL/githubv4 vs gh CLI vs defer)
 - Phase 9: Jira rate limiting is opaque — plan for research-phase during Phase 9 planning
 
 ## Session Continuity
 
-Last session: 2026-02-14
-Stopped at: Completed Phase 7 (GUI Foundation) — all 3 plans done
-Resume file: Ready for Phase 8 planning
+Last session: 2026-02-19
+Stopped at: Completed 08-05-PLAN.md (attention signals, ignore workflow, threshold UI) — Phase 8 complete
+Resume file: Ready for Phase 9 planning

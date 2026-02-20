@@ -4,11 +4,12 @@ import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmod
 import "fmt"
 
 // PRCard renders a clickable card for one PR in the sidebar list.
+// It shows attention signal indicators (colored border, icons) and an ignore button on hover.
 templ PRCard(card viewmodel.PRCardViewModel) {
 	<div
 		role="button"
 		tabindex="0"
-		class="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700 transition-colors"
+		class={ "group p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700 transition-colors " + attentionBorderClass(card.Attention.Severity()) }
 		hx-get={ card.DetailPath }
 		hx-target="#pr-detail"
 		hx-swap="morph"
@@ -17,9 +18,27 @@ templ PRCard(card viewmodel.PRCardViewModel) {
 	>
 		<div class="flex items-start justify-between gap-2">
 			<div class="min-w-0 flex-1">
-				<p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title={ card.Title }>
-					{ truncateTitle(card.Title) }
-				</p>
+				<div class="flex items-start gap-1">
+					<p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1" title={ card.Title }>
+						{ truncateTitle(card.Title) }
+					</p>
+					<!-- Ignore button: visible on hover -->
+					<button
+						hx-post={ fmt.Sprintf("/app/prs/%d/ignore", card.ID) }
+						hx-target="#pr-list"
+						hx-swap="morph"
+						hx-ext="alpine-morph"
+						class="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-gray-400 hover:text-red-500 focus-visible:ring-2 focus-visible:ring-red-500 shrink-0 p-0.5"
+						title="Ignore this PR"
+						aria-label="Ignore this PR"
+						type="button"
+						onclick="event.stopPropagation()"
+					>
+						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+						</svg>
+					</button>
+				</div>
 				<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
 					{ card.Repository } #{ fmt.Sprint(card.Number) }
 				</p>
@@ -64,7 +83,47 @@ templ PRCard(card viewmodel.PRCardViewModel) {
 				</span>
 			}
 		</div>
+		<!-- Attention signal icons: only shown when signals are active -->
+		if card.Attention.HasAny() {
+			<div class="flex items-center gap-1.5 mt-1.5">
+				if card.Attention.NeedsMoreReviews {
+					<svg class="w-3.5 h-3.5 text-orange-500 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Needs more reviews">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+					</svg>
+				}
+				if card.Attention.IsAgeUrgent {
+					<svg class="w-3.5 h-3.5 text-red-500 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="PR is stale (open too long)">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+				}
+				if card.Attention.HasStaleReview {
+					<svg class="w-3.5 h-3.5 text-yellow-500 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Your review is outdated">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+					</svg>
+				}
+				if card.Attention.HasCIFailure {
+					<svg class="w-3.5 h-3.5 text-red-600 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="CI is failing on your PR">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+				}
+			</div>
+		}
 	</div>
+}
+
+// attentionBorderClass returns a Tailwind CSS border-l class based on attention severity.
+func attentionBorderClass(severity int) string {
+	switch severity {
+	case 1:
+		return "border-l-4 border-l-orange-400"
+	case 2:
+		return "border-l-4 border-l-orange-500"
+	default:
+		if severity >= 3 {
+			return "border-l-4 border-l-red-500"
+		}
+		return "border-l-4 border-l-transparent"
+	}
 }
 
 // truncateTitle truncates a title to roughly 50 characters with an ellipsis.

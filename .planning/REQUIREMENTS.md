@@ -19,24 +19,24 @@ Requirements for the Web GUI milestone. Each maps to roadmap phases.
 
 ### Credential Management
 
-- [ ] **CRED-01**: User can enter GitHub username and token through the GUI
-- [ ] **CRED-02**: GitHub credentials are persisted in SQLite and used by the polling engine
+- [x] **CRED-01**: User can enter GitHub username and token through the GUI
+- [x] **CRED-02**: GitHub credentials are persisted in SQLite and used by the polling engine
 - [ ] **CRED-03**: User can enter Jira connection details (URL, email, token) through the GUI
 - [ ] **CRED-04**: Jira credentials are persisted in SQLite
 
 ### Review Workflows
 
-- [ ] **REV-01**: User can view PR comments and change requests in a threaded conversation view
-- [ ] **REV-02**: User can reply to PR comments from the GUI
-- [ ] **REV-03**: User can submit a review on others' PRs (approve, request changes, or comment)
-- [ ] **REV-04**: User can toggle a PR between active and draft status
+- [x] **REV-01**: User can view PR comments and change requests in a threaded conversation view
+- [x] **REV-02**: User can reply to PR comments from the GUI
+- [x] **REV-03**: User can submit a review on others' PRs (approve, request changes, or comment)
+- [x] **REV-04**: User can toggle a PR between active and draft status
 
 ### Attention Signals
 
-- [ ] **ATT-01**: User can set required review count per repo to flag PRs needing more reviews
-- [ ] **ATT-02**: User can set urgency threshold (days) per repo to flag stale PRs
-- [ ] **ATT-03**: User can ignore PRs so they are no longer displayed or updated
-- [ ] **ATT-04**: User can view the ignore list and re-add previously ignored PRs
+- [x] **ATT-01**: User can set required review count per repo to flag PRs needing more reviews
+- [x] **ATT-02**: User can set urgency threshold (days) per repo to flag stale PRs
+- [x] **ATT-03**: User can ignore PRs so they are no longer displayed or updated
+- [x] **ATT-04**: User can view the ignore list and re-add previously ignored PRs
 
 ### Jira Integration
 
@@ -89,18 +89,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GUI-05 | Phase 7 | Pending |
 | GUI-06 | Phase 7 | Pending |
 | GUI-07 | Phase 7 | Pending |
-| CRED-01 | Phase 8 | Pending |
-| CRED-02 | Phase 8 | Pending |
+| CRED-01 | Phase 8 | Complete |
+| CRED-02 | Phase 8 | Complete |
 | CRED-03 | Phase 9 | Pending |
 | CRED-04 | Phase 9 | Pending |
-| REV-01 | Phase 8 | Pending |
-| REV-02 | Phase 8 | Pending |
-| REV-03 | Phase 8 | Pending |
-| REV-04 | Phase 8 | Pending |
-| ATT-01 | Phase 8 | Pending |
-| ATT-02 | Phase 8 | Pending |
-| ATT-03 | Phase 8 | Pending |
-| ATT-04 | Phase 8 | Pending |
+| REV-01 | Phase 8 | Complete |
+| REV-02 | Phase 8 | Complete |
+| REV-03 | Phase 8 | Complete |
+| REV-04 | Phase 8 | Complete |
+| ATT-01 | Phase 8 | Complete |
+| ATT-02 | Phase 8 | Complete |
+| ATT-03 | Phase 8 | Complete |
+| ATT-04 | Phase 8 | Complete |
 | JIRA-01 | Phase 9 | Pending |
 | JIRA-02 | Phase 9 | Pending |
 | JIRA-03 | Phase 9 | Pending |

@@ -14,5 +14,6 @@ type PRStore interface {
 	GetByNumber(ctx context.Context, repoFullName string, number int) (*model.PullRequest, error)
 	ListAll(ctx context.Context) ([]model.PullRequest, error)
 	ListNeedingReview(ctx context.Context) ([]model.PullRequest, error)
+	ListIgnoredWithPRData(ctx context.Context) ([]model.PullRequest, error)
 	Delete(ctx context.Context, repoFullName string, number int) error
 }
