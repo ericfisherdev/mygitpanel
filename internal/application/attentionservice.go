@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"log/slog"
-	"sort"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
@@ -105,28 +104,26 @@ func (s *AttentionService) SignalsForPR(ctx context.Context, pr model.PullReques
 		return model.AttentionSignals{}, nil
 	}
 
-	// Count approvals from non-bot reviewers.
-	approvalCount := 0
+	// Collapse to each reviewer's latest review to avoid double-counting when
+	// the same person has reviewed multiple times (e.g., approve → request changes → approve).
+	latestByReviewer := make(map[string]model.Review, len(reviews))
 	for _, r := range reviews {
-		if r.State == model.ReviewStateApproved && !r.IsBot {
-			approvalCount++
+		existing, seen := latestByReviewer[r.ReviewerLogin]
+		if !seen || r.SubmittedAt.After(existing.SubmittedAt) {
+			latestByReviewer[r.ReviewerLogin] = r
 		}
 	}
 
-	// Find the authenticated user's most recent review commit SHA.
+	// Count approvals and locate the authenticated user's review SHA in one pass.
+	approvalCount := 0
 	var userReviewSHA string
-	userReviews := make([]model.Review, 0)
-	for _, r := range reviews {
-		if r.ReviewerLogin == s.username {
-			userReviews = append(userReviews, r)
+	for login, r := range latestByReviewer {
+		if r.State == model.ReviewStateApproved && !r.IsBot {
+			approvalCount++
 		}
-	}
-	if len(userReviews) > 0 {
-		// Sort by SubmittedAt DESC and take the first.
-		sort.Slice(userReviews, func(i, j int) bool {
-			return userReviews[i].SubmittedAt.After(userReviews[j].SubmittedAt)
-		})
-		userReviewSHA = userReviews[0].CommitID
+		if login == s.username {
+			userReviewSHA = r.CommitID
+		}
 	}
 
 	thresholds, err := s.EffectiveThresholdsFor(ctx, pr.RepoFullName)

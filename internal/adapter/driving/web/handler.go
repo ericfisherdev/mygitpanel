@@ -36,7 +36,9 @@ type Handler struct {
 	credStore      driven.CredentialStore
 	thresholdStore driven.ThresholdStore
 	ignoreStore    driven.IgnoreStore
-	ghWriter       driven.GitHubWriter
+	// writerFactory creates a fresh GitHubWriter per request using the current token,
+	// allowing credentials updated via the GUI to take effect without restarting.
+	writerFactory func(token string) driven.GitHubWriter
 }
 
 // NewHandler creates a Handler with all required dependencies.
@@ -51,7 +53,7 @@ func NewHandler(
 	credStore driven.CredentialStore,
 	thresholdStore driven.ThresholdStore,
 	ignoreStore driven.IgnoreStore,
-	ghWriter driven.GitHubWriter,
+	writerFactory func(token string) driven.GitHubWriter,
 ) *Handler {
 	return &Handler{
 		prStore:        prStore,
@@ -64,7 +66,7 @@ func NewHandler(
 		credStore:      credStore,
 		thresholdStore: thresholdStore,
 		ignoreStore:    ignoreStore,
-		ghWriter:       ghWriter,
+		writerFactory:  writerFactory,
 	}
 }
 
@@ -655,20 +657,20 @@ func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) 
 	}
 
 	token := strings.TrimSpace(r.FormValue("github_token"))
-	username := strings.TrimSpace(r.FormValue("github_username"))
 
 	if token == "" {
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: GitHub token is required</span>`)
 		return
 	}
 
-	if h.ghWriter == nil || h.credStore == nil {
+	if h.writerFactory == nil || h.credStore == nil {
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: credential storage is not configured</span>`)
 		return
 	}
 
 	// Validate the token against the GitHub API.
-	validatedUsername, err := h.ghWriter.ValidateToken(r.Context(), token)
+	// A token-less writer is sufficient for validation since we pass the token explicitly.
+	validatedUsername, err := h.writerFactory("").ValidateToken(r.Context(), token)
 	if err != nil {
 		if errors.Is(err, sqliteadapter.ErrEncryptionKeyNotSet) {
 			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
@@ -690,12 +692,8 @@ func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Store the username (provided or from validation).
-	storedUsername := validatedUsername
-	if username != "" {
-		storedUsername = username
-	}
-	if err := h.credStore.Set(r.Context(), "github_username", storedUsername); err != nil {
+	// Always store the validated username for auth checks (don't allow user overrides).
+	if err := h.credStore.Set(r.Context(), "github_username", validatedUsername); err != nil {
 		h.logger.Error("failed to store github username", "error", err)
 		// Non-fatal: token was saved successfully; username storage failure is logged.
 	}
@@ -804,8 +802,9 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	repoFullName := owner + "/" + repo
+	writer := h.writerFactory(token)
 
-	if err := h.ghWriter.CreateReplyComment(r.Context(), repoFullName, number, rootID, body, filePath, commitSHA); err != nil {
+	if err := writer.CreateReplyComment(r.Context(), repoFullName, number, rootID, body, filePath, commitSHA); err != nil {
 		h.logger.Error("failed to create reply comment", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
@@ -921,6 +920,7 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	repoFullName := owner + "/" + repo
+	writer := h.writerFactory(token)
 
 	req := driven.ReviewRequest{
 		CommitID: commitSHA,
@@ -929,7 +929,7 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 		Comments: lineComments,
 	}
 
-	if err := h.ghWriter.SubmitReview(r.Context(), repoFullName, number, req); err != nil {
+	if err := writer.SubmitReview(r.Context(), repoFullName, number, req); err != nil {
 		h.logger.Error("failed to submit review", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
@@ -986,8 +986,9 @@ func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	repoFullName := owner + "/" + repo
+	writer := h.writerFactory(token)
 
-	if err := h.ghWriter.CreateIssueComment(r.Context(), repoFullName, number, body); err != nil {
+	if err := writer.CreateIssueComment(r.Context(), repoFullName, number, body); err != nil {
 		h.logger.Error("failed to create issue comment", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, err.Error())
@@ -1053,10 +1054,11 @@ func (h *Handler) ToggleDraftStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute the appropriate mutation based on current draft state.
+	writer := h.writerFactory(token)
 	if pr.IsDraft {
-		err = h.ghWriter.MarkPullRequestReadyForReview(r.Context(), repoFullName, number)
+		err = writer.MarkPullRequestReadyForReview(r.Context(), repoFullName, number)
 	} else {
-		err = h.ghWriter.ConvertPullRequestToDraft(r.Context(), repoFullName, number)
+		err = writer.ConvertPullRequestToDraft(r.Context(), repoFullName, number)
 	}
 	if err != nil {
 		h.logger.Error("failed to toggle draft status", "repo", repoFullName, "pr", number, "error", err)

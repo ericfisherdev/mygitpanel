@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 const convertToDraftMutation = `
@@ -106,7 +107,8 @@ func (c *Client) executeDraftMutation(ctx context.Context, mutation, nodeID stri
 	httpReq.Header.Set("Authorization", fmt.Sprintf("bearer %s", c.token))
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("graphql draft mutation: request failed: %w", err)
 	}
@@ -166,7 +168,8 @@ func (c *Client) FetchThreadResolution(ctx context.Context, repoFullName string,
 	httpReq.Header.Set("Authorization", fmt.Sprintf("bearer %s", c.token))
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		slog.Warn("graphql: request failed", "error", err, "repo", repoFullName, "pr", prNumber)
 		return map[int64]bool{}, nil

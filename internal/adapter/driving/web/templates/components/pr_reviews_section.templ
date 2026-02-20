@@ -69,7 +69,7 @@ templ PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) {
 					hx-post={ fmt.Sprintf("/app/prs/%s/%s/%d/review", owner, repo, pr.Number) }
 					hx-target="#pr-reviews-section"
 					hx-swap="morph"
-					@htmx:after-request.camel="pendingComments = []; reviewBody = ''"
+					@htmx:after-request.camel="if(event.detail.successful){ pendingComments = []; reviewBody = '' }"
 					class="space-y-3"
 				>
 					<input type="hidden" name="commit_sha" value={ pr.HeadSHA }/>

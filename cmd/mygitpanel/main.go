@@ -77,11 +77,19 @@ func run() error {
 	ghClient := githubadapter.NewClient(cfg.GitHubToken, cfg.GitHubUsername)
 
 	// 6a. Wire credential token provider for PollService hot-swap.
-	// The closure reads from the credential store each cycle; env var token is the fallback.
+	// The closure reads from the credential store each cycle, falling back to
+	// the env var token so that the app works on first run before any GUI credential is saved.
 	tokenProvider := func(ctx context.Context) (string, error) {
-		return credStore.Get(ctx, "github_token")
+		stored, _ := credStore.Get(ctx, "github_token") // fallback to env var on error or empty
+		if stored == "" {
+			return cfg.GitHubToken, nil
+		}
+		return stored, nil
 	}
 	clientFactory := func(token string) driven.GitHubClient {
+		return githubadapter.NewClient(token, cfg.GitHubUsername)
+	}
+	writerFactory := func(token string) driven.GitHubWriter {
 		return githubadapter.NewClient(token, cfg.GitHubUsername)
 	}
 
@@ -112,9 +120,8 @@ func run() error {
 	httphandler.RegisterAPIRoutes(mux, apiHandler)
 
 	// 7.6. Create web handler and register GUI routes.
-	// ghClient implements driven.GitHubWriter (writer.go adds the interface satisfaction).
 	attentionSvc := application.NewAttentionService(thresholdStore, reviewStore, cfg.GitHubUsername)
-	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, ghClient)
+	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, writerFactory)
 	webHandler.WithAttentionService(attentionSvc)
 	webhandler.RegisterRoutes(mux, webHandler)
 

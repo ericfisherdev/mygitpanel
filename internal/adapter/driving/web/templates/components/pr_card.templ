@@ -28,8 +28,9 @@ templ PRCard(card viewmodel.PRCardViewModel) {
 						hx-target="#pr-list"
 						hx-swap="morph"
 						hx-ext="alpine-morph"
-						class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 shrink-0 p-0.5"
+						class="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-gray-400 hover:text-red-500 focus-visible:ring-2 focus-visible:ring-red-500 shrink-0 p-0.5"
 						title="Ignore this PR"
+						aria-label="Ignore this PR"
 						type="button"
 						onclick="event.stopPropagation()"
 					>
