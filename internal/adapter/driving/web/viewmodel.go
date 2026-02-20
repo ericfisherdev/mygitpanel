@@ -10,16 +10,6 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
-// toPRCardViewModels converts a slice of domain PullRequests to PRCardViewModels
-// with zero-value attention signals.
-func toPRCardViewModels(prs []model.PullRequest) []vm.PRCardViewModel {
-	cards := make([]vm.PRCardViewModel, 0, len(prs))
-	for _, pr := range prs {
-		cards = append(cards, toPRCardViewModel(pr, model.AttentionSignals{}))
-	}
-	return cards
-}
-
 // toPRCardViewModel converts a single domain PullRequest to a PRCardViewModel.
 // Pass model.AttentionSignals{} for zero-value signals (no signals active).
 func toPRCardViewModel(pr model.PullRequest, signals model.AttentionSignals) vm.PRCardViewModel {

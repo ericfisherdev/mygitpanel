@@ -31,8 +31,8 @@ type PollService struct {
 	teamSlugs     []string
 	interval      time.Duration
 	refreshCh     chan refreshRequest
-	tokenProvider func(ctx context.Context) (string, error)  // optional; re-reads token each cycle
-	clientFactory func(token string) driven.GitHubClient     // optional; creates a new GitHub client with the given token
+	tokenProvider func(ctx context.Context) (string, error) // optional; re-reads token each cycle
+	clientFactory func(token string) driven.GitHubClient    // optional; creates a new GitHub client with the given token
 
 	// branchProtectionCache caches required status check contexts per
 	// "repo/branch" key during a poll cycle. Branch protection rarely changes,
@@ -65,7 +65,7 @@ func NewPollService(
 	teamSlugs []string,
 	interval time.Duration,
 	tokenProvider func(ctx context.Context) (string, error), // may be nil
-	clientFactory func(token string) driven.GitHubClient,    // may be nil
+	clientFactory func(token string) driven.GitHubClient, // may be nil
 ) *PollService {
 	return &PollService{
 		ghClient:      ghClient,

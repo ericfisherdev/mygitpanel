@@ -181,4 +181,3 @@ func (r *CredentialRepo) decrypt(encoded string) (string, error) {
 
 	return string(plaintext), nil
 }
-

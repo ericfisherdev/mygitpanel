@@ -77,12 +77,7 @@ func (s *AttentionService) EffectiveThresholdsFor(ctx context.Context, repoFullN
 	}
 
 	// Merge: repo override wins if non-nil.
-	effective := model.EffectiveThresholds{
-		ReviewCountThreshold: global.ReviewCountThreshold,
-		AgeUrgencyDays:       global.AgeUrgencyDays,
-		StaleReviewEnabled:   global.StaleReviewEnabled,
-		CIFailureEnabled:     global.CIFailureEnabled,
-	}
+	effective := model.EffectiveThresholds(global)
 
 	if repoThreshold.ReviewCount != nil {
 		effective.ReviewCountThreshold = *repoThreshold.ReviewCount
@@ -137,13 +132,7 @@ func (s *AttentionService) SignalsForPR(ctx context.Context, pr model.PullReques
 	thresholds, err := s.EffectiveThresholdsFor(ctx, pr.RepoFullName)
 	if err != nil {
 		s.logger.Warn("failed to get effective thresholds, using defaults", "repo", pr.RepoFullName, "error", err)
-		defaults := model.DefaultGlobalSettings()
-		thresholds = model.EffectiveThresholds{
-			ReviewCountThreshold: defaults.ReviewCountThreshold,
-			AgeUrgencyDays:       defaults.AgeUrgencyDays,
-			StaleReviewEnabled:   defaults.StaleReviewEnabled,
-			CIFailureEnabled:     defaults.CIFailureEnabled,
-		}
+		thresholds = model.EffectiveThresholds(model.DefaultGlobalSettings())
 	}
 
 	return ComputeAttentionSignals(pr, approvalCount, userReviewSHA, thresholds, s.username), nil
