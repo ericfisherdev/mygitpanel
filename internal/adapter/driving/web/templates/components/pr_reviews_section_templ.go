@@ -129,7 +129,7 @@ func PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) templ.
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" hx-target=\"#pr-reviews-section\" hx-swap=\"morph\" @htmx:after-request.camel=\"pendingComments = []; reviewBody = ''\" class=\"space-y-3\"><input type=\"hidden\" name=\"commit_sha\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" hx-target=\"#pr-reviews-section\" hx-swap=\"morph\" @htmx:after-request.camel=\"if(event.detail.successful){ pendingComments = []; reviewBody = '' }\" class=\"space-y-3\"><input type=\"hidden\" name=\"commit_sha\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
