@@ -70,6 +70,7 @@ templ PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) {
 					hx-target="#pr-reviews-section"
 					hx-swap="morph"
 					@htmx:after-request.camel="if(event.detail.successful){ pendingComments = []; reviewBody = ''; reviewEvent = 'COMMENT' }"
+					hx-on:htmx:response-error="document.getElementById('pr-review-error').textContent = event.detail.xhr.responseText || 'Submission failed. Please try again.'"
 					class="space-y-3"
 				>
 					<input type="hidden" name="commit_sha" value={ pr.HeadSHA }/>

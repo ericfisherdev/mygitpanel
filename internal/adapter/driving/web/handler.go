@@ -400,12 +400,15 @@ func (h *Handler) SaveGlobalThresholds(w http.ResponseWriter, r *http.Request) {
 		CIFailureEnabled:     ciEnabled,
 	}
 
-	if h.thresholdStore != nil {
-		if err := h.thresholdStore.SetGlobalSettings(r.Context(), settings); err != nil {
-			h.logger.Error("failed to save global thresholds", "error", err)
-			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save settings</span>`)
-			return
-		}
+	if h.thresholdStore == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := h.thresholdStore.SetGlobalSettings(r.Context(), settings); err != nil {
+		h.logger.Error("failed to save global thresholds", "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save settings</span>`)
+		return
 	}
 
 	// Status fragment for hx-target="#threshold-status".
@@ -448,13 +451,24 @@ func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
 			threshold.AgeUrgencyDays = &n
 		}
 	}
+	if v := r.FormValue("stale_review_enabled"); v != "" {
+		b := v == "on" || v == "1"
+		threshold.StaleReviewEnabled = &b
+	}
+	if v := r.FormValue("ci_failure_enabled"); v != "" {
+		b := v == "on" || v == "1"
+		threshold.CIFailureEnabled = &b
+	}
 
-	if h.thresholdStore != nil {
-		if err := h.thresholdStore.SetRepoThreshold(r.Context(), threshold); err != nil {
-			h.logger.Error("failed to save repo threshold", "repo", repoFullName, "error", err)
-			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save settings</span>`)
-			return
-		}
+	if h.thresholdStore == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := h.thresholdStore.SetRepoThreshold(r.Context(), threshold); err != nil {
+		h.logger.Error("failed to save repo threshold", "repo", repoFullName, "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save settings</span>`)
+		return
 	}
 
 	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Saved</span>`)
@@ -474,12 +488,15 @@ func (h *Handler) DeleteRepoThreshold(w http.ResponseWriter, r *http.Request) {
 	repo := r.PathValue("repo")
 	repoFullName := owner + "/" + repo
 
-	if h.thresholdStore != nil {
-		if err := h.thresholdStore.DeleteRepoThreshold(r.Context(), repoFullName); err != nil {
-			h.logger.Error("failed to delete repo threshold", "repo", repoFullName, "error", err)
-			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to reset</span>`)
-			return
-		}
+	if h.thresholdStore == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := h.thresholdStore.DeleteRepoThreshold(r.Context(), repoFullName); err != nil {
+		h.logger.Error("failed to delete repo threshold", "repo", repoFullName, "error", err)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to reset</span>`)
+		return
 	}
 
 	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Reset to global defaults</span>`)
@@ -744,12 +761,20 @@ func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.credStore.Set(r.Context(), "jira_email", jiraEmail); err != nil {
+		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
+			return
+		}
 		h.logger.Error("failed to store jira_email", "error", err)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
 		return
 	}
 
 	if err := h.credStore.Set(r.Context(), "jira_token", jiraToken); err != nil {
+		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
+			return
+		}
 		h.logger.Error("failed to store jira_token", "error", err)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
 		return
@@ -932,6 +957,13 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	repoFullName := owner + "/" + repo
+
+	// Resolve the current HEAD SHA from the store to avoid GitHub 422s caused by
+	// a stale commit_sha baked into the form when the PR received new commits.
+	if pr, fetchErr := h.prStore.GetByNumber(r.Context(), repoFullName, number); fetchErr == nil && pr != nil {
+		commitSHA = pr.HeadSHA
+	}
+
 	writer := h.writerFactory(token)
 
 	req := driven.ReviewRequest{

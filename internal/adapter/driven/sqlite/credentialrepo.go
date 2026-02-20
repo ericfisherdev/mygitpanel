@@ -30,9 +30,13 @@ type CredentialRepo struct {
 	key []byte // 32-byte AES-256 key; nil when encryption is disabled.
 }
 
-// NewCredentialRepo creates a new CredentialRepo. key must be 32 bytes for AES-256-GCM,
-// or nil to disable credential storage (all operations will return ErrEncryptionKeyNotSet).
+// NewCredentialRepo creates a new CredentialRepo. key must be exactly 32 bytes for
+// AES-256-GCM, or nil to disable credential storage (all operations will return
+// ErrEncryptionKeyNotSet). Panics if key is non-nil with wrong length.
 func NewCredentialRepo(db *DB, key []byte) *CredentialRepo {
+	if key != nil && len(key) != 32 {
+		panic(fmt.Errorf("invalid AES-256 key length: got %d, want 32", len(key)))
+	}
 	return &CredentialRepo{db: db, key: key}
 }
 
@@ -43,7 +47,8 @@ func (r *CredentialRepo) Set(ctx context.Context, service, plaintext string) err
 		return err
 	}
 
-	const query = `INSERT OR REPLACE INTO credentials (service, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)`
+	const query = `INSERT INTO credentials (service, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(service) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
 	_, err = r.db.Writer.ExecContext(ctx, query, service, encrypted)
 	if err != nil {
 		return fmt.Errorf("set credential %q: %w", service, err)

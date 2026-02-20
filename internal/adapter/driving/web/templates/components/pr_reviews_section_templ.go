@@ -129,14 +129,14 @@ func PRReviewsSection(pr viewmodel.PRDetailViewModel, owner, repo string) templ.
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" hx-target=\"#pr-reviews-section\" hx-swap=\"morph\" @htmx:after-request.camel=\"if(event.detail.successful){ pendingComments = []; reviewBody = ''; reviewEvent = 'COMMENT' }\" class=\"space-y-3\"><input type=\"hidden\" name=\"commit_sha\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" hx-target=\"#pr-reviews-section\" hx-swap=\"morph\" @htmx:after-request.camel=\"if(event.detail.successful){ pendingComments = []; reviewBody = ''; reviewEvent = 'COMMENT' }\" hx-on:htmx:response-error=\"document.getElementById('pr-review-error').textContent = event.detail.xhr.responseText || 'Submission failed. Please try again.'\" class=\"space-y-3\"><input type=\"hidden\" name=\"commit_sha\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(pr.HeadSHA)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/pr_reviews_section.templ`, Line: 75, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/pr_reviews_section.templ`, Line: 76, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {

@@ -16,14 +16,17 @@ var ErrEncryptionKeyNotSet = errors.New("encryption key not configured: set MYGI
 // operates on plaintext values at the domain boundary.
 type CredentialStore interface {
 	// Set stores or replaces the credential for the given service with the
-	// provided plaintext value.
+	// provided plaintext value. Returns ErrEncryptionKeyNotSet if the adapter
+	// was constructed without an encryption key.
 	Set(ctx context.Context, service, plaintext string) error
 
 	// Get retrieves the plaintext credential for the given service.
 	// Returns ("", nil) if no credential exists for that service.
+	// Returns ErrEncryptionKeyNotSet if the adapter was constructed without an encryption key.
 	Get(ctx context.Context, service string) (string, error)
 
 	// List returns all stored credentials. Values are decrypted plaintext.
+	// Returns ErrEncryptionKeyNotSet if the adapter was constructed without an encryption key.
 	List(ctx context.Context) ([]model.Credential, error)
 
 	// Delete removes the credential for the given service.

@@ -80,6 +80,14 @@ func TestComputeAttentionSignals_IsAgeUrgent(t *testing.T) {
 		signals := application.ComputeAttentionSignals(pr, 1, "", thresholds, testAuthor)
 		assert.True(t, signals.IsAgeUrgent)
 	})
+
+	t.Run("threshold 0 -> IsAgeUrgent false (disabled)", func(t *testing.T) {
+		disabled := thresholds
+		disabled.AgeUrgencyDays = 0
+		pr := prWithAge(100)
+		signals := application.ComputeAttentionSignals(pr, 1, "", disabled, testAuthor)
+		assert.False(t, signals.IsAgeUrgent)
+	})
 }
 
 func TestComputeAttentionSignals_HasStaleReview(t *testing.T) {
