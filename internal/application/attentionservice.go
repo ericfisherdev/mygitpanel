@@ -24,8 +24,8 @@ func ComputeAttentionSignals(
 	// NeedsMoreReviews: fewer than threshold approvals.
 	signals.NeedsMoreReviews = approvalCount < thresholds.ReviewCountThreshold
 
-	// IsAgeUrgent: open longer than threshold days.
-	signals.IsAgeUrgent = pr.DaysSinceOpened() >= thresholds.AgeUrgencyDays
+	// IsAgeUrgent: open longer than threshold days. A threshold of 0 means disabled.
+	signals.IsAgeUrgent = thresholds.AgeUrgencyDays > 0 && pr.DaysSinceOpened() >= thresholds.AgeUrgencyDays
 
 	// HasStaleReview: user has reviewed, but not on the current head commit.
 	// Non-empty reviewSHA means user has reviewed; if it doesn't match head, it's stale.
