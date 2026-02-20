@@ -1,14 +1,73 @@
 package application_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
+
+// attentionReviewStore implements driven.ReviewStore for AttentionService tests.
+// Only GetReviewsByPR is used by AttentionService; remaining methods panic.
+type attentionReviewStore struct {
+	reviews []model.Review
+	err     error
+}
+
+func (m *attentionReviewStore) GetReviewsByPR(_ context.Context, _ int64) ([]model.Review, error) {
+	return m.reviews, m.err
+}
+
+func (m *attentionReviewStore) UpsertReview(_ context.Context, _ model.Review) error { panic("unused") }
+func (m *attentionReviewStore) UpsertReviewComment(_ context.Context, _ model.ReviewComment) error {
+	panic("unused")
+}
+func (m *attentionReviewStore) UpsertIssueComment(_ context.Context, _ model.IssueComment) error {
+	panic("unused")
+}
+func (m *attentionReviewStore) GetReviewCommentsByPR(_ context.Context, _ int64) ([]model.ReviewComment, error) {
+	panic("unused")
+}
+func (m *attentionReviewStore) GetIssueCommentsByPR(_ context.Context, _ int64) ([]model.IssueComment, error) {
+	panic("unused")
+}
+func (m *attentionReviewStore) UpdateCommentResolution(_ context.Context, _ int64, _ bool) error {
+	panic("unused")
+}
+func (m *attentionReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error { panic("unused") }
+
+// attentionThresholdStore implements driven.ThresholdStore for AttentionService tests.
+// Only GetGlobalSettings and GetRepoThreshold are used by AttentionService.
+type attentionThresholdStore struct {
+	global    model.GlobalSettings
+	globalErr error
+	repo      model.RepoThreshold
+	repoErr   error
+}
+
+func (m *attentionThresholdStore) GetGlobalSettings(_ context.Context) (model.GlobalSettings, error) {
+	return m.global, m.globalErr
+}
+
+func (m *attentionThresholdStore) GetRepoThreshold(_ context.Context, _ string) (model.RepoThreshold, error) {
+	return m.repo, m.repoErr
+}
+
+func (m *attentionThresholdStore) SetGlobalSettings(_ context.Context, _ model.GlobalSettings) error {
+	panic("unused")
+}
+func (m *attentionThresholdStore) SetRepoThreshold(_ context.Context, _ model.RepoThreshold) error {
+	panic("unused")
+}
+func (m *attentionThresholdStore) DeleteRepoThreshold(_ context.Context, _ string) error {
+	panic("unused")
+}
 
 // testAuthor is the GitHub username used as the authenticated user in test cases.
 const testAuthor = "alice"
@@ -156,7 +215,7 @@ func TestComputeAttentionSignals_HasCIFailure(t *testing.T) {
 	})
 }
 
-func TestComputeAttentionSignals_HasAny(t *testing.T) {
+func TestAttentionSignals_HasAny(t *testing.T) {
 	t.Run("no signals -> HasAny false", func(t *testing.T) {
 		signals := model.AttentionSignals{}
 		assert.False(t, signals.HasAny())
@@ -168,7 +227,7 @@ func TestComputeAttentionSignals_HasAny(t *testing.T) {
 	})
 }
 
-func TestComputeAttentionSignals_Severity(t *testing.T) {
+func TestAttentionSignals_Severity(t *testing.T) {
 	t.Run("no signals -> severity 0", func(t *testing.T) {
 		signals := model.AttentionSignals{}
 		assert.Equal(t, 0, signals.Severity())
@@ -193,4 +252,109 @@ func TestComputeAttentionSignals_Severity(t *testing.T) {
 		}
 		assert.Equal(t, 4, signals.Severity())
 	})
+}
+
+func TestSignalsForPR_ReviewerDeduplication(t *testing.T) {
+	now := time.Now()
+	pr := model.PullRequest{ID: 1, HeadSHA: "sha1", Status: model.PRStatusOpen, OpenedAt: now}
+	thresholds := defaultThresholds() // ReviewCountThreshold = 1
+
+	t.Run("latest approval wins over earlier request-changes from same reviewer", func(t *testing.T) {
+		reviews := []model.Review{
+			{ReviewerLogin: "bob", State: model.ReviewStateChangesRequested, SubmittedAt: now.Add(-2 * time.Hour), CommitID: "sha1"},
+			{ReviewerLogin: "bob", State: model.ReviewStateApproved, SubmittedAt: now.Add(-1 * time.Hour), CommitID: "sha1"},
+		}
+		svc := application.NewAttentionService(
+			&attentionThresholdStore{global: model.DefaultGlobalSettings()},
+			&attentionReviewStore{reviews: reviews},
+			testAuthor,
+		)
+		signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
+		require.NoError(t, err)
+		assert.False(t, signals.NeedsMoreReviews, "one approval from bob should satisfy threshold of 1")
+	})
+
+	t.Run("latest request-changes overrides earlier approval from same reviewer", func(t *testing.T) {
+		reviews := []model.Review{
+			{ReviewerLogin: "bob", State: model.ReviewStateApproved, SubmittedAt: now.Add(-2 * time.Hour), CommitID: "sha1"},
+			{ReviewerLogin: "bob", State: model.ReviewStateChangesRequested, SubmittedAt: now.Add(-1 * time.Hour), CommitID: "sha1"},
+		}
+		svc := application.NewAttentionService(
+			&attentionThresholdStore{global: model.DefaultGlobalSettings()},
+			&attentionReviewStore{reviews: reviews},
+			testAuthor,
+		)
+		signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
+		require.NoError(t, err)
+		assert.True(t, signals.NeedsMoreReviews, "request-changes should nullify the earlier approval")
+	})
+
+	t.Run("bots are excluded from approval count", func(t *testing.T) {
+		reviews := []model.Review{
+			{ReviewerLogin: "dependabot", State: model.ReviewStateApproved, SubmittedAt: now, CommitID: "sha1", IsBot: true},
+		}
+		svc := application.NewAttentionService(
+			&attentionThresholdStore{global: model.DefaultGlobalSettings()},
+			&attentionReviewStore{reviews: reviews},
+			testAuthor,
+		)
+		signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
+		require.NoError(t, err)
+		assert.True(t, signals.NeedsMoreReviews, "bot approvals should not count toward threshold")
+	})
+}
+
+func TestSignalsForPR_StoreError(t *testing.T) {
+	pr := model.PullRequest{ID: 1, HeadSHA: "sha1", Status: model.PRStatusOpen, OpenedAt: time.Now()}
+	thresholds := defaultThresholds()
+	storeErr := errors.New("db unavailable")
+
+	svc := application.NewAttentionService(
+		&attentionThresholdStore{global: model.DefaultGlobalSettings()},
+		&attentionReviewStore{err: storeErr},
+		testAuthor,
+	)
+	signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
+	assert.NoError(t, err, "review store errors should be swallowed (non-fatal)")
+	assert.Equal(t, model.AttentionSignals{}, signals, "zero-value signals returned on store error")
+}
+
+func TestEffectiveThresholdsFor_RepoOverridePrecedence(t *testing.T) {
+	repoCount := 3
+	repoAge := 14
+	repoStale := false
+	repoCI := false
+
+	ts := &attentionThresholdStore{
+		global: model.GlobalSettings{ReviewCountThreshold: 1, AgeUrgencyDays: 7, StaleReviewEnabled: true, CIFailureEnabled: true},
+		repo: model.RepoThreshold{
+			ReviewCount:        &repoCount,
+			AgeUrgencyDays:     &repoAge,
+			StaleReviewEnabled: &repoStale,
+			CIFailureEnabled:   &repoCI,
+		},
+	}
+	svc := application.NewAttentionService(ts, &attentionReviewStore{}, testAuthor)
+	effective := svc.EffectiveThresholdsFor(context.Background(), "owner/repo")
+
+	assert.Equal(t, 3, effective.ReviewCountThreshold, "repo override should win over global")
+	assert.Equal(t, 14, effective.AgeUrgencyDays, "repo override should win over global")
+	assert.False(t, effective.StaleReviewEnabled, "repo override should win over global")
+	assert.False(t, effective.CIFailureEnabled, "repo override should win over global")
+}
+
+func TestEffectiveThresholdsFor_GlobalFallbackOnStoreError(t *testing.T) {
+	storeErr := errors.New("db unavailable")
+	ts := &attentionThresholdStore{
+		globalErr: storeErr,
+		repoErr:   storeErr,
+	}
+	svc := application.NewAttentionService(ts, &attentionReviewStore{}, testAuthor)
+	effective := svc.EffectiveThresholdsFor(context.Background(), "owner/repo")
+
+	defaults := model.DefaultGlobalSettings()
+	assert.Equal(t, defaults.ReviewCountThreshold, effective.ReviewCountThreshold)
+	assert.Equal(t, defaults.AgeUrgencyDays, effective.AgeUrgencyDays)
+	assert.Equal(t, defaults.StaleReviewEnabled, effective.StaleReviewEnabled)
+	assert.Equal(t, defaults.CIFailureEnabled, effective.CIFailureEnabled)
 }

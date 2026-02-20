@@ -723,7 +723,7 @@ func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) 
 		// Non-fatal: token was saved successfully; username storage failure is logged.
 	}
 
-	fmt.Fprintf(w, `<span class="text-green-600 text-sm">GitHub token: configured (%s)</span>`, validatedUsername)
+	fmt.Fprintf(w, `<span class="text-green-600 text-sm">GitHub token: configured (%s)</span>`, html.EscapeString(validatedUsername))
 }
 
 // SaveJiraCredentials handles POST /app/settings/jira.
@@ -832,6 +832,11 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token, err := h.credStore.Get(r.Context(), "github_token")
+	if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set.</p>`)
+		return
+	}
 	if err != nil || token == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to reply to comments.</p>`)
@@ -950,6 +955,11 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token, err := h.credStore.Get(r.Context(), "github_token")
+	if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set.</p>`)
+		return
+	}
 	if err != nil || token == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to submit reviews.</p>`)
@@ -1023,6 +1033,11 @@ func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token, err := h.credStore.Get(r.Context(), "github_token")
+	if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set.</p>`)
+		return
+	}
 	if err != nil || token == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to post comments.</p>`)
@@ -1069,6 +1084,11 @@ func (h *Handler) ToggleDraftStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token, err := h.credStore.Get(r.Context(), "github_token")
+	if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set.</p>`)
+		return
+	}
 	if err != nil || token == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to toggle draft status.</p>`)
