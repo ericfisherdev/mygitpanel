@@ -51,6 +51,8 @@ type PRDetailViewModel struct {
 	AwaitingCoderabbit  bool
 	ResolvedThreads     int
 	UnresolvedThreads   int
+
+	JiraCard JiraCardViewModel
 }
 
 // ReviewViewModel holds presentation-ready data for a single review.
@@ -159,6 +161,39 @@ type JiraConnectionStatusViewModel struct {
 	Success      bool
 	Message      string
 	ConnectionID int64 // populated on successful create
+}
+
+// JiraCardViewModel holds all state for the JiraCard component.
+// The component uses these fields to determine which of three states to render:
+// (1) no credentials configured, (2) no linked issue key, (3) issue data (or load error).
+type JiraCardViewModel struct {
+	HasCredentials bool         // false when jiraConnStore has no applicable connection
+	JiraKey        string       // "" when no key detected on this PR
+	Issue          *JiraIssueVM // nil on load error or when HasCredentials=false or JiraKey=""
+	LoadError      string       // non-empty when Jira fetch failed
+	// PRIdentifiers for HTMX form action construction.
+	Owner  string
+	Repo   string
+	Number int
+}
+
+// JiraIssueVM holds presentation-ready fields for a linked Jira issue.
+type JiraIssueVM struct {
+	Key         string
+	Summary     string
+	Description string
+	Status      string
+	Priority    string
+	Assignee    string
+	Comments    []JiraCommentVM
+	JiraURL     string // direct link to the issue in Jira (BaseURL + /browse/ + Key)
+}
+
+// JiraCommentVM holds presentation-ready data for a single Jira comment.
+type JiraCommentVM struct {
+	Author    string
+	Body      string
+	CreatedAt string // formatted as "2 Jan 2006" for display
 }
 
 // CredentialStatusViewModel is the response payload for credential save handlers.
