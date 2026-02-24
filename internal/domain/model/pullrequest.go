@@ -26,6 +26,10 @@ type PullRequest struct {
 	UpdatedAt       time.Time
 	LastActivityAt  time.Time
 
+	// JiraKey is the detected Jira issue key (e.g. "PROJ-123") extracted from
+	// Branch or Title during polling. Empty if none detected.
+	JiraKey string
+
 	// Transient fields populated during GitHub fetch, not persisted.
 	RequestedReviewers []string
 	RequestedTeamSlugs []string
