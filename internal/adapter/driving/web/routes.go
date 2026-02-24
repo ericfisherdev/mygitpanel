@@ -37,6 +37,9 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("POST /app/settings/jira/connections/{id}/default", h.SetDefaultJiraConnection)
 	mux.HandleFunc("POST /app/settings/jira/repo-mapping", h.SaveJiraRepoMapping)
 
+	// Jira comment route.
+	mux.HandleFunc("POST /app/prs/{owner}/{repo}/{number}/jira-comment", h.CreateJiraComment)
+
 	// PR ignore routes.
 	mux.HandleFunc("POST /app/prs/{id}/ignore", h.IgnorePR)
 	mux.HandleFunc("POST /app/prs/{id}/unignore", h.UnignorePR)

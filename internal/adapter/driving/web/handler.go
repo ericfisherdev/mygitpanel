@@ -202,10 +202,172 @@ func (h *Handler) GetPRDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	detail := toPRDetailViewModel(*pr, summary, checkRuns, botUsernames, h.authenticatedUsername(r.Context()))
+
+	// Jira enrichment (non-fatal — errors populate LoadError, never prevent the detail from rendering).
+	detail.JiraCard = h.buildJiraCardVM(r.Context(), *pr, owner, repo, number)
+
 	component := partials.PRDetailContent(detail)
 
 	if err := component.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render PR detail", "error", err)
+	}
+}
+
+// buildJiraCardVM resolves the Jira connection for this repo and fetches
+// the linked issue if a key exists. All errors are captured in LoadError;
+// this method never returns an error — Jira failures must not block PR rendering.
+func (h *Handler) buildJiraCardVM(ctx context.Context, pr model.PullRequest, owner, repo string, number int) vm.JiraCardViewModel {
+	base := vm.JiraCardViewModel{
+		Owner:   owner,
+		Repo:    repo,
+		Number:  number,
+		JiraKey: pr.JiraKey,
+	}
+
+	if h.jiraConnStore == nil || h.jiraClientFactory == nil {
+		return base // no Jira integration configured
+	}
+
+	conn, err := h.jiraConnStore.GetForRepo(ctx, pr.RepoFullName)
+	if err != nil {
+		h.logger.Error("jira: getForRepo failed", "repo", pr.RepoFullName, "error", err)
+		return base
+	}
+
+	if conn.ID == 0 {
+		return base // no connection assigned or defaulted for this repo
+	}
+
+	base.HasCredentials = true
+
+	if pr.JiraKey == "" {
+		return base // no key detected
+	}
+
+	client := h.jiraClientFactory(conn)
+	issue, err := client.GetIssue(ctx, pr.JiraKey)
+	if err != nil {
+		base.LoadError = friendlyJiraError(err)
+		return base
+	}
+
+	issueVM := &vm.JiraIssueVM{
+		Key:         issue.Key,
+		Summary:     issue.Summary,
+		Description: issue.Description,
+		Status:      issue.Status,
+		Priority:    issue.Priority,
+		Assignee:    issue.Assignee,
+		JiraURL:     conn.BaseURL + "/browse/" + issue.Key,
+	}
+
+	for _, c := range issue.Comments {
+		issueVM.Comments = append(issueVM.Comments, vm.JiraCommentVM{
+			Author:    c.Author,
+			Body:      c.Body,
+			CreatedAt: c.CreatedAt.Format("2 Jan 2006"),
+		})
+	}
+
+	base.Issue = issueVM
+	return base
+}
+
+// friendlyJiraError maps Jira sentinel errors to user-friendly messages.
+func friendlyJiraError(err error) string {
+	switch {
+	case errors.Is(err, driven.ErrJiraUnauthorized):
+		return "Invalid credentials — update in Settings"
+	case errors.Is(err, driven.ErrJiraNotFound):
+		return "Issue not found in Jira"
+	default:
+		return "Jira instance unreachable — check connection in Settings"
+	}
+}
+
+// CreateJiraComment posts a plain-text comment to the linked Jira issue.
+// On success, re-renders the JiraCard component (morph swap target: #jira-card).
+// Returns 422 HTML fragment on missing creds, unreachable Jira, or invalid key.
+func (h *Handler) CreateJiraComment(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	repo := r.PathValue("repo")
+	numberStr := r.PathValue("number")
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	body := strings.TrimSpace(r.FormValue("body"))
+	if body == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Comment body is required</span>`)
+		return
+	}
+
+	if h.jiraConnStore == nil || h.jiraClientFactory == nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Jira integration not configured</span>`)
+		return
+	}
+
+	repoFullName := owner + "/" + repo
+
+	pr, err := h.prStore.GetByNumber(r.Context(), repoFullName, number)
+	if err != nil || pr == nil {
+		h.logger.Error("failed to get PR for jira comment", "repo", repoFullName, "number", number, "error", err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Pull request not found</span>`)
+		return
+	}
+
+	if pr.JiraKey == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">No Jira issue linked to this PR</span>`)
+		return
+	}
+
+	conn, err := h.jiraConnStore.GetForRepo(r.Context(), pr.RepoFullName)
+	if err != nil {
+		h.logger.Error("jira: getForRepo failed", "repo", pr.RepoFullName, "error", err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Failed to resolve Jira connection</span>`)
+		return
+	}
+
+	if conn.ID == 0 {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">No Jira connection configured for this repo</span>`)
+		return
+	}
+
+	client := h.jiraClientFactory(conn)
+
+	// Validate connectivity before posting.
+	if err := client.Ping(r.Context()); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">%s</span>`, html.EscapeString(friendlyJiraError(err)))
+		return
+	}
+
+	if err := client.AddComment(r.Context(), pr.JiraKey, body); err != nil {
+		h.logger.Error("jira: add comment failed", "key", pr.JiraKey, "error", err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Failed to post comment: %s</span>`, html.EscapeString(friendlyJiraError(err)))
+		return
+	}
+
+	// Re-render JiraCard with updated comment list.
+	cardVM := h.buildJiraCardVM(r.Context(), *pr, owner, repo, number)
+	// Force expanded state so the user sees their new comment.
+	if err := components.JiraCard(cardVM).Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render jira card after comment", "error", err)
 	}
 }
 

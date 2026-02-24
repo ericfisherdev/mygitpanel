@@ -266,6 +266,7 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 		fetchedNumbers[pr.Number] = true
 
 		pr.NeedsReview = IsReviewRequestedFrom(pr, s.username, s.teamSlugs)
+		pr.JiraKey = ExtractJiraKey(pr.Branch, pr.Title)
 
 		if stored, ok := storedByNumber[pr.Number]; ok {
 			if stored.UpdatedAt.Equal(pr.UpdatedAt) && stored.NeedsReview == pr.NeedsReview {
