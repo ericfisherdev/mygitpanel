@@ -1,0 +1,311 @@
+package sqlite
+
+import (
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"database/sql"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
+)
+
+// Compile-time interface satisfaction check.
+var _ driven.JiraConnectionStore = (*JiraConnectionRepo)(nil)
+
+// JiraConnectionRepo is the SQLite implementation of the JiraConnectionStore port interface.
+// API tokens are encrypted with AES-256-GCM before write and decrypted after read.
+type JiraConnectionRepo struct {
+	db  *DB
+	key []byte // 32-byte AES-256 key; nil when encryption is disabled.
+}
+
+// NewJiraConnectionRepo creates a new JiraConnectionRepo. key must be exactly 32 bytes
+// for AES-256-GCM, or nil to disable credential storage (all operations will return
+// ErrEncryptionKeyNotSet). Panics if key is non-nil with wrong length.
+func NewJiraConnectionRepo(db *DB, key []byte) *JiraConnectionRepo {
+	if key != nil && len(key) != 32 {
+		panic(fmt.Errorf("invalid AES-256 key length: got %d, want 32", len(key)))
+	}
+	return &JiraConnectionRepo{db: db, key: key}
+}
+
+// Create persists a new Jira connection and returns the assigned ID.
+func (r *JiraConnectionRepo) Create(ctx context.Context, conn model.JiraConnection) (int64, error) {
+	encrypted, err := r.encrypt(conn.Token)
+	if err != nil {
+		return 0, err
+	}
+
+	isDefault := 0
+	if conn.IsDefault {
+		isDefault = 1
+	}
+
+	const query = `INSERT INTO jira_connections (display_name, base_url, email, token, is_default)
+		VALUES (?, ?, ?, ?, ?)`
+	result, err := r.db.Writer.ExecContext(ctx, query,
+		conn.DisplayName, conn.BaseURL, conn.Email, encrypted, isDefault,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("create jira connection: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("last insert id: %w", err)
+	}
+	return id, nil
+}
+
+// Update replaces all fields of an existing Jira connection.
+func (r *JiraConnectionRepo) Update(ctx context.Context, conn model.JiraConnection) error {
+	encrypted, err := r.encrypt(conn.Token)
+	if err != nil {
+		return err
+	}
+
+	isDefault := 0
+	if conn.IsDefault {
+		isDefault = 1
+	}
+
+	const query = `UPDATE jira_connections
+		SET display_name = ?, base_url = ?, email = ?, token = ?, is_default = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`
+	_, err = r.db.Writer.ExecContext(ctx, query,
+		conn.DisplayName, conn.BaseURL, conn.Email, encrypted, isDefault, conn.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update jira connection %d: %w", conn.ID, err)
+	}
+	return nil
+}
+
+// Delete removes a Jira connection by ID. FK cascade handles repo_jira_mapping cleanup.
+func (r *JiraConnectionRepo) Delete(ctx context.Context, id int64) error {
+	const query = `DELETE FROM jira_connections WHERE id = ?`
+	_, err := r.db.Writer.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("delete jira connection %d: %w", id, err)
+	}
+	return nil
+}
+
+// List returns all Jira connections with decrypted tokens, ordered by display name.
+func (r *JiraConnectionRepo) List(ctx context.Context) ([]model.JiraConnection, error) {
+	if r.key == nil {
+		return nil, driven.ErrEncryptionKeyNotSet
+	}
+
+	const query = `SELECT id, display_name, base_url, email, token, is_default, created_at, updated_at
+		FROM jira_connections ORDER BY display_name`
+	rows, err := r.db.Reader.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list jira connections: %w", err)
+	}
+	defer rows.Close()
+
+	var conns []model.JiraConnection
+	for rows.Next() {
+		conn, err := r.scanConnection(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan jira connection: %w", err)
+		}
+		conns = append(conns, conn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate jira connections: %w", err)
+	}
+	return conns, nil
+}
+
+// GetByID retrieves a single Jira connection by ID.
+// Returns a zero-value JiraConnection (ID==0) and nil error if not found.
+func (r *JiraConnectionRepo) GetByID(ctx context.Context, id int64) (model.JiraConnection, error) {
+	if r.key == nil {
+		return model.JiraConnection{}, driven.ErrEncryptionKeyNotSet
+	}
+
+	const query = `SELECT id, display_name, base_url, email, token, is_default, created_at, updated_at
+		FROM jira_connections WHERE id = ?`
+	conn, err := r.scanConnection(r.db.Reader.QueryRowContext(ctx, query, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.JiraConnection{}, nil
+	}
+	if err != nil {
+		return model.JiraConnection{}, fmt.Errorf("get jira connection %d: %w", id, err)
+	}
+	return conn, nil
+}
+
+// GetForRepo returns the Jira connection associated with the given repository.
+// Falls back to the default connection if no explicit mapping exists.
+// Returns a zero-value JiraConnection (ID==0) and nil error if no connection applies.
+func (r *JiraConnectionRepo) GetForRepo(ctx context.Context, repoFullName string) (model.JiraConnection, error) {
+	if r.key == nil {
+		return model.JiraConnection{}, driven.ErrEncryptionKeyNotSet
+	}
+
+	// Try explicit mapping first, then fall back to default connection.
+	const query = `
+		SELECT jc.id, jc.display_name, jc.base_url, jc.email, jc.token, jc.is_default, jc.created_at, jc.updated_at
+		FROM jira_connections jc
+		LEFT JOIN repo_jira_mapping rjm ON rjm.jira_connection_id = jc.id AND rjm.repo_full_name = ?
+		WHERE rjm.repo_full_name IS NOT NULL OR jc.is_default = 1
+		ORDER BY CASE WHEN rjm.repo_full_name IS NOT NULL THEN 0 ELSE 1 END
+		LIMIT 1`
+
+	conn, err := r.scanConnection(r.db.Reader.QueryRowContext(ctx, query, repoFullName))
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.JiraConnection{}, nil
+	}
+	if err != nil {
+		return model.JiraConnection{}, fmt.Errorf("get jira connection for repo %s: %w", repoFullName, err)
+	}
+	return conn, nil
+}
+
+// SetRepoMapping associates a repository with a Jira connection.
+// Pass connectionID=0 to clear the mapping.
+func (r *JiraConnectionRepo) SetRepoMapping(ctx context.Context, repoFullName string, connectionID int64) error {
+	if connectionID == 0 {
+		const query = `DELETE FROM repo_jira_mapping WHERE repo_full_name = ?`
+		_, err := r.db.Writer.ExecContext(ctx, query, repoFullName)
+		if err != nil {
+			return fmt.Errorf("clear repo jira mapping %s: %w", repoFullName, err)
+		}
+		return nil
+	}
+
+	const query = `INSERT INTO repo_jira_mapping (repo_full_name, jira_connection_id) VALUES (?, ?)
+		ON CONFLICT(repo_full_name) DO UPDATE SET jira_connection_id = excluded.jira_connection_id`
+	_, err := r.db.Writer.ExecContext(ctx, query, repoFullName, connectionID)
+	if err != nil {
+		return fmt.Errorf("set repo jira mapping %s -> %d: %w", repoFullName, connectionID, err)
+	}
+	return nil
+}
+
+// SetDefault marks a connection as the default. Pass id=0 to clear the default.
+// Atomically clears is_default on all other connections before setting the new one.
+func (r *JiraConnectionRepo) SetDefault(ctx context.Context, id int64) error {
+	tx, err := r.db.Writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	// Clear all defaults.
+	if _, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 0 WHERE is_default = 1`); err != nil {
+		return fmt.Errorf("clear defaults: %w", err)
+	}
+
+	// Set new default if id > 0.
+	if id > 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 1 WHERE id = ?`, id); err != nil {
+			return fmt.Errorf("set default %d: %w", id, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit set default: %w", err)
+	}
+	return nil
+}
+
+// scanConnection scans a single jira_connections row from the given scanner.
+func (r *JiraConnectionRepo) scanConnection(s scanner) (model.JiraConnection, error) {
+	var conn model.JiraConnection
+	var encrypted string
+	var isDefault int
+	var createdAt, updatedAt string
+
+	err := s.Scan(
+		&conn.ID, &conn.DisplayName, &conn.BaseURL, &conn.Email,
+		&encrypted, &isDefault, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return model.JiraConnection{}, err
+	}
+
+	conn.IsDefault = isDefault != 0
+
+	conn.Token, err = r.decrypt(encrypted)
+	if err != nil {
+		return model.JiraConnection{}, fmt.Errorf("decrypt token for connection %d: %w", conn.ID, err)
+	}
+
+	conn.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return model.JiraConnection{}, fmt.Errorf("parse created_at for connection %d: %w", conn.ID, err)
+	}
+
+	conn.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return model.JiraConnection{}, fmt.Errorf("parse updated_at for connection %d: %w", conn.ID, err)
+	}
+
+	return conn, nil
+}
+
+// encrypt encrypts plaintext using AES-256-GCM and returns a base64-encoded string
+// containing the nonce (12 bytes) prepended to the ciphertext.
+func (r *JiraConnectionRepo) encrypt(plaintext string) (string, error) {
+	if r.key == nil {
+		return "", driven.ErrEncryptionKeyNotSet
+	}
+
+	block, err := aes.NewCipher(r.key)
+	if err != nil {
+		return "", fmt.Errorf("aes.NewCipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("cipher.NewGCM: %w", err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", fmt.Errorf("rand nonce: %w", err)
+	}
+
+	// Seal appends the ciphertext to nonce, producing: nonce || ciphertext || tag.
+	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// decrypt decrypts a base64-encoded AES-256-GCM ciphertext.
+func (r *JiraConnectionRepo) decrypt(encoded string) (string, error) {
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("base64 decode: %w", err)
+	}
+
+	block, err := aes.NewCipher(r.key)
+	if err != nil {
+		return "", fmt.Errorf("aes.NewCipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("cipher.NewGCM: %w", err)
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(data) < nonceSize {
+		return "", errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	plainplaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", fmt.Errorf("gcm.Open: %w", err)
+	}
+
+	return string(plainplaintext), nil
+}

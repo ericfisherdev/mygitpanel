@@ -1,0 +1,1 @@
+ALTER TABLE pull_requests ADD COLUMN jira_key TEXT NOT NULL DEFAULT '';

@@ -32,8 +32,8 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 			number, repo_full_name, title, author, status, is_draft, needs_review,
 			url, branch, base_branch, labels, head_sha,
 			additions, deletions, changed_files, mergeable_status, ci_status,
-			opened_at, updated_at, last_activity_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			opened_at, updated_at, last_activity_at, jira_key
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(repo_full_name, number) DO UPDATE SET
 			title = excluded.title,
 			author = excluded.author,
@@ -52,7 +52,8 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 			ci_status = excluded.ci_status,
 			opened_at = excluded.opened_at,
 			updated_at = excluded.updated_at,
-			last_activity_at = excluded.last_activity_at
+			last_activity_at = excluded.last_activity_at,
+			jira_key = excluded.jira_key
 	`
 
 	labels := pr.Labels
@@ -88,7 +89,7 @@ func (r *PRRepo) Upsert(ctx context.Context, pr model.PullRequest) error {
 		pr.Number, pr.RepoFullName, pr.Title, pr.Author, string(pr.Status), isDraft, needsReview,
 		pr.URL, pr.Branch, pr.BaseBranch, string(labelsJSON), pr.HeadSHA,
 		pr.Additions, pr.Deletions, pr.ChangedFiles, mergeableStatus, ciStatus,
-		pr.OpenedAt.UTC(), pr.UpdatedAt.UTC(), pr.LastActivityAt.UTC(),
+		pr.OpenedAt.UTC(), pr.UpdatedAt.UTC(), pr.LastActivityAt.UTC(), pr.JiraKey,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert pull request %s#%d: %w", pr.RepoFullName, pr.Number, err)
@@ -103,7 +104,7 @@ func (r *PRRepo) GetByRepository(ctx context.Context, repoFullName string) ([]mo
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
 		       url, branch, base_branch, labels, head_sha,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
-		       opened_at, updated_at, last_activity_at
+		       opened_at, updated_at, last_activity_at, jira_key
 		FROM pull_requests
 		WHERE repo_full_name = ?
 		ORDER BY number
@@ -118,7 +119,7 @@ func (r *PRRepo) GetByStatus(ctx context.Context, status model.PRStatus) ([]mode
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
 		       url, branch, base_branch, labels, head_sha,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
-		       opened_at, updated_at, last_activity_at
+		       opened_at, updated_at, last_activity_at, jira_key
 		FROM pull_requests
 		WHERE status = ?
 		ORDER BY updated_at DESC
@@ -134,7 +135,7 @@ func (r *PRRepo) GetByNumber(ctx context.Context, repoFullName string, number in
 		SELECT id, number, repo_full_name, title, author, status, is_draft, needs_review,
 		       url, branch, base_branch, labels, head_sha,
 		       additions, deletions, changed_files, mergeable_status, ci_status,
-		       opened_at, updated_at, last_activity_at
+		       opened_at, updated_at, last_activity_at, jira_key
 		FROM pull_requests
 		WHERE repo_full_name = ? AND number = ?
 	`
@@ -157,7 +158,7 @@ func (r *PRRepo) ListAll(ctx context.Context) ([]model.PullRequest, error) {
 		SELECT pr.id, pr.number, pr.repo_full_name, pr.title, pr.author, pr.status, pr.is_draft, pr.needs_review,
 		       pr.url, pr.branch, pr.base_branch, pr.labels, pr.head_sha,
 		       pr.additions, pr.deletions, pr.changed_files, pr.mergeable_status, pr.ci_status,
-		       pr.opened_at, pr.updated_at, pr.last_activity_at
+		       pr.opened_at, pr.updated_at, pr.last_activity_at, pr.jira_key
 		FROM pull_requests pr
 		LEFT JOIN ignored_prs ip ON ip.pr_id = pr.id
 		WHERE ip.pr_id IS NULL
@@ -175,7 +176,7 @@ func (r *PRRepo) ListNeedingReview(ctx context.Context) ([]model.PullRequest, er
 		SELECT pr.id, pr.number, pr.repo_full_name, pr.title, pr.author, pr.status, pr.is_draft, pr.needs_review,
 		       pr.url, pr.branch, pr.base_branch, pr.labels, pr.head_sha,
 		       pr.additions, pr.deletions, pr.changed_files, pr.mergeable_status, pr.ci_status,
-		       pr.opened_at, pr.updated_at, pr.last_activity_at
+		       pr.opened_at, pr.updated_at, pr.last_activity_at, pr.jira_key
 		FROM pull_requests pr
 		LEFT JOIN ignored_prs ip ON ip.pr_id = pr.id
 		WHERE pr.needs_review = 1
@@ -193,7 +194,7 @@ func (r *PRRepo) ListIgnoredWithPRData(ctx context.Context) ([]model.PullRequest
 		SELECT pr.id, pr.number, pr.repo_full_name, pr.title, pr.author, pr.status, pr.is_draft, pr.needs_review,
 		       pr.url, pr.branch, pr.base_branch, pr.labels, pr.head_sha,
 		       pr.additions, pr.deletions, pr.changed_files, pr.mergeable_status, pr.ci_status,
-		       pr.opened_at, pr.updated_at, pr.last_activity_at
+		       pr.opened_at, pr.updated_at, pr.last_activity_at, pr.jira_key
 		FROM pull_requests pr
 		INNER JOIN ignored_prs ip ON ip.pr_id = pr.id
 		ORDER BY ip.ignored_at DESC
@@ -261,7 +262,7 @@ func scanPR(s scanner) (*model.PullRequest, error) {
 		&status, &isDraft, &needsReview, &pr.URL, &pr.Branch, &pr.BaseBranch,
 		&labelsJSON, &pr.HeadSHA,
 		&pr.Additions, &pr.Deletions, &pr.ChangedFiles, &mergeableStatus, &ciStatus,
-		&openedAt, &updatedAt, &lastActivityAt,
+		&openedAt, &updatedAt, &lastActivityAt, &pr.JiraKey,
 	)
 	if err != nil {
 		return nil, err
