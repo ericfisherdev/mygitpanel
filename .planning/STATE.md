@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 
 Milestone: 2026.2.0 Web GUI
 Phase: 9 of 9 (Jira Integration)
-Plan: 1 of 4
+Plan: 2 of 4
 Status: In progress
-Last activity: 2026-02-24 — Completed 09-01-PLAN.md (Jira data foundation)
+Last activity: 2026-02-24 — Completed 09-02-PLAN.md (Jira HTTP client adapter)
 
-Progress: [=====...............] 25% (1/4 plans)
+Progress: [==========..........] 50% (2/4 plans)
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Progress: [=====...............] 25% (1/4 plans)
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
 | 08-review-workflows-and-attention-signals | 5/5 | 54min | 10.8min |
-| 09-jira-integration | 1/4 | 4min | 4min |
+| 09-jira-integration | 2/4 | 7min | 3.5min |
 
 ## Accumulated Context
 
@@ -78,6 +78,8 @@ Recent decisions (2026.2.0):
 - [Phase 09-jira-integration]: Duplicated encrypt/decrypt in JiraConnectionRepo (not shared with CredentialRepo) per SRP
 - [Phase 09-jira-integration]: GetByID/GetForRepo return zero-value JiraConnection + nil error when not found (project convention)
 - [Phase 09-jira-integration]: repo_jira_mapping uses ON DELETE SET NULL so mapping rows persist after connection deletion
+- [Phase 09-jira-integration]: parseJiraTime fallback for Jira's non-standard timezone offset format (+0000 vs +00:00)
+- [Phase 09-jira-integration]: Separated extractADFDocText (top-level doc) from extractADFText (recursive node) for clean ADF handling
 
 ### Pending Todos
 
@@ -90,5 +92,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 09-01-PLAN.md (Jira data foundation) — Phase 9 in progress
-Resume file: .planning/phases/09-jira-integration/09-02-PLAN.md
+Stopped at: Completed 09-02-PLAN.md (Jira HTTP client adapter) — Phase 9 in progress
+Resume file: .planning/phases/09-jira-integration/09-03-PLAN.md
