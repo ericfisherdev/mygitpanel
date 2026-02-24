@@ -30,7 +30,12 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 
 	// Settings / credential management routes.
 	mux.HandleFunc("POST /app/settings/github", h.SaveGitHubCredentials)
-	mux.HandleFunc("POST /app/settings/jira", h.SaveJiraCredentials)
+
+	// Jira connection management routes.
+	mux.HandleFunc("POST /app/settings/jira/connections", h.CreateJiraConnection)
+	mux.HandleFunc("DELETE /app/settings/jira/connections/{id}", h.DeleteJiraConnection)
+	mux.HandleFunc("POST /app/settings/jira/connections/{id}/default", h.SetDefaultJiraConnection)
+	mux.HandleFunc("POST /app/settings/jira/repo-mapping", h.SaveJiraRepoMapping)
 
 	// PR ignore routes.
 	mux.HandleFunc("POST /app/prs/{id}/ignore", h.IgnorePR)

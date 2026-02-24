@@ -39,6 +39,11 @@ type Handler struct {
 	// writerFactory creates a fresh GitHubWriter per request using the current token,
 	// allowing credentials updated via the GUI to take effect without restarting.
 	writerFactory func(token string) driven.GitHubWriter
+	// jiraConnStore manages multi-connection Jira credential persistence.
+	jiraConnStore driven.JiraConnectionStore
+	// jiraClientFactory creates a JiraClient for a given connection, enabling
+	// credential validation (Ping) without coupling to concrete adapter.
+	jiraClientFactory func(conn model.JiraConnection) driven.JiraClient
 }
 
 // NewHandler creates a Handler with all required dependencies.
@@ -54,19 +59,23 @@ func NewHandler(
 	thresholdStore driven.ThresholdStore,
 	ignoreStore driven.IgnoreStore,
 	writerFactory func(token string) driven.GitHubWriter,
+	jiraConnStore driven.JiraConnectionStore,
+	jiraClientFactory func(conn model.JiraConnection) driven.JiraClient,
 ) *Handler {
 	return &Handler{
-		prStore:        prStore,
-		repoStore:      repoStore,
-		reviewSvc:      reviewSvc,
-		healthSvc:      healthSvc,
-		pollSvc:        pollSvc,
-		username:       username,
-		logger:         logger,
-		credStore:      credStore,
-		thresholdStore: thresholdStore,
-		ignoreStore:    ignoreStore,
-		writerFactory:  writerFactory,
+		prStore:           prStore,
+		repoStore:         repoStore,
+		reviewSvc:         reviewSvc,
+		healthSvc:         healthSvc,
+		pollSvc:           pollSvc,
+		username:          username,
+		logger:            logger,
+		credStore:         credStore,
+		thresholdStore:    thresholdStore,
+		ignoreStore:       ignoreStore,
+		writerFactory:     writerFactory,
+		jiraConnStore:     jiraConnStore,
+		jiraClientFactory: jiraClientFactory,
 	}
 }
 
@@ -105,7 +114,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	csrfToken(w, r)
 
 	cards := h.toPRCardViewModelsWithSignals(r.Context(), prs)
-	data := buildDashboardViewModel(cards, repos, ignoredPRs, globalSettings)
+	data := h.buildDashboardViewModel(r.Context(), cards, repos, ignoredPRs, globalSettings)
 	component := pages.Dashboard(data)
 	layout := templates.Layout("ReviewHub", component, globalSettings)
 
@@ -290,7 +299,7 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	repoVMs := toRepoViewModels(repos)
+	repoVMs := h.toRepoViewModels(r.Context(), repos)
 	cards := h.toPRCardViewModelsWithSignals(r.Context(), prs)
 	repoNames := extractRepoNames(repos)
 
@@ -586,19 +595,31 @@ func isValidRepoChar(ch rune) bool {
 }
 
 // buildDashboardViewModel constructs the full view model for the dashboard page.
-func buildDashboardViewModel(cards []vm.PRCardViewModel, repos []model.Repository, ignoredPRs []model.PullRequest, globalSettings model.GlobalSettings) vm.DashboardViewModel {
+func (h *Handler) buildDashboardViewModel(ctx context.Context, cards []vm.PRCardViewModel, repos []model.Repository, ignoredPRs []model.PullRequest, globalSettings model.GlobalSettings) vm.DashboardViewModel {
 	ignoredCards := make([]vm.PRCardViewModel, 0, len(ignoredPRs))
 	for _, pr := range ignoredPRs {
 		// Ignored PRs show with zero-value attention signals in the ignore list.
 		ignoredCards = append(ignoredCards, toPRCardViewModel(pr, model.AttentionSignals{}))
 	}
 
+	// Fetch Jira connections for the dashboard (settings drawer pre-population).
+	var jiraConnVMs []vm.JiraConnectionViewModel
+	if h.jiraConnStore != nil {
+		conns, err := h.jiraConnStore.List(ctx)
+		if err != nil {
+			h.logger.Warn("failed to list jira connections for dashboard", "error", err)
+		} else {
+			jiraConnVMs = h.toJiraConnectionViewModels(conns)
+		}
+	}
+
 	return vm.DashboardViewModel{
-		Cards:          cards,
-		Repos:          toRepoViewModels(repos),
-		RepoNames:      extractRepoNames(repos),
-		IgnoredPRs:     ignoredCards,
-		GlobalSettings: globalSettings,
+		Cards:           cards,
+		Repos:           h.toRepoViewModels(ctx, repos),
+		RepoNames:       extractRepoNames(repos),
+		IgnoredPRs:      ignoredCards,
+		GlobalSettings:  globalSettings,
+		JiraConnections: jiraConnVMs,
 	}
 }
 
@@ -645,14 +666,24 @@ func (h *Handler) getGlobalSettings(ctx context.Context) model.GlobalSettings {
 }
 
 // toRepoViewModels converts domain repos to presentation view models.
-func toRepoViewModels(repos []model.Repository) []vm.RepoViewModel {
+func (h *Handler) toRepoViewModels(ctx context.Context, repos []model.Repository) []vm.RepoViewModel {
 	vms := make([]vm.RepoViewModel, 0, len(repos))
 	for _, r := range repos {
+		var assignedID int64
+		if h.jiraConnStore != nil {
+			conn, err := h.jiraConnStore.GetForRepo(ctx, r.FullName)
+			if err != nil {
+				h.logger.Warn("failed to get jira mapping for repo", "repo", r.FullName, "error", err)
+			} else {
+				assignedID = conn.ID
+			}
+		}
 		vms = append(vms, vm.RepoViewModel{
-			FullName:   r.FullName,
-			Owner:      r.Owner,
-			Name:       r.Name,
-			DeletePath: fmt.Sprintf("/app/repos/%s/%s", r.Owner, r.Name),
+			FullName:                 r.FullName,
+			Owner:                    r.Owner,
+			Name:                     r.Name,
+			DeletePath:               fmt.Sprintf("/app/repos/%s/%s", r.Owner, r.Name),
+			AssignedJiraConnectionID: assignedID,
 		})
 	}
 	return vms
@@ -726,11 +757,17 @@ func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) 
 	fmt.Fprintf(w, `<span class="text-green-600 text-sm">GitHub token: configured (%s)</span>`, html.EscapeString(validatedUsername))
 }
 
-// SaveJiraCredentials handles POST /app/settings/jira.
-// It stores Jira credentials without validation (Phase 9 will add validation).
-// The response is an HTML fragment injected into #cred-jira-status by HTMX.
+// SaveJiraCredentials is a deprecated stub that returns 410 Gone.
+// The single-connection endpoint has been replaced by multi-connection handlers in Phase 9.
 func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "replaced by /app/settings/jira/connections in Phase 9", http.StatusGone)
+}
+
+// CreateJiraConnection handles POST /app/settings/jira/connections.
+// It validates the connection via Ping before persisting and returns the updated connection list HTML fragment.
+func (h *Handler) CreateJiraConnection(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: invalid form data</span>`)
 		return
 	}
@@ -740,47 +777,160 @@ func (h *Handler) SaveJiraCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jiraURL := strings.TrimSpace(r.FormValue("jira_url"))
-	jiraEmail := strings.TrimSpace(r.FormValue("jira_email"))
-	jiraToken := strings.TrimSpace(r.FormValue("jira_token"))
+	displayName := strings.TrimSpace(r.FormValue("display_name"))
+	baseURL := strings.TrimSpace(r.FormValue("base_url"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	token := strings.TrimSpace(r.FormValue("token"))
 
-	if h.credStore == nil {
-		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: credential storage is not configured</span>`)
+	if displayName == "" || baseURL == "" || email == "" || token == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">All fields are required</span>`)
 		return
 	}
 
-	// Store all three Jira fields without validation.
-	if err := h.credStore.Set(r.Context(), "jira_url", jiraURL); err != nil {
-		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
-			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
+	if h.jiraClientFactory == nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Jira integration not configured</span>`)
+		return
+	}
+
+	conn := model.JiraConnection{
+		DisplayName: displayName,
+		BaseURL:     baseURL,
+		Email:       email,
+		Token:       token,
+	}
+
+	// Validate credentials by pinging the Jira instance.
+	client := h.jiraClientFactory(conn)
+	if err := client.Ping(r.Context()); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		switch {
+		case errors.Is(err, driven.ErrJiraUnauthorized):
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Invalid credentials — check email and API token</span>`)
+		case errors.Is(err, driven.ErrJiraUnavailable):
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Could not reach Jira instance — check base URL</span>`)
+		default:
+			h.logger.Error("jira ping failed", "error", err)
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Connection validation failed: %s</span>`, html.EscapeString(err.Error()))
+		}
+		return
+	}
+
+	if _, err := h.jiraConnStore.Create(r.Context(), conn); err != nil {
+		h.logger.Error("failed to create jira connection", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save connection</span>`)
+		return
+	}
+
+	h.renderJiraConnectionList(w, r)
+}
+
+// DeleteJiraConnection handles DELETE /app/settings/jira/connections/{id}.
+// It removes the connection and returns the updated connection list HTML fragment.
+func (h *Handler) DeleteJiraConnection(w http.ResponseWriter, r *http.Request) {
+	h.jiraConnectionByID(w, r, "delete jira connection", h.jiraConnStore.Delete)
+}
+
+// SetDefaultJiraConnection handles POST /app/settings/jira/connections/{id}/default.
+// It marks the connection as the default and returns the updated connection list HTML fragment.
+func (h *Handler) SetDefaultJiraConnection(w http.ResponseWriter, r *http.Request) {
+	h.jiraConnectionByID(w, r, "set default jira connection", h.jiraConnStore.SetDefault)
+}
+
+// jiraConnectionByID is a shared handler for operations that parse a connection ID path param,
+// validate CSRF, execute a store operation, and render the updated connection list.
+func (h *Handler) jiraConnectionByID(w http.ResponseWriter, r *http.Request, opName string, storeFn func(ctx context.Context, id int64) error) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid connection ID", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	if err := storeFn(r.Context(), id); err != nil {
+		h.logger.Error("failed to "+opName, "error", err, "id", id)
+		http.Error(w, "failed to "+opName, http.StatusInternalServerError)
+		return
+	}
+
+	h.renderJiraConnectionList(w, r)
+}
+
+// SaveJiraRepoMapping handles POST /app/settings/jira/repo-mapping.
+// It assigns a Jira connection to a repo or clears the mapping when connectionID is 0.
+func (h *Handler) SaveJiraRepoMapping(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	repoFullName := strings.TrimSpace(r.FormValue("repo_full_name"))
+	connIDStr := r.FormValue("jira_connection_id")
+
+	if repoFullName == "" {
+		http.Error(w, "repo_full_name is required", http.StatusBadRequest)
+		return
+	}
+
+	var connectionID int64
+	if connIDStr != "" {
+		var err error
+		connectionID, err = strconv.ParseInt(connIDStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid jira_connection_id", http.StatusBadRequest)
 			return
 		}
-		h.logger.Error("failed to store jira_url", "error", err)
-		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
+	}
+
+	if err := h.jiraConnStore.SetRepoMapping(r.Context(), repoFullName, connectionID); err != nil {
+		h.logger.Error("failed to set jira repo mapping", "error", err, "repo", repoFullName)
+		http.Error(w, "failed to save mapping", http.StatusInternalServerError)
 		return
 	}
 
-	if err := h.credStore.Set(r.Context(), "jira_email", jiraEmail); err != nil {
-		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
-			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
-			return
-		}
-		h.logger.Error("failed to store jira_email", "error", err)
-		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
+	fmt.Fprintf(w, `<span class="text-green-600 text-xs">Saved</span>`)
+}
+
+// renderJiraConnectionList fetches all Jira connections and renders the connection list fragment.
+func (h *Handler) renderJiraConnectionList(w http.ResponseWriter, r *http.Request) {
+	conns, err := h.jiraConnStore.List(r.Context())
+	if err != nil {
+		h.logger.Error("failed to list jira connections", "error", err)
+		http.Error(w, "failed to load connections", http.StatusInternalServerError)
 		return
 	}
 
-	if err := h.credStore.Set(r.Context(), "jira_token", jiraToken); err != nil {
-		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
-			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set</span>`)
-			return
-		}
-		h.logger.Error("failed to store jira_token", "error", err)
-		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save credentials</span>`)
-		return
+	connVMs := h.toJiraConnectionViewModels(conns)
+	if err := components.JiraConnectionList(connVMs).Render(r.Context(), w); err != nil {
+		h.logger.Error("failed to render jira connection list", "error", err)
 	}
+}
 
-	fmt.Fprintf(w, `<span class="text-green-600 text-sm">Jira credentials saved</span>`)
+// toJiraConnectionViewModels maps domain JiraConnections to view models.
+func (h *Handler) toJiraConnectionViewModels(conns []model.JiraConnection) []vm.JiraConnectionViewModel {
+	vms := make([]vm.JiraConnectionViewModel, 0, len(conns))
+	for _, c := range conns {
+		vms = append(vms, vm.JiraConnectionViewModel{
+			ID:          c.ID,
+			DisplayName: c.DisplayName,
+			BaseURL:     c.BaseURL,
+			Email:       c.Email,
+			IsDefault:   c.IsDefault,
+		})
+	}
+	return vms
 }
 
 // CreateReplyComment handles POST /app/prs/{owner}/{repo}/{number}/comments/{rootID}/reply.
