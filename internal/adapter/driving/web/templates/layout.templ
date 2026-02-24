@@ -2,10 +2,11 @@ package templates
 
 import (
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templates/components"
+	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
-templ Layout(title string, contents templ.Component, globalSettings model.GlobalSettings) {
+templ Layout(title string, contents templ.Component, globalSettings model.GlobalSettings, jiraConnections []viewmodel.JiraConnectionViewModel) {
 	<!DOCTYPE html>
 	<html lang="en" x-data x-bind:class="$store.theme.dark ? 'dark' : ''">
 	<head>
@@ -16,7 +17,7 @@ templ Layout(title string, contents templ.Component, globalSettings model.Global
 	</head>
 	<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen" hx-ext="alpine-morph">
 		@contents
-		@components.SettingsDrawer(globalSettings)
+		@components.SettingsDrawer(globalSettings, jiraConnections)
 		<!-- Script loading order: htmx -> htmx-ext-alpine-morph -> alpine plugins -> stores -> alpine core -->
 		<script src="/static/vendor/htmx.min.js"></script>
 		<script src="/static/vendor/htmx-ext-alpine-morph.js"></script>

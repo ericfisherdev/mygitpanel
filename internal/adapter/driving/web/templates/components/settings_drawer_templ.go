@@ -15,7 +15,7 @@ import "fmt"
 // SettingsDrawer renders the slide-in settings drawer controlled by Alpine $store.drawer.
 // The drawer is always present in the DOM (rendered outside any HTMX swap target in
 // the layout) so that Alpine state survives morph swaps.
-func SettingsDrawer(globalSettings model.GlobalSettings) templ.Component {
+func SettingsDrawer(globalSettings model.GlobalSettings, jiraConnections []viewmodel.JiraConnectionViewModel) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -36,63 +36,71 @@ func SettingsDrawer(globalSettings model.GlobalSettings) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!-- Settings drawer backdrop --><div x-show=\"$store.drawer.open\" x-transition:enter=\"transition ease-out duration-200\" x-transition:enter-start=\"opacity-0\" x-transition:enter-end=\"opacity-100\" x-transition:leave=\"transition ease-in duration-150\" x-transition:leave-start=\"opacity-100\" x-transition:leave-end=\"opacity-0\" class=\"fixed inset-0 bg-black/40 z-40\" @click=\"$store.drawer.hide()\" aria-hidden=\"true\"></div><!-- Settings drawer panel --><div x-show=\"$store.drawer.open\" x-transition:enter=\"transition ease-out duration-200\" x-transition:enter-start=\"translate-x-full\" x-transition:enter-end=\"translate-x-0\" x-transition:leave=\"transition ease-in duration-150\" x-transition:leave-start=\"translate-x-0\" x-transition:leave-end=\"translate-x-full\" class=\"fixed right-0 top-0 h-full w-96 bg-white dark:bg-gray-800 shadow-xl z-50 overflow-y-auto flex flex-col\" role=\"dialog\" aria-label=\"Settings\" aria-modal=\"true\"><!-- Panel header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><h2 class=\"text-lg font-semibold text-gray-900 dark:text-gray-100\">Settings</h2><button type=\"button\" @click=\"$store.drawer.hide()\" class=\"p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors\" aria-label=\"Close settings\"><svg class=\"w-5 h-5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M6 18L18 6M6 6l12 12\"></path></svg></button></div><!-- Sections navigation tabs --><div class=\"flex border-b border-gray-200 dark:border-gray-700\"><button type=\"button\" @click=\"$store.drawer.section = 'credentials'\" :class=\"$store.drawer.section === 'credentials' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'\" class=\"px-4 py-2 text-sm font-medium transition-colors\">Credentials</button> <button type=\"button\" @click=\"$store.drawer.section = 'thresholds'\" :class=\"$store.drawer.section === 'thresholds' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'\" class=\"px-4 py-2 text-sm font-medium transition-colors\">Thresholds</button></div><!-- Credentials section --><div x-show=\"$store.drawer.section === 'credentials'\" class=\"flex-1 p-4 space-y-6\"><!-- GitHub subsection --><div><h3 class=\"text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3\">GitHub</h3><form hx-post=\"/app/settings/github\" hx-target=\"#cred-github-status\" hx-swap=\"innerHTML\" hx-indicator=\"#cred-github-spinner\" class=\"space-y-3\"><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"github_token\">Personal Access Token</label> <input id=\"github_token\" type=\"password\" name=\"github_token\" placeholder=\"ghp_...\" autocomplete=\"current-password\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"github_username\">Username</label> <input id=\"github_username\" type=\"text\" name=\"github_username\" placeholder=\"octocat\" autocomplete=\"username\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div class=\"flex items-center gap-2\"><button type=\"submit\" class=\"px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors\">Save</button> <span id=\"cred-github-spinner\" class=\"htmx-indicator\"><svg class=\"w-4 h-4 animate-spin text-indigo-500\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z\"></path></svg></span></div><div id=\"cred-github-status\" class=\"text-sm\"></div></form></div><!-- Divider --><div class=\"border-t border-gray-200 dark:border-gray-700\"></div><!-- Jira subsection --><div><h3 class=\"text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1\">Jira <span class=\"ml-1 text-xs font-normal text-gray-400 dark:text-gray-500\">(Phase 9)</span></h3><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-3\">Fields stored now; Jira integration available in a future update.</p><form hx-post=\"/app/settings/jira\" hx-target=\"#cred-jira-status\" hx-swap=\"innerHTML\" hx-indicator=\"#cred-jira-spinner\" class=\"space-y-3\"><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"jira_url\">Jira URL</label> <input id=\"jira_url\" type=\"url\" name=\"jira_url\" placeholder=\"https://yourcompany.atlassian.net\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"jira_email\">Email</label> <input id=\"jira_email\" type=\"email\" name=\"jira_email\" placeholder=\"you@company.com\" autocomplete=\"email\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"jira_token\">API Token</label> <input id=\"jira_token\" type=\"password\" name=\"jira_token\" placeholder=\"Jira API token\" autocomplete=\"current-password\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div class=\"flex items-center gap-2\"><button type=\"submit\" class=\"px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors\">Save</button> <span id=\"cred-jira-spinner\" class=\"htmx-indicator\"><svg class=\"w-4 h-4 animate-spin text-indigo-500\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z\"></path></svg></span></div><div id=\"cred-jira-status\" class=\"text-sm\"></div></form></div></div><!-- Thresholds section --><div x-show=\"$store.drawer.section === 'thresholds'\" class=\"flex-1 p-4\"><h3 class=\"text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3\">Attention Thresholds</h3><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-4\">Configure when PRs appear with visual attention signals. Per-repo overrides can be set via the gear icon next to each repo.</p><form hx-post=\"/app/settings/thresholds/global\" hx-target=\"#threshold-status\" hx-swap=\"innerHTML\" class=\"space-y-4\"><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"review_count_threshold\">Minimum approvals required</label> <input id=\"review_count_threshold\" type=\"number\" name=\"review_count_threshold\" min=\"0\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!-- Settings drawer backdrop --><div x-show=\"$store.drawer.open\" x-transition:enter=\"transition ease-out duration-200\" x-transition:enter-start=\"opacity-0\" x-transition:enter-end=\"opacity-100\" x-transition:leave=\"transition ease-in duration-150\" x-transition:leave-start=\"opacity-100\" x-transition:leave-end=\"opacity-0\" class=\"fixed inset-0 bg-black/40 z-40\" @click=\"$store.drawer.hide()\" aria-hidden=\"true\"></div><!-- Settings drawer panel --><div x-show=\"$store.drawer.open\" x-transition:enter=\"transition ease-out duration-200\" x-transition:enter-start=\"translate-x-full\" x-transition:enter-end=\"translate-x-0\" x-transition:leave=\"transition ease-in duration-150\" x-transition:leave-start=\"translate-x-0\" x-transition:leave-end=\"translate-x-full\" class=\"fixed right-0 top-0 h-full w-96 bg-white dark:bg-gray-800 shadow-xl z-50 overflow-y-auto flex flex-col\" role=\"dialog\" aria-label=\"Settings\" aria-modal=\"true\"><!-- Panel header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><h2 class=\"text-lg font-semibold text-gray-900 dark:text-gray-100\">Settings</h2><button type=\"button\" @click=\"$store.drawer.hide()\" class=\"p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors\" aria-label=\"Close settings\"><svg class=\"w-5 h-5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M6 18L18 6M6 6l12 12\"></path></svg></button></div><!-- Sections navigation tabs --><div class=\"flex border-b border-gray-200 dark:border-gray-700\"><button type=\"button\" @click=\"$store.drawer.section = 'credentials'\" :class=\"$store.drawer.section === 'credentials' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'\" class=\"px-4 py-2 text-sm font-medium transition-colors\">Credentials</button> <button type=\"button\" @click=\"$store.drawer.section = 'thresholds'\" :class=\"$store.drawer.section === 'thresholds' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'\" class=\"px-4 py-2 text-sm font-medium transition-colors\">Thresholds</button></div><!-- Credentials section --><div x-show=\"$store.drawer.section === 'credentials'\" class=\"flex-1 p-4 space-y-6\"><!-- GitHub subsection --><div><h3 class=\"text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3\">GitHub</h3><form hx-post=\"/app/settings/github\" hx-target=\"#cred-github-status\" hx-swap=\"innerHTML\" hx-indicator=\"#cred-github-spinner\" class=\"space-y-3\"><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"github_token\">Personal Access Token</label> <input id=\"github_token\" type=\"password\" name=\"github_token\" placeholder=\"ghp_...\" autocomplete=\"current-password\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"github_username\">Username</label> <input id=\"github_username\" type=\"text\" name=\"github_username\" placeholder=\"octocat\" autocomplete=\"username\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div class=\"flex items-center gap-2\"><button type=\"submit\" class=\"px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors\">Save</button> <span id=\"cred-github-spinner\" class=\"htmx-indicator\"><svg class=\"w-4 h-4 animate-spin text-indigo-500\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z\"></path></svg></span></div><div id=\"cred-github-status\" class=\"text-sm\"></div></form></div><!-- Divider --><div class=\"border-t border-gray-200 dark:border-gray-700\"></div><!-- Jira Connections subsection --><div><h3 class=\"text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3\">Jira Connections</h3><!-- Connection list (HTMX swap target) --><div id=\"jira-connection-list\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = JiraConnectionList(jiraConnections).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div><!-- Add connection form (collapsed by default) --><div x-data=\"{ addOpen: false }\" class=\"mt-3\"><button type=\"button\" @click=\"addOpen = !addOpen\" class=\"text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium\"><span x-text=\"addOpen ? 'Cancel' : 'Add Jira connection +'\"></span></button><div x-show=\"addOpen\" x-transition class=\"mt-2\"><form hx-post=\"/app/settings/jira/connections\" hx-target=\"#jira-connection-list\" hx-swap=\"innerHTML\" hx-indicator=\"#jira-add-spinner\" @htmx:after-request.camel=\"if ($event.detail.successful) { addOpen = false; $el.reset(); }\" class=\"space-y-2\"><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5\" for=\"jira_display_name\">Display name</label> <input id=\"jira_display_name\" type=\"text\" name=\"display_name\" placeholder=\"Work Jira\" class=\"w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5\" for=\"jira_base_url\">Base URL</label> <input id=\"jira_base_url\" type=\"url\" name=\"base_url\" placeholder=\"https://yourcompany.atlassian.net\" class=\"w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5\" for=\"jira_conn_email\">Email</label> <input id=\"jira_conn_email\" type=\"email\" name=\"email\" placeholder=\"you@company.com\" autocomplete=\"email\" class=\"w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5\" for=\"jira_conn_token\">API Token</label> <input id=\"jira_conn_token\" type=\"password\" name=\"token\" placeholder=\"Jira API token\" autocomplete=\"current-password\" class=\"w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div class=\"flex items-center gap-2\"><button type=\"submit\" class=\"px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors\">Save</button> <span id=\"jira-add-spinner\" class=\"htmx-indicator\"><svg class=\"w-4 h-4 animate-spin text-indigo-500\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z\"></path></svg></span></div><div id=\"jira-add-status\" class=\"text-sm\"></div></form></div></div></div></div><!-- Thresholds section --><div x-show=\"$store.drawer.section === 'thresholds'\" class=\"flex-1 p-4\"><h3 class=\"text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3\">Attention Thresholds</h3><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-4\">Configure when PRs appear with visual attention signals. Per-repo overrides can be set via the gear icon next to each repo.</p><form hx-post=\"/app/settings/thresholds/global\" hx-target=\"#threshold-status\" hx-swap=\"innerHTML\" class=\"space-y-4\"><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"review_count_threshold\">Minimum approvals required</label> <input id=\"review_count_threshold\" type=\"number\" name=\"review_count_threshold\" min=\"0\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(globalSettings.ReviewCountThreshold))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 223, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 248, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"age_urgency_days\">Age urgency threshold (days)</label> <input id=\"age_urgency_days\" type=\"number\" name=\"age_urgency_days\" min=\"0\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div><label class=\"block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1\" for=\"age_urgency_days\">Age urgency threshold (days)</label> <input id=\"age_urgency_days\" type=\"number\" name=\"age_urgency_days\" min=\"0\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(globalSettings.AgeUrgencyDays))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 236, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 261, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div class=\"flex items-center justify-between\"><label class=\"text-xs font-medium text-gray-600 dark:text-gray-400\" for=\"stale_review_enabled\">Flag stale reviews</label> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\" class=\"w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500\"></div><div class=\"flex items-center justify-between\"><label class=\"text-xs font-medium text-gray-600 dark:text-gray-400\" for=\"stale_review_enabled\">Flag stale reviews</label> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if globalSettings.StaleReviewEnabled {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<input id=\"stale_review_enabled\" type=\"checkbox\" name=\"stale_review_enabled\" checked class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<input id=\"stale_review_enabled\" type=\"checkbox\" name=\"stale_review_enabled\" checked class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<input id=\"stale_review_enabled\" type=\"checkbox\" name=\"stale_review_enabled\" class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<input id=\"stale_review_enabled\" type=\"checkbox\" name=\"stale_review_enabled\" class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><div class=\"flex items-center justify-between\"><label class=\"text-xs font-medium text-gray-600 dark:text-gray-400\" for=\"ci_failure_enabled\">Flag own PRs with CI failures</label> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><div class=\"flex items-center justify-between\"><label class=\"text-xs font-medium text-gray-600 dark:text-gray-400\" for=\"ci_failure_enabled\">Flag own PRs with CI failures</label> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if globalSettings.CIFailureEnabled {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<input id=\"ci_failure_enabled\" type=\"checkbox\" name=\"ci_failure_enabled\" checked class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<input id=\"ci_failure_enabled\" type=\"checkbox\" name=\"ci_failure_enabled\" checked class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<input id=\"ci_failure_enabled\" type=\"checkbox\" name=\"ci_failure_enabled\" class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<input id=\"ci_failure_enabled\" type=\"checkbox\" name=\"ci_failure_enabled\" class=\"rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div><div class=\"flex items-center gap-2\"><button type=\"submit\" class=\"px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors\">Save</button></div><div id=\"threshold-status\" class=\"text-sm\"></div></form></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div><div class=\"flex items-center gap-2\"><button type=\"submit\" class=\"px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors\">Save</button></div><div id=\"threshold-status\" class=\"text-sm\"></div></form></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -124,111 +132,111 @@ func JiraConnectionList(conns []viewmodel.JiraConnectionViewModel) templ.Compone
 		}
 		ctx = templ.ClearChildren(ctx)
 		if len(conns) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<p class=\"text-xs text-gray-400 dark:text-gray-500 py-2\">No Jira connections configured yet.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<p class=\"text-xs text-gray-400 dark:text-gray-500 py-2\">No Jira connections configured yet.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
 			for _, conn := range conns {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0\"><div class=\"min-w-0 flex-1\"><div class=\"flex items-center gap-1.5\"><span class=\"text-sm font-medium text-gray-800 dark:text-gray-200 truncate\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0\"><div class=\"min-w-0 flex-1\"><div class=\"flex items-center gap-1.5\"><span class=\"text-sm font-medium text-gray-800 dark:text-gray-200 truncate\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(conn.DisplayName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 284, Col: 100}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 309, Col: 100}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if conn.IsDefault {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<span class=\"text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded\">default</span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<span class=\"text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded\">default</span>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div><p class=\"text-xs text-gray-500 dark:text-gray-400 truncate\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div><p class=\"text-xs text-gray-500 dark:text-gray-400 truncate\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(conn.BaseURL)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 289, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 314, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</p></div><div class=\"flex items-center gap-1 shrink-0 ml-2\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</p></div><div class=\"flex items-center gap-1 shrink-0 ml-2\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if !conn.IsDefault {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<button type=\"button\" hx-post=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<button type=\"button\" hx-post=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/app/settings/jira/connections/%d/default", conn.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 295, Col: 82}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 320, Col: 82}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" hx-target=\"#jira-connection-list\" hx-swap=\"innerHTML\" class=\"p-1 text-gray-400 hover:text-yellow-500 dark:text-gray-500 dark:hover:text-yellow-400 transition-colors\" title=\"Set as default\"><svg class=\"w-3.5 h-3.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z\"></path></svg></button> ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" hx-target=\"#jira-connection-list\" hx-swap=\"innerHTML\" class=\"p-1 text-gray-400 hover:text-yellow-500 dark:text-gray-500 dark:hover:text-yellow-400 transition-colors\" title=\"Set as default\"><svg class=\"w-3.5 h-3.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z\"></path></svg></button> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<button type=\"button\" hx-delete=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<button type=\"button\" hx-delete=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/app/settings/jira/connections/%d", conn.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 308, Col: 75}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 333, Col: 75}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" hx-target=\"#jira-connection-list\" hx-swap=\"innerHTML\" hx-confirm=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\" hx-target=\"#jira-connection-list\" hx-swap=\"innerHTML\" hx-confirm=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs("Delete Jira connection \"" + conn.DisplayName + "\"?")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 311, Col: 73}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 336, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\" class=\"p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors\" title=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" class=\"p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors\" title=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs("Delete " + conn.DisplayName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 313, Col: 42}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/adapter/driving/web/templates/components/settings_drawer.templ`, Line: 338, Col: 42}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\"><svg class=\"w-3.5 h-3.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M6 18L18 6M6 6l12 12\"></path></svg></button></div></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\"><svg class=\"w-3.5 h-3.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M6 18L18 6M6 6l12 12\"></path></svg></button></div></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

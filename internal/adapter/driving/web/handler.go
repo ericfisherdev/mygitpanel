@@ -116,7 +116,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	cards := h.toPRCardViewModelsWithSignals(r.Context(), prs)
 	data := h.buildDashboardViewModel(r.Context(), cards, repos, ignoredPRs, globalSettings)
 	component := pages.Dashboard(data)
-	layout := templates.Layout("ReviewHub", component, globalSettings)
+	layout := templates.Layout("ReviewHub", component, globalSettings, data.JiraConnections)
 
 	if err := layout.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render dashboard", "error", err)
@@ -309,8 +309,19 @@ func (h *Handler) renderRepoMutationResponse(w http.ResponseWriter, r *http.Requ
 		ignoredPRs = nil
 	}
 
+	// Fetch Jira connections for repo popover assignment dropdown.
+	var jiraConnVMs []vm.JiraConnectionViewModel
+	if h.jiraConnStore != nil {
+		conns, jiraErr := h.jiraConnStore.List(r.Context())
+		if jiraErr != nil {
+			h.logger.Warn("failed to list jira connections for repo list", "error", jiraErr)
+		} else {
+			jiraConnVMs = h.toJiraConnectionViewModels(conns)
+		}
+	}
+
 	// Primary target: repo list.
-	repoListComp := partials.RepoList(repoVMs)
+	repoListComp := partials.RepoList(repoVMs, jiraConnVMs)
 	if err := repoListComp.Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render repo list", "error", err)
 		return

@@ -3,7 +3,8 @@ package components
 import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 
 // RepoManager renders the add/remove repo form and watched repo list in the sidebar.
-templ RepoManager(repos []viewmodel.RepoViewModel) {
+// jiraConnections is passed through to RepoThresholdPopover for per-repo assignment.
+templ RepoManager(repos []viewmodel.RepoViewModel, jiraConnections []viewmodel.JiraConnectionViewModel) {
 	<div class="border-t border-gray-200 dark:border-gray-700" x-data="{ expanded: false }">
 		<button
 			@click="expanded = !expanded"
@@ -46,24 +47,7 @@ templ RepoManager(repos []viewmodel.RepoViewModel) {
 			<!-- Watched repo list -->
 			<div id="repo-list">
 				for _, repo := range repos {
-					<div class="flex items-center justify-between py-1">
-						<span class="text-xs text-gray-700 dark:text-gray-300 truncate" title={ repo.FullName }>
-							{ repo.FullName }
-						</span>
-						<button
-							hx-delete={ repo.DeletePath }
-							hx-target="#repo-list"
-							hx-swap="morph"
-							hx-ext="alpine-morph"
-							hx-confirm={ "Remove " + repo.FullName + "?" }
-							class="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors shrink-0"
-							title={ "Remove " + repo.FullName }
-						>
-							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-							</svg>
-						</button>
-					</div>
+					@RepoThresholdPopover(repo, jiraConnections)
 				}
 				if len(repos) == 0 {
 					<p class="text-xs text-gray-400 dark:text-gray-500 py-1">No repos watched</p>
