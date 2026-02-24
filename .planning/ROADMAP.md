@@ -79,11 +79,13 @@ Plans:
   1. User can enter Jira connection details (URL, email, token) through the GUI and credentials are persisted for use across sessions
   2. When viewing a PR whose branch name contains a Jira issue key, the dashboard automatically displays the linked Jira issue details (description, status, priority, assignee, comments)
   3. User can post a comment to a linked Jira issue directly from the PR detail view, and the comment appears in Jira
-**Plans:** TBD
+**Plans:** 4 plans
 
 Plans:
-- [ ] 09-01: TBD
-- [ ] 09-02: TBD
+- [ ] 09-01-PLAN.md — Data foundation: domain models, port interfaces, migrations 000013-000014, JiraConnectionRepo, jira_key in PRRepo, ExtractJiraKey
+- [ ] 09-02-PLAN.md — Jira HTTP client adapter: net/http, ADF handling, Basic auth, error mapping
+- [ ] 09-03-PLAN.md — Settings drawer multi-connection UI: Jira connection CRUD handlers, per-repo assignment in repo popover
+- [ ] 09-04-PLAN.md — JiraCard component, GetPRDetail Jira enrichment, CreateJiraComment handler, PollService jira_key extraction
 
 ## Progress
 
@@ -100,4 +102,4 @@ Phases execute in numeric order: 7 → 8 → 9
 | 6. Docker Deployment | v1.0 | 2/2 | Complete | 2026-02-14 |
 | 7. GUI Foundation | 2026.2.0 | 3/3 | Complete | 2026-02-15 |
 | 8. Review Workflows and Attention Signals | 5/5 | Complete   | 2026-02-19 | - |
-| 9. Jira Integration | 2026.2.0 | 0/TBD | Not started | - |
+| 9. Jira Integration | 2026.2.0 | 0/4 | Not started | - |
