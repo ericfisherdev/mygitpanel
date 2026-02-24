@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 
 Milestone: 2026.2.0 Web GUI
 Phase: 9 of 9 (Jira Integration)
-Plan: 2 of 4
+Plan: 3 of 4
 Status: In progress
-Last activity: 2026-02-24 — Completed 09-02-PLAN.md (Jira HTTP client adapter)
+Last activity: 2026-02-24 — Completed 09-03-PLAN.md (Settings UI and Jira connection management)
 
-Progress: [==========..........] 50% (2/4 plans)
+Progress: [===============.....] 75% (3/4 plans)
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Progress: [==========..........] 50% (2/4 plans)
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
 | 08-review-workflows-and-attention-signals | 5/5 | 54min | 10.8min |
-| 09-jira-integration | 2/4 | 7min | 3.5min |
+| 09-jira-integration | 3/4 | 16min | 5.3min |
 
 ## Accumulated Context
 
@@ -80,6 +80,9 @@ Recent decisions (2026.2.0):
 - [Phase 09-jira-integration]: repo_jira_mapping uses ON DELETE SET NULL so mapping rows persist after connection deletion
 - [Phase 09-jira-integration]: parseJiraTime fallback for Jira's non-standard timezone offset format (+0000 vs +00:00)
 - [Phase 09-jira-integration]: Separated extractADFDocText (top-level doc) from extractADFText (recursive node) for clean ADF handling
+- [Phase 09-jira-integration]: jiraConnectionByID shared handler pattern for ID-based store operations (deduplicates Delete/SetDefault)
+- [Phase 09-jira-integration]: jiraConnections threaded through Layout/Sidebar/RepoManager/RepoList/RepoThresholdPopover (no global state)
+- [Phase 09-jira-integration]: RepoManager updated to use RepoThresholdPopover for consistent initial render and OOB swap behavior
 
 ### Pending Todos
 
@@ -92,5 +95,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 09-02-PLAN.md (Jira HTTP client adapter) — Phase 9 in progress
-Resume file: .planning/phases/09-jira-integration/09-03-PLAN.md
+Stopped at: Completed 09-03-PLAN.md (Settings UI and Jira connection management) — Phase 9 in progress
+Resume file: .planning/phases/09-jira-integration/09-04-PLAN.md
