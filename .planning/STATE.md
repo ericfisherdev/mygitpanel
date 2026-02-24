@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** A single dashboard where a developer can see all PRs needing attention, review and comment on them, and link to Jira context
-**Current focus:** Phase 9 — Jira Integration
+**Current focus:** Phase 9 complete -- Milestone 2026.2.0 Web GUI delivered
 
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
 Phase: 9 of 9 (Jira Integration)
-Plan: 3 of 4
-Status: In progress
-Last activity: 2026-02-24 — Completed 09-03-PLAN.md (Settings UI and Jira connection management)
+Plan: 4 of 4
+Status: Phase complete
+Last activity: 2026-02-24 — Completed 09-04-PLAN.md (JiraCard component and handler wiring)
 
-Progress: [===============.....] 75% (3/4 plans)
+Progress: [====================] 100% (4/4 plans)
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Progress: [===============.....] 75% (3/4 plans)
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
 | 08-review-workflows-and-attention-signals | 5/5 | 54min | 10.8min |
-| 09-jira-integration | 3/4 | 16min | 5.3min |
+| 09-jira-integration | 4/4 | 20min | 5min |
 
 ## Accumulated Context
 
@@ -83,6 +83,8 @@ Recent decisions (2026.2.0):
 - [Phase 09-jira-integration]: jiraConnectionByID shared handler pattern for ID-based store operations (deduplicates Delete/SetDefault)
 - [Phase 09-jira-integration]: jiraConnections threaded through Layout/Sidebar/RepoManager/RepoList/RepoThresholdPopover (no global state)
 - [Phase 09-jira-integration]: RepoManager updated to use RepoThresholdPopover for consistent initial render and OOB swap behavior
+- [Phase 09-jira-integration]: friendlyJiraError maps sentinel errors to user-facing messages for buildJiraCardVM and CreateJiraComment
+- [Phase 09-jira-integration]: JiraCard placed after PRDetailHeader, before info section grid
 
 ### Pending Todos
 
@@ -90,10 +92,10 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 9: Jira rate limiting is opaque — plan for research-phase during Phase 9 planning
+None. Milestone 2026.2.0 is feature-complete.
 
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 09-03-PLAN.md (Settings UI and Jira connection management) — Phase 9 in progress
-Resume file: .planning/phases/09-jira-integration/09-04-PLAN.md
+Stopped at: Completed 09-04-PLAN.md (JiraCard component and handler wiring) — Phase 9 complete, Milestone 2026.2.0 delivered
+Resume file: N/A (milestone complete)
