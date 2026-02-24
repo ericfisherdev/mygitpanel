@@ -1,0 +1,187 @@
+package components
+
+import (
+	"fmt"
+	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
+)
+
+// jiraStatusColor returns a Tailwind badge color class set based on the Jira issue status.
+func jiraStatusColor(status string) string {
+	switch status {
+	case "Done", "Closed", "Resolved":
+		return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200"
+	case "In Progress", "In Review":
+		return "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200"
+	default:
+		return "bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
+	}
+}
+
+// JiraCard renders a collapsible Jira issue card with four states:
+// (1) no credentials, (2) no linked issue key, (3) load error, (4) issue loaded.
+templ JiraCard(jiraVM viewmodel.JiraCardViewModel) {
+	<div id="jira-card" class="mb-6 border-l-4 border-blue-700 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden" x-data="{ expanded: false }">
+		if !jiraVM.HasCredentials {
+			<!-- State 1: No credentials configured -->
+			<div class="flex items-center gap-3 px-4 py-3">
+				@jiraIcon()
+				<span class="text-sm font-medium text-gray-500 dark:text-gray-400">Jira</span>
+				<button
+					type="button"
+					@click="$store.drawer.open('credentials')"
+					class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+				>
+					Configure Jira in Settings
+				</button>
+			</div>
+		} else if jiraVM.JiraKey == "" {
+			<!-- State 2: No linked issue key -->
+			<div class="flex items-center gap-3 px-4 py-3">
+				@jiraIcon()
+				<span class="text-sm text-gray-400 dark:text-gray-500">No linked issue</span>
+			</div>
+		} else if jiraVM.LoadError != "" {
+			<!-- State 3: Key exists but fetch failed -->
+			<div>
+				<button
+					type="button"
+					@click="expanded = !expanded"
+					class="w-full flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+				>
+					@jiraIcon()
+					<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">{ jiraVM.JiraKey }</span>
+					<span class="text-sm text-red-600 dark:text-red-400">Could not load</span>
+					<svg
+						class="ml-auto h-4 w-4 text-gray-400 transition-transform"
+						:class="expanded ? 'rotate-180' : ''"
+						xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+					</svg>
+				</button>
+				<div x-show="expanded" x-transition class="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
+					<p class="text-sm text-red-600 dark:text-red-400 mt-3">Could not load Jira issue: { jiraVM.LoadError }</p>
+					<button
+						type="button"
+						hx-get={ fmt.Sprintf("/app/prs/%s/%s/%d", jiraVM.Owner, jiraVM.Repo, jiraVM.Number) }
+						hx-target="#pr-detail-content"
+						hx-swap="morph"
+						hx-ext="alpine-morph"
+						class="mt-3 inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+					>
+						Retry
+					</button>
+				</div>
+			</div>
+		} else if jiraVM.Issue != nil {
+			<!-- State 4: Issue loaded -->
+			<div>
+				<button
+					type="button"
+					@click="expanded = !expanded"
+					class="w-full flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+				>
+					@jiraIcon()
+					<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">{ jiraVM.Issue.Key }</span>
+					<span class="text-sm text-gray-700 dark:text-gray-300 truncate flex-1 text-left">{ jiraVM.Issue.Summary }</span>
+					<span class={ "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0", jiraStatusColor(jiraVM.Issue.Status) }>{ jiraVM.Issue.Status }</span>
+					<svg
+						class="ml-2 h-4 w-4 text-gray-400 transition-transform shrink-0"
+						:class="expanded ? 'rotate-180' : ''"
+						xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+					</svg>
+				</button>
+				<div x-show="expanded" x-transition class="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
+					<!-- Summary -->
+					<p class="text-base font-bold text-gray-900 dark:text-gray-100 mt-3">{ jiraVM.Issue.Summary }</p>
+					<!-- Metadata row -->
+					<div class="flex items-center gap-6 mt-3 text-sm">
+						<div>
+							<span class="text-gray-500 dark:text-gray-400">Status</span>
+							<p class="text-gray-900 dark:text-gray-100">{ jiraVM.Issue.Status }</p>
+						</div>
+						<div>
+							<span class="text-gray-500 dark:text-gray-400">Priority</span>
+							<p class="text-gray-900 dark:text-gray-100">{ jiraVM.Issue.Priority }</p>
+						</div>
+						<div>
+							<span class="text-gray-500 dark:text-gray-400">Assignee</span>
+							<p class="text-gray-900 dark:text-gray-100">
+								if jiraVM.Issue.Assignee != "" {
+									{ jiraVM.Issue.Assignee }
+								} else {
+									Unassigned
+								}
+							</p>
+						</div>
+						<a
+							href={ templ.SafeURL(jiraVM.Issue.JiraURL) }
+							target="_blank"
+							rel="noopener noreferrer"
+							class="ml-auto text-blue-600 dark:text-blue-400 hover:underline text-xs"
+						>
+							Open in Jira &nearr;
+						</a>
+					</div>
+					<!-- Description -->
+					if jiraVM.Issue.Description != "" {
+						<div class="mt-4">
+							<p class="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap">{ jiraVM.Issue.Description }</p>
+						</div>
+					}
+					<!-- Comments section -->
+					<div class="mt-4">
+						<h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Comments ({ fmt.Sprint(len(jiraVM.Issue.Comments)) })</h4>
+						if len(jiraVM.Issue.Comments) == 0 {
+							<p class="text-sm text-gray-400 dark:text-gray-500 mt-2">No comments</p>
+						}
+						for _, comment := range jiraVM.Issue.Comments {
+							<div class="mt-3 pl-3 border-l-2 border-gray-200 dark:border-gray-600">
+								<div class="flex items-center gap-2 mb-1">
+									<span class="text-sm font-medium text-gray-900 dark:text-gray-100">{ comment.Author }</span>
+									<span class="text-xs text-gray-400 dark:text-gray-500">{ comment.CreatedAt }</span>
+								</div>
+								<p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ comment.Body }</p>
+							</div>
+						}
+					</div>
+					<!-- Comment form (only when credentials exist) -->
+					if jiraVM.HasCredentials {
+						<form
+							hx-post={ fmt.Sprintf("/app/prs/%s/%s/%d/jira-comment", jiraVM.Owner, jiraVM.Repo, jiraVM.Number) }
+							hx-target="#jira-card"
+							hx-swap="morph"
+							hx-ext="alpine-morph"
+							hx-indicator="#jira-comment-spinner"
+							class="mt-4"
+						>
+							<textarea
+								name="body"
+								placeholder="Add a comment..."
+								required
+								class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+								rows="3"
+							></textarea>
+							<div class="flex items-center gap-2 mt-2">
+								<button
+									type="submit"
+									class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+								>
+									Comment
+								</button>
+								<span id="jira-comment-spinner" class="htmx-indicator text-sm text-gray-400">Posting...</span>
+							</div>
+						</form>
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// jiraIcon renders a simple Jira-branded icon (blue "J" square).
+templ jiraIcon() {
+	<span class="inline-flex items-center justify-center w-6 h-6 rounded bg-blue-700 text-white text-xs font-bold shrink-0">J</span>
+}
