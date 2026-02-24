@@ -13,8 +13,9 @@ import "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/templat
 
 // RepoList renders the watched repo list for the repo manager section.
 // This is the primary target for OOB swaps after add/remove operations.
-// Each repo row includes a gear icon to open a per-repo threshold override popover.
-func RepoList(repos []viewmodel.RepoViewModel) templ.Component {
+// Each repo row includes a gear icon to open a per-repo threshold override popover
+// and an optional Jira connection assignment dropdown.
+func RepoList(repos []viewmodel.RepoViewModel, jiraConnections []viewmodel.JiraConnectionViewModel) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -36,7 +37,7 @@ func RepoList(repos []viewmodel.RepoViewModel) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		for _, repo := range repos {
-			templ_7745c5c3_Err = components.RepoThresholdPopover(repo).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.RepoThresholdPopover(repo, jiraConnections).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

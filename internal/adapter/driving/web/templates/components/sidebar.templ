@@ -75,7 +75,7 @@ templ Sidebar(data viewmodel.DashboardViewModel) {
 		</div>
 		<!-- Repo manager -->
 		<div x-show="!collapsed" x-transition>
-			@RepoManager(data.Repos)
+			@RepoManager(data.Repos, data.JiraConnections)
 		</div>
 	</aside>
 }
