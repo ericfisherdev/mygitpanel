@@ -128,19 +128,37 @@ type RepoFilterViewModel struct {
 
 // RepoViewModel holds presentation data for a watched repo in the repo manager.
 type RepoViewModel struct {
-	FullName   string
-	Owner      string
-	Name       string
-	DeletePath string // computed: /app/repos/{owner}/{repo}
+	FullName                 string
+	Owner                    string
+	Name                     string
+	DeletePath               string // computed: /app/repos/{owner}/{repo}
+	AssignedJiraConnectionID int64  // 0 means no explicit assignment (use default)
 }
 
 // DashboardViewModel holds all data needed to render the dashboard page.
 type DashboardViewModel struct {
-	Cards          []PRCardViewModel
-	Repos          []RepoViewModel
-	RepoNames      []string // distinct repo names for search bar filter
-	IgnoredPRs     []PRCardViewModel
-	GlobalSettings model.GlobalSettings
+	Cards           []PRCardViewModel
+	Repos           []RepoViewModel
+	RepoNames       []string // distinct repo names for search bar filter
+	IgnoredPRs      []PRCardViewModel
+	GlobalSettings  model.GlobalSettings
+	JiraConnections []JiraConnectionViewModel
+}
+
+// JiraConnectionViewModel holds presentation data for a single Jira connection in the Settings drawer.
+type JiraConnectionViewModel struct {
+	ID          int64
+	DisplayName string
+	BaseURL     string
+	Email       string
+	IsDefault   bool
+}
+
+// JiraConnectionStatusViewModel is the response for connection save/validate handlers.
+type JiraConnectionStatusViewModel struct {
+	Success      bool
+	Message      string
+	ConnectionID int64 // populated on successful create
 }
 
 // CredentialStatusViewModel is the response payload for credential save handlers.

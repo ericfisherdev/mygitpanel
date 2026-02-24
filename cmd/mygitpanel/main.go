@@ -13,11 +13,13 @@ import (
 	_ "golang.org/x/crypto/x509roots/fallback" // Embed CA certs for scratch container
 
 	githubadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/github"
+	jiraadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/jira"
 	sqliteadapter "github.com/ericfisherdev/mygitpanel/internal/adapter/driven/sqlite"
 	httphandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/http"
 	webhandler "github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web"
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/config"
+	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
@@ -92,6 +94,10 @@ func run() error {
 	writerFactory := func(token string) driven.GitHubWriter {
 		return githubadapter.NewClient(token, cfg.GitHubUsername)
 	}
+	jiraConnStore := sqliteadapter.NewJiraConnectionRepo(db, cfg.SecretKey)
+	jiraClientFactory := func(conn model.JiraConnection) driven.JiraClient {
+		return jiraadapter.NewJiraClient(conn.BaseURL, conn.Email, conn.Token)
+	}
 
 	// 7. Create and start poll service.
 	pollSvc := application.NewPollService(
@@ -121,7 +127,7 @@ func run() error {
 
 	// 7.6. Create web handler and register GUI routes.
 	attentionSvc := application.NewAttentionService(thresholdStore, reviewStore, cfg.GitHubUsername)
-	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, writerFactory)
+	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, writerFactory, jiraConnStore, jiraClientFactory)
 	webHandler.WithAttentionService(attentionSvc)
 	webhandler.RegisterRoutes(mux, webHandler)
 
