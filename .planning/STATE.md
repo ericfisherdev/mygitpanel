@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 ## Current Position
 
 Milestone: 2026.2.0 Web GUI
-Phase: 8 of 9 (Review Workflows and Attention Signals) — COMPLETE
-Plan: 5 of 5
-Status: Complete
-Last activity: 2026-02-19 — Completed 08-05-PLAN.md (attention signals, ignore workflow, threshold UI)
+Phase: 9 of 9 (Jira Integration)
+Plan: 1 of 4
+Status: In progress
+Last activity: 2026-02-24 — Completed 09-01-PLAN.md (Jira data foundation)
 
-Progress: [====================] 100% (5/5 plans)
+Progress: [=====...............] 25% (1/4 plans)
 
 ## Performance Metrics
 
@@ -32,6 +32,7 @@ Progress: [====================] 100% (5/5 plans)
 |-------|-------|-------|----------|
 | 07-gui-foundation | 3/3 | 14min | 5min |
 | 08-review-workflows-and-attention-signals | 5/5 | 54min | 10.8min |
+| 09-jira-integration | 1/4 | 4min | 4min |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Recent decisions (2026.2.0):
 - [Phase 08-review-workflows-and-attention-signals]: PRListOOB passes []model.PullRequest for ignored section; sidebar uses []vm.PRCardViewModel — no conversion in OOB path
 - [Phase 08-review-workflows-and-attention-signals]: WithAttentionService post-construction injection avoids circular dependency between Handler and AttentionService
 - [Phase 08-review-workflows-and-attention-signals]: Layout.templ accepts GlobalSettings to pre-populate threshold form in SettingsDrawer
+- [Phase 09-jira-integration]: Duplicated encrypt/decrypt in JiraConnectionRepo (not shared with CredentialRepo) per SRP
+- [Phase 09-jira-integration]: GetByID/GetForRepo return zero-value JiraConnection + nil error when not found (project convention)
+- [Phase 09-jira-integration]: repo_jira_mapping uses ON DELETE SET NULL so mapping rows persist after connection deletion
 
 ### Pending Todos
 
@@ -85,6 +89,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 08-05-PLAN.md (attention signals, ignore workflow, threshold UI) — Phase 8 complete
-Resume file: Ready for Phase 9 planning
+Last session: 2026-02-24
+Stopped at: Completed 09-01-PLAN.md (Jira data foundation) — Phase 9 in progress
+Resume file: .planning/phases/09-jira-integration/09-02-PLAN.md
