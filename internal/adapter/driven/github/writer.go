@@ -94,11 +94,8 @@ func (c *Client) CreateReplyComment(ctx context.Context, repoFullName string, pr
 		return err
 	}
 
-	// When in_reply_to is set, GitHub ignores all fields except body.
-	_, _, err = c.gh.PullRequests.CreateComment(ctx, owner, repo, prNumber, &gh.PullRequestComment{
-		Body:      gh.Ptr(body),
-		InReplyTo: gh.Ptr(inReplyTo),
-	})
+	// CreateCommentInReplyTo uses the correct in_reply_to JSON key (not in_reply_to_id).
+	_, _, err = c.gh.PullRequests.CreateCommentInReplyTo(ctx, owner, repo, prNumber, body, inReplyTo)
 	if err != nil {
 		return fmt.Errorf("creating reply comment on %s#%d: %w", repoFullName, prNumber, err)
 	}
