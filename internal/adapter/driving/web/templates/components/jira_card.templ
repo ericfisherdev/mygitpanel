@@ -73,8 +73,25 @@ templ JiraCard(jiraVM viewmodel.JiraCardViewModel) {
 					</button>
 				</div>
 			</div>
-		} else if jiraVM.Issue != nil {
-			<!-- State 4: Issue loaded -->
+		} else if jiraVM.Issue == nil {
+			<!-- State 4: Key exists, no error, but issue data is unavailable -->
+			<div class="flex items-center gap-3 px-4 py-3">
+				@jiraIcon()
+				<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">{ jiraVM.JiraKey }</span>
+				<span class="text-sm text-gray-400 dark:text-gray-500">Issue data unavailable</span>
+				<button
+					type="button"
+					hx-get={ fmt.Sprintf("/app/prs/%s/%s/%d", jiraVM.Owner, jiraVM.Repo, jiraVM.Number) }
+					hx-target="#pr-detail-content"
+					hx-swap="morph"
+					hx-ext="alpine-morph"
+					class="ml-auto text-sm text-blue-600 dark:text-blue-400 hover:underline"
+				>
+					Retry
+				</button>
+			</div>
+		} else {
+			<!-- State 5: Issue loaded -->
 			<div>
 				<button
 					type="button"

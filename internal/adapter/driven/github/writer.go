@@ -16,6 +16,17 @@ import (
 // Compile-time interface satisfaction check.
 var _ driven.GitHubWriter = (*Client)(nil)
 
+// Valid values for the Side field on draft review comments.
+const (
+	commentSideLeft  = "LEFT"
+	commentSideRight = "RIGHT"
+)
+
+// isValidCommentSide returns true when s is an accepted diff-hunk side value.
+func isValidCommentSide(s string) bool {
+	return s == commentSideLeft || s == commentSideRight
+}
+
 // ValidateToken verifies that the given GitHub personal access token is valid
 // and returns the authenticated username on success. It creates a one-shot
 // client with the provided token to avoid mutating the receiver's state.
@@ -51,6 +62,9 @@ func (c *Client) SubmitReview(ctx context.Context, repoFullName string, prNumber
 	// Map DraftLineComments to GitHub API types.
 	var draftComments []*gh.DraftReviewComment
 	for _, dlc := range req.Comments {
+		if !isValidCommentSide(dlc.Side) {
+			return fmt.Errorf("invalid comment side %q: must be %s or %s", dlc.Side, commentSideLeft, commentSideRight)
+		}
 		dc := &gh.DraftReviewComment{
 			Path: gh.Ptr(dlc.Path),
 			Body: gh.Ptr(dlc.Body),
@@ -58,6 +72,9 @@ func (c *Client) SubmitReview(ctx context.Context, repoFullName string, prNumber
 			Side: gh.Ptr(dlc.Side),
 		}
 		if dlc.StartLine > 0 {
+			if !isValidCommentSide(dlc.StartSide) {
+				return fmt.Errorf("invalid comment start side %q: must be %s or %s", dlc.StartSide, commentSideLeft, commentSideRight)
+			}
 			dc.StartLine = gh.Ptr(dlc.StartLine)
 			dc.StartSide = gh.Ptr(dlc.StartSide)
 		}
@@ -120,6 +137,19 @@ func (c *Client) CreateIssueComment(ctx context.Context, repoFullName string, pr
 	return nil
 }
 
+// fetchPRNodeID retrieves the GraphQL node ID for a pull request via REST.
+func (c *Client) fetchPRNodeID(ctx context.Context, owner, repo string, prNumber int) (string, error) {
+	pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		return "", fmt.Errorf("fetching PR node ID: %w", err)
+	}
+	nodeID := pr.GetNodeID()
+	if nodeID == "" {
+		return "", fmt.Errorf("PR node ID is empty — cannot execute GraphQL mutation")
+	}
+	return nodeID, nil
+}
+
 // ConvertPullRequestToDraft converts a ready-for-review PR to draft status using
 // the GitHub GraphQL API. The PR node ID is fetched on-demand via REST.
 func (c *Client) ConvertPullRequestToDraft(ctx context.Context, repoFullName string, prNumber int) error {
@@ -127,13 +157,9 @@ func (c *Client) ConvertPullRequestToDraft(ctx context.Context, repoFullName str
 	if err != nil {
 		return err
 	}
-	pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, prNumber)
+	nodeID, err := c.fetchPRNodeID(ctx, owner, repo, prNumber)
 	if err != nil {
-		return fmt.Errorf("fetching PR node ID: %w", err)
-	}
-	nodeID := pr.GetNodeID()
-	if nodeID == "" {
-		return fmt.Errorf("PR node ID is empty — cannot execute GraphQL mutation")
+		return err
 	}
 	return c.executeDraftMutation(ctx, convertToDraftMutation, nodeID)
 }
@@ -145,13 +171,9 @@ func (c *Client) MarkPullRequestReadyForReview(ctx context.Context, repoFullName
 	if err != nil {
 		return err
 	}
-	pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, prNumber)
+	nodeID, err := c.fetchPRNodeID(ctx, owner, repo, prNumber)
 	if err != nil {
-		return fmt.Errorf("fetching PR node ID: %w", err)
-	}
-	nodeID := pr.GetNodeID()
-	if nodeID == "" {
-		return fmt.Errorf("PR node ID is empty — cannot execute GraphQL mutation")
+		return err
 	}
 	return c.executeDraftMutation(ctx, markReadyMutation, nodeID)
 }

@@ -560,6 +560,7 @@ func (s *PollService) pollDueRepos(ctx context.Context) {
 // handleRefresh dispatches a manual refresh request. After polling, the repo's
 // adaptive schedule is recalculated based on fresh activity data.
 func (s *PollService) handleRefresh(ctx context.Context, req refreshRequest) error {
+	s.maybeRefreshToken(ctx)
 	if req.repoFullName != "" {
 		err := s.pollRepo(ctx, req.repoFullName)
 		if err == nil {

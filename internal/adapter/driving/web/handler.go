@@ -9,6 +9,7 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -849,7 +850,28 @@ func (h *Handler) requireGitHubToken(w http.ResponseWriter, r *http.Request, act
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to %s.</p>`, safeAction)
 		return ""
 	}
+	if h.writerFactory == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">GitHub write operations are not configured.</p>`)
+		return ""
+	}
 	return token
+}
+
+// validateJiraBaseURL parses and validates a Jira base URL.
+// It requires the HTTPS scheme and a non-empty hostname.
+func validateJiraBaseURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("base URL must use HTTPS scheme (got %q)", u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("base URL must include a hostname")
+	}
+	return nil
 }
 
 // getGlobalSettings fetches global settings from the threshold store, returning defaults on error.
@@ -984,6 +1006,12 @@ func (h *Handler) CreateJiraConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateJiraBaseURL(baseURL); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Invalid base URL: %s</span>`, html.EscapeString(err.Error()))
+		return
+	}
+
 	if h.jiraClientFactory == nil || h.jiraConnStore == nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Jira integration not configured</span>`)
@@ -1026,12 +1054,20 @@ func (h *Handler) CreateJiraConnection(w http.ResponseWriter, r *http.Request) {
 // DeleteJiraConnection handles DELETE /app/settings/jira/connections/{id}.
 // It removes the connection and returns the updated connection list HTML fragment.
 func (h *Handler) DeleteJiraConnection(w http.ResponseWriter, r *http.Request) {
+	if h.jiraConnStore == nil {
+		http.Error(w, "Jira integration not configured", http.StatusUnprocessableEntity)
+		return
+	}
 	h.jiraConnectionByID(w, r, "delete jira connection", h.jiraConnStore.Delete)
 }
 
 // SetDefaultJiraConnection handles POST /app/settings/jira/connections/{id}/default.
 // It marks the connection as the default and returns the updated connection list HTML fragment.
 func (h *Handler) SetDefaultJiraConnection(w http.ResponseWriter, r *http.Request) {
+	if h.jiraConnStore == nil {
+		http.Error(w, "Jira integration not configured", http.StatusUnprocessableEntity)
+		return
+	}
 	h.jiraConnectionByID(w, r, "set default jira connection", h.jiraConnStore.SetDefault)
 }
 
