@@ -10,7 +10,7 @@ A single dashboard where a developer can see all PRs needing attention, review a
 
 ## Current State
 
-**Version:** 2026.2.0 Web GUI (shipped 2026-02-24)
+**Version:** 2026.2.0 Web GUI (completed 2026-02-24, pending merge)
 **Codebase:** 18,782 lines Go, dual driving adapters (JSON API + web GUI)
 **Tech stack:** Go 1.25, modernc.org/sqlite, google/go-github v82, templ, HTMX, Alpine.js, Tailwind CSS, GSAP, Docker scratch
 **Architecture:** Hexagonal (ports & adapters), 17 routes (10 API + 7 GUI app), adaptive polling
@@ -52,7 +52,7 @@ A single dashboard where a developer can see all PRs needing attention, review a
 
 ### Active
 
-(None — planning next milestone)
+- Implementing 2026.2.0 features (PR `#8` open, pending merge)
 
 ### Out of Scope
 
@@ -112,4 +112,4 @@ A single dashboard where a developer can see all PRs needing attention, review a
 | Optimistic draft flip | UI updates immediately, poll brings consistency | ✓ Good — perceived performance with no race condition |
 
 ---
-*Last updated: 2026-02-24 after 2026.2.0 milestone completion*
+*Last updated: 2026-02-24 after 2026.2.0 milestone completion (pending PR `#8` merge)*

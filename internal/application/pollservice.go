@@ -269,7 +269,7 @@ func (s *PollService) pollRepo(ctx context.Context, repoFullName string) error {
 		pr.JiraKey = ExtractJiraKey(pr.Branch, pr.Title)
 
 		if stored, ok := storedByNumber[pr.Number]; ok {
-			if stored.UpdatedAt.Equal(pr.UpdatedAt) && stored.NeedsReview == pr.NeedsReview {
+			if stored.UpdatedAt.Equal(pr.UpdatedAt) && stored.NeedsReview == pr.NeedsReview && stored.JiraKey == pr.JiraKey {
 				skippedUnchanged++
 				continue
 			}

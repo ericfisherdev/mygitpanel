@@ -88,7 +88,7 @@ func (c *Client) SubmitReview(ctx context.Context, repoFullName string, prNumber
 }
 
 // CreateReplyComment creates a reply to an existing review thread.
-func (c *Client) CreateReplyComment(ctx context.Context, repoFullName string, prNumber int, inReplyTo int64, body, path, commitSHA string) error {
+func (c *Client) CreateReplyComment(ctx context.Context, repoFullName string, prNumber int, inReplyTo int64, body string) error {
 	owner, repo, err := splitRepo(repoFullName)
 	if err != nil {
 		return err

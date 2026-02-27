@@ -29,7 +29,7 @@ type GitHubWriter interface {
 	SubmitReview(ctx context.Context, repoFullName string, prNumber int, req ReviewRequest) error
 
 	// CreateReplyComment creates a reply to an existing review thread.
-	CreateReplyComment(ctx context.Context, repoFullName string, prNumber int, inReplyTo int64, body, path, commitSHA string) error
+	CreateReplyComment(ctx context.Context, repoFullName string, prNumber int, inReplyTo int64, body string) error
 
 	// CreateIssueComment creates a top-level (non-diff) comment on a pull request.
 	CreateIssueComment(ctx context.Context, repoFullName string, prNumber int, body string) error

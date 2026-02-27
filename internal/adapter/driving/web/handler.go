@@ -304,6 +304,11 @@ func (h *Handler) CreateJiraComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
 	body := strings.TrimSpace(r.FormValue("body"))
 	if body == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -1000,7 +1005,7 @@ func (h *Handler) CreateJiraConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.jiraClientFactory == nil {
+	if h.jiraClientFactory == nil || h.jiraConnStore == nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Jira integration not configured</span>`)
 		return
@@ -1078,6 +1083,11 @@ func (h *Handler) jiraConnectionByID(w http.ResponseWriter, r *http.Request, opN
 // SaveJiraRepoMapping handles POST /app/settings/jira/repo-mapping.
 // It assigns a Jira connection to a repo or clears the mapping when connectionID is 0.
 func (h *Handler) SaveJiraRepoMapping(w http.ResponseWriter, r *http.Request) {
+	if h.jiraConnStore == nil {
+		http.Error(w, "Jira integration not configured", http.StatusUnprocessableEntity)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form data", http.StatusBadRequest)
 		return
@@ -1177,8 +1187,6 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body := strings.TrimSpace(r.FormValue("body"))
-	commitSHA := r.FormValue("commit_sha")
-	filePath := r.FormValue("path")
 
 	if body == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -1194,7 +1202,7 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 	repoFullName := owner + "/" + repo
 	writer := h.writerFactory(token)
 
-	if err := writer.CreateReplyComment(r.Context(), repoFullName, number, rootID, body, filePath, commitSHA); err != nil {
+	if err := writer.CreateReplyComment(r.Context(), repoFullName, number, rootID, body); err != nil {
 		h.logger.Error("failed to create reply comment", "repo", repoFullName, "pr", number, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: %s</p>`, html.EscapeString(err.Error()))
