@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -859,8 +860,10 @@ func (h *Handler) requireGitHubToken(w http.ResponseWriter, r *http.Request, act
 }
 
 // validateJiraBaseURL parses and validates a Jira base URL.
-// It requires the HTTPS scheme and a non-empty hostname.
-func validateJiraBaseURL(rawURL string) error {
+// It requires HTTPS scheme, a non-empty hostname, and rejects hosts that
+// resolve to loopback, unspecified, link-local, multicast, or private addresses
+// to prevent SSRF attacks.
+func validateJiraBaseURL(ctx context.Context, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid base URL: %w", err)
@@ -868,8 +871,45 @@ func validateJiraBaseURL(rawURL string) error {
 	if u.Scheme != "https" {
 		return fmt.Errorf("base URL must use HTTPS scheme (got %q)", u.Scheme)
 	}
-	if u.Hostname() == "" {
+	host := u.Hostname()
+	if host == "" {
 		return fmt.Errorf("base URL must include a hostname")
+	}
+	// Reject literal IP addresses that are in restricted ranges before DNS lookup.
+	if ip := net.ParseIP(host); ip != nil {
+		return validateIP(ip)
+	}
+	// Resolve hostname and reject any address in a restricted range.
+	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve base URL hostname %q: %w", host, err)
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		if err := validateIP(ip); err != nil {
+			return fmt.Errorf("base URL hostname %q resolves to disallowed address: %w", host, err)
+		}
+	}
+	return nil
+}
+
+// validateIP returns an error if ip is loopback, unspecified, link-local,
+// multicast, or a private (RFC1918 / RFC4193) address.
+func validateIP(ip net.IP) error {
+	switch {
+	case ip.IsLoopback():
+		return fmt.Errorf("loopback address not allowed")
+	case ip.IsUnspecified():
+		return fmt.Errorf("unspecified address not allowed")
+	case ip.IsLinkLocalUnicast(), ip.IsLinkLocalMulticast():
+		return fmt.Errorf("link-local address not allowed")
+	case ip.IsMulticast():
+		return fmt.Errorf("multicast address not allowed")
+	case ip.IsPrivate():
+		return fmt.Errorf("private address not allowed")
 	}
 	return nil
 }
@@ -1006,7 +1046,7 @@ func (h *Handler) CreateJiraConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateJiraBaseURL(baseURL); err != nil {
+	if err := validateJiraBaseURL(r.Context(), baseURL); err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Invalid base URL: %s</span>`, html.EscapeString(err.Error()))
 		return
@@ -1436,7 +1476,7 @@ func (h *Handler) ToggleDraftStatus(w http.ResponseWriter, r *http.Request) {
 
 	// Server-side author check: only the PR author can toggle draft status.
 	authUser := h.authenticatedUsername(r.Context())
-	if authUser == "" || pr.Author != authUser {
+	if authUser == "" || !strings.EqualFold(pr.Author, authUser) {
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: only the PR author can toggle draft status</p>`)
 		return

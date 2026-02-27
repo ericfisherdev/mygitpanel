@@ -2,15 +2,18 @@ package components
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/ericfisherdev/mygitpanel/internal/adapter/driving/web/viewmodel"
 )
 
 // jiraStatusColor returns a Tailwind badge color class set based on the Jira issue status.
+// Comparisons are case-insensitive so "done", "DONE", and "Done" all match.
 func jiraStatusColor(status string) string {
-	switch status {
-	case "Done", "Closed", "Resolved":
+	switch strings.ToLower(status) {
+	case "done", "closed", "resolved":
 		return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200"
-	case "In Progress", "In Review":
+	case "in progress", "in review":
 		return "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200"
 	default:
 		return "bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300"

@@ -23,6 +23,7 @@ type refreshRequest struct {
 // and persistence.
 type PollService struct {
 	ghClient      driven.GitHubClient
+	startupClient driven.GitHubClient // original client used as fallback when token is unavailable
 	prStore       driven.PRStore
 	repoStore     driven.RepoStore
 	reviewStore   driven.ReviewStore
@@ -69,6 +70,7 @@ func NewPollService(
 ) *PollService {
 	return &PollService{
 		ghClient:      ghClient,
+		startupClient: ghClient,
 		prStore:       prStore,
 		repoStore:     repoStore,
 		reviewStore:   reviewStore,
@@ -192,10 +194,12 @@ func (s *PollService) maybeRefreshToken(ctx context.Context) {
 	}
 	token, err := s.tokenProvider(ctx)
 	if err != nil {
-		slog.Debug("token provider error; retaining startup client", "error", err)
+		slog.Debug("token provider error; reverting to startup client", "error", err)
+		s.ghClient = s.startupClient
 		return
 	}
 	if token == "" {
+		s.ghClient = s.startupClient
 		return
 	}
 	s.ghClient = s.clientFactory(token)

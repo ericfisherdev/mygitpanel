@@ -50,9 +50,13 @@ templ SettingsDrawer(globalSettings model.GlobalSettings, jiraConnections []view
 			</button>
 		</div>
 		<!-- Sections navigation tabs -->
-		<div class="flex border-b border-gray-200 dark:border-gray-700">
+		<div role="tablist" class="flex border-b border-gray-200 dark:border-gray-700">
 			<button
+				id="credentials-tab"
 				type="button"
+				role="tab"
+				aria-controls="credentials-panel"
+				:aria-selected="$store.drawer.section === 'credentials'"
 				@click="$store.drawer.section = 'credentials'"
 				:class="$store.drawer.section === 'credentials' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
 				class="px-4 py-2 text-sm font-medium transition-colors"
@@ -60,7 +64,11 @@ templ SettingsDrawer(globalSettings model.GlobalSettings, jiraConnections []view
 				Credentials
 			</button>
 			<button
+				id="thresholds-tab"
 				type="button"
+				role="tab"
+				aria-controls="thresholds-panel"
+				:aria-selected="$store.drawer.section === 'thresholds'"
 				@click="$store.drawer.section = 'thresholds'"
 				:class="$store.drawer.section === 'thresholds' ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
 				class="px-4 py-2 text-sm font-medium transition-colors"
@@ -69,7 +77,7 @@ templ SettingsDrawer(globalSettings model.GlobalSettings, jiraConnections []view
 			</button>
 		</div>
 		<!-- Credentials section -->
-		<div x-show="$store.drawer.section === 'credentials'" class="flex-1 p-4 space-y-6">
+		<div id="credentials-panel" role="tabpanel" aria-labelledby="credentials-tab" x-show="$store.drawer.section === 'credentials'" class="flex-1 p-4 space-y-6">
 			<!-- GitHub subsection -->
 			<div>
 				<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">GitHub</h3>
@@ -150,7 +158,8 @@ templ SettingsDrawer(globalSettings model.GlobalSettings, jiraConnections []view
 							hx-target="#jira-connection-list"
 							hx-swap="innerHTML"
 							hx-indicator="#jira-add-spinner"
-							@htmx:after-request.camel="if ($event.detail.successful) { addOpen = false; $el.reset(); }"
+							hx-target-error="#jira-add-status"
+							@htmx:after-request.camel="if ($event.detail.successful) { addOpen = false; $el.reset(); document.getElementById('jira-add-status').innerHTML = ''; }"
 							class="space-y-2"
 						>
 							<div>
@@ -220,13 +229,14 @@ templ SettingsDrawer(globalSettings model.GlobalSettings, jiraConnections []view
 									</svg>
 								</span>
 							</div>
+							<div id="jira-add-status" class="text-sm"></div>
 						</form>
 					</div>
 				</div>
 			</div>
 		</div>
 		<!-- Thresholds section -->
-		<div x-show="$store.drawer.section === 'thresholds'" class="flex-1 p-4">
+		<div id="thresholds-panel" role="tabpanel" aria-labelledby="thresholds-tab" x-show="$store.drawer.section === 'thresholds'" class="flex-1 p-4">
 			<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Attention Thresholds</h3>
 			<p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Configure when PRs appear with visual attention signals. Per-repo overrides can be set via the gear icon next to each repo.</p>
 			<form
@@ -349,7 +359,7 @@ templ JiraConnectionList(conns []viewmodel.JiraConnectionViewModel) {
 						aria-label={ "Delete " + conn.DisplayName }
 					>
 						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path>
 						</svg>
 					</button>
 				</div>
