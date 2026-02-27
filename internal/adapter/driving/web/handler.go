@@ -269,7 +269,7 @@ func (h *Handler) buildJiraCardVM(ctx context.Context, pr model.PullRequest, own
 		Status:      issue.Status,
 		Priority:    issue.Priority,
 		Assignee:    issue.Assignee,
-		JiraURL:     conn.BaseURL + "/browse/" + issue.Key,
+		JiraURL:     strings.TrimRight(conn.BaseURL, "/") + "/browse/" + issue.Key,
 	}
 
 	for _, c := range issue.Comments {

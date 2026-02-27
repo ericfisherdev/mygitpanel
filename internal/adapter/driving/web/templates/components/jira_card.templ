@@ -20,8 +20,9 @@ func jiraStatusColor(status string) string {
 	}
 }
 
-// JiraCard renders a collapsible Jira issue card with four states:
-// (1) no credentials, (2) no linked issue key, (3) load error, (4) issue loaded.
+// JiraCard renders a collapsible Jira issue card with five states:
+// (1) no credentials, (2) no linked issue key, (3) load error,
+// (4) issue data unavailable (key present but Issue==nil with no error), (5) issue loaded.
 templ JiraCard(jiraVM viewmodel.JiraCardViewModel) {
 	<div id="jira-card" class="mb-6 border-l-4 border-blue-700 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden" x-data="{ expanded: false }">
 		if !jiraVM.HasCredentials {
