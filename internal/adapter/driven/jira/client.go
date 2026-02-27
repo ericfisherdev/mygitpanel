@@ -20,6 +20,16 @@ import (
 // Compile-time interface satisfaction check.
 var _ driven.JiraClient = (*JiraHTTPClient)(nil)
 
+// HTTP header and MIME type constants shared across all Jira API methods.
+const (
+	contentTypeJSON = "application/json"
+
+	// Error format strings used across GetIssue, AddComment, and Ping.
+	errFmtBuildRequest     = "jira: building request: %w"
+	errFmtRequestFailed    = "jira: request failed: %w"
+	errFmtUnexpectedStatus = "jira: unexpected status %d: %w"
+)
+
 // JiraHTTPClient implements the driven.JiraClient port using Jira Cloud REST API v3.
 type JiraHTTPClient struct {
 	baseURL    string
@@ -202,14 +212,14 @@ func (c *JiraHTTPClient) GetIssue(ctx context.Context, key string) (model.JiraIs
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return model.JiraIssue{}, fmt.Errorf("jira: building request: %w", err)
+		return model.JiraIssue{}, fmt.Errorf(errFmtBuildRequest, err)
 	}
 	req.Header.Set("Authorization", basicAuthHeader(c.email, c.token))
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", contentTypeJSON)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return model.JiraIssue{}, fmt.Errorf("jira: request failed: %w", driven.ErrJiraUnavailable)
+		return model.JiraIssue{}, fmt.Errorf(errFmtRequestFailed, driven.ErrJiraUnavailable)
 	}
 	defer resp.Body.Close()
 
@@ -298,15 +308,15 @@ func (c *JiraHTTPClient) AddComment(ctx context.Context, key, body string) error
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("jira: building request: %w", err)
+		return fmt.Errorf(errFmtBuildRequest, err)
 	}
 	req.Header.Set("Authorization", basicAuthHeader(c.email, c.token))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", contentTypeJSON)
+	req.Header.Set("Accept", contentTypeJSON)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("jira: request failed: %w", driven.ErrJiraUnavailable)
+		return fmt.Errorf(errFmtRequestFailed, driven.ErrJiraUnavailable)
 	}
 	defer resp.Body.Close()
 
@@ -325,7 +335,7 @@ func (c *JiraHTTPClient) AddComment(ctx context.Context, key, body string) error
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return nil
 		}
-		return fmt.Errorf("jira: unexpected status %d: %w", resp.StatusCode, driven.ErrJiraUnavailable)
+		return fmt.Errorf(errFmtUnexpectedStatus, resp.StatusCode, driven.ErrJiraUnavailable)
 	}
 }
 
@@ -337,14 +347,14 @@ func (c *JiraHTTPClient) Ping(ctx context.Context) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return fmt.Errorf("jira: building request: %w", err)
+		return fmt.Errorf(errFmtBuildRequest, err)
 	}
 	req.Header.Set("Authorization", basicAuthHeader(c.email, c.token))
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", contentTypeJSON)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("jira: request failed: %w", driven.ErrJiraUnavailable)
+		return fmt.Errorf(errFmtRequestFailed, driven.ErrJiraUnavailable)
 	}
 	defer resp.Body.Close()
 
@@ -354,7 +364,7 @@ func (c *JiraHTTPClient) Ping(ctx context.Context) error {
 	case http.StatusUnauthorized:
 		return driven.ErrJiraUnauthorized
 	default:
-		return fmt.Errorf("jira: unexpected status %d: %w", resp.StatusCode, driven.ErrJiraUnavailable)
+		return fmt.Errorf(errFmtUnexpectedStatus, resp.StatusCode, driven.ErrJiraUnavailable)
 	}
 }
 
@@ -386,6 +396,6 @@ func mapStatusCode(code int) error {
 		if code >= 200 && code < 300 {
 			return nil
 		}
-		return fmt.Errorf("jira: unexpected status %d: %w", code, driven.ErrJiraUnavailable)
+		return fmt.Errorf(errFmtUnexpectedStatus, code, driven.ErrJiraUnavailable)
 	}
 }

@@ -9,12 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test fixture constants for JiraConnectionRepo tests.
+const (
+	testJiraToken    = "secret-api-token"
+	testJiraRepoName = "org/repo"
+)
+
 func newTestJiraConn(name, url string) model.JiraConnection {
 	return model.JiraConnection{
 		DisplayName: name,
 		BaseURL:     url,
 		Email:       "user@example.com",
-		Token:       "secret-api-token",
+		Token:       testJiraToken,
 	}
 }
 
@@ -65,7 +71,7 @@ func TestJiraConnectionRepo_GetByID_Found(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, id, got.ID)
 	assert.Equal(t, "Test", got.DisplayName)
-	assert.Equal(t, "secret-api-token", got.Token)
+	assert.Equal(t, testJiraToken, got.Token)
 }
 
 func TestJiraConnectionRepo_Update(t *testing.T) {
@@ -109,7 +115,7 @@ func TestJiraConnectionRepo_GetForRepo_DefaultFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	// No explicit mapping -- should fall back to default.
-	got, err := repo.GetForRepo(ctx, "org/repo")
+	got, err := repo.GetForRepo(ctx, testJiraRepoName)
 	require.NoError(t, err)
 	assert.Equal(t, id, got.ID)
 	assert.Equal(t, "Default Jira", got.DisplayName)
@@ -136,10 +142,10 @@ func TestJiraConnectionRepo_GetForRepo_ExplicitMapping(t *testing.T) {
 	require.NoError(t, err)
 
 	// Map repo to specific connection.
-	err = repo.SetRepoMapping(ctx, "org/repo", specificID)
+	err = repo.SetRepoMapping(ctx, testJiraRepoName, specificID)
 	require.NoError(t, err)
 
-	got, err := repo.GetForRepo(ctx, "org/repo")
+	got, err := repo.GetForRepo(ctx, testJiraRepoName)
 	require.NoError(t, err)
 	assert.Equal(t, specificID, got.ID)
 	assert.Equal(t, "Specific", got.DisplayName)
@@ -213,7 +219,7 @@ func TestJiraConnectionRepo_Delete_CascadesMapping(t *testing.T) {
 	id, err := repo.Create(ctx, newTestJiraConn("ToDelete", "https://delete.atlassian.net"))
 	require.NoError(t, err)
 
-	err = repo.SetRepoMapping(ctx, "org/repo", id)
+	err = repo.SetRepoMapping(ctx, testJiraRepoName, id)
 	require.NoError(t, err)
 
 	// Delete the connection -- mapping should be cleaned up via ON DELETE SET NULL.
@@ -245,6 +251,6 @@ func TestJiraConnectionRepo_NilKey(t *testing.T) {
 	_, err = repo.GetByID(ctx, 1)
 	require.ErrorIs(t, err, ErrEncryptionKeyNotSet)
 
-	_, err = repo.GetForRepo(ctx, "org/repo")
+	_, err = repo.GetForRepo(ctx, testJiraRepoName)
 	require.ErrorIs(t, err, ErrEncryptionKeyNotSet)
 }
