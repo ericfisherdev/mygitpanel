@@ -84,6 +84,34 @@ templ RepoThresholdPopover(repo viewmodel.RepoViewModel, jiraConnections []viewm
 						class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
 					/>
 				</div>
+				<div>
+					<label class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5" for={ "stale-" + repoSlug(repo.FullName) }>
+						Flag stale reviews
+					</label>
+					<select
+						id={ "stale-" + repoSlug(repo.FullName) }
+						name="stale_review_enabled"
+						class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+					>
+						<option value="inherit">Inherit from global</option>
+						<option value="true">Enabled</option>
+						<option value="false">Disabled</option>
+					</select>
+				</div>
+				<div>
+					<label class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5" for={ "ci-" + repoSlug(repo.FullName) }>
+						Flag own PRs with CI failures
+					</label>
+					<select
+						id={ "ci-" + repoSlug(repo.FullName) }
+						name="ci_failure_enabled"
+						class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+					>
+						<option value="inherit">Inherit from global</option>
+						<option value="true">Enabled</option>
+						<option value="false">Disabled</option>
+					</select>
+				</div>
 				<div class="flex items-center gap-2">
 					<button
 						type="submit"

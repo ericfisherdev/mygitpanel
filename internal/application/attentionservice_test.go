@@ -353,6 +353,10 @@ func TestEffectiveThresholdsFor_GlobalFallbackOnStoreError(t *testing.T) {
 	effective := svc.EffectiveThresholdsFor(context.Background(), "owner/repo")
 
 	defaults := model.DefaultGlobalSettings()
+	require.True(t,
+		defaults.ReviewCountThreshold != 0 || defaults.AgeUrgencyDays != 0 || defaults.StaleReviewEnabled || defaults.CIFailureEnabled,
+		"DefaultGlobalSettings must return non-trivial values for this test to be meaningful",
+	)
 	assert.Equal(t, defaults.ReviewCountThreshold, effective.ReviewCountThreshold)
 	assert.Equal(t, defaults.AgeUrgencyDays, effective.AgeUrgencyDays)
 	assert.Equal(t, defaults.StaleReviewEnabled, effective.StaleReviewEnabled)
