@@ -11,8 +11,9 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
-// Compile-time interface satisfaction check.
+// Compile-time interface satisfaction checks.
 var _ driven.JiraConnectionStore = (*JiraConnectionRepo)(nil)
+var _ driven.JiraRepoMappingStore = (*JiraConnectionRepo)(nil)
 
 // JiraConnectionRepo is the SQLite implementation of the JiraConnectionStore port interface.
 // API tokens are encrypted with AES-256-GCM before write and decrypted after read.
@@ -32,21 +33,24 @@ func NewJiraConnectionRepo(db *DB, key []byte) *JiraConnectionRepo {
 }
 
 // Create persists a new Jira connection and returns the assigned ID.
+// is_default is always inserted as 0; if conn.IsDefault is true the SetDefault logic
+// is applied atomically within the same transaction.
 func (r *JiraConnectionRepo) Create(ctx context.Context, conn model.JiraConnection) (int64, error) {
 	encrypted, err := r.encrypt(conn.Token)
 	if err != nil {
 		return 0, err
 	}
 
-	isDefault := 0
-	if conn.IsDefault {
-		isDefault = 1
+	tx, err := r.db.Writer.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("create jira connection: begin tx: %w", err)
 	}
+	defer tx.Rollback() //nolint:errcheck
 
 	const query = `INSERT INTO jira_connections (display_name, base_url, email, token, is_default)
-		VALUES (?, ?, ?, ?, ?)`
-	result, err := r.db.Writer.ExecContext(ctx, query,
-		conn.DisplayName, conn.BaseURL, conn.Email, encrypted, isDefault,
+		VALUES (?, ?, ?, ?, 0)`
+	result, err := tx.ExecContext(ctx, query,
+		conn.DisplayName, conn.BaseURL, conn.Email, encrypted,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("create jira connection: %w", err)
@@ -54,31 +58,63 @@ func (r *JiraConnectionRepo) Create(ctx context.Context, conn model.JiraConnecti
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("last insert id: %w", err)
+		return 0, fmt.Errorf("create jira connection: last insert id: %w", err)
+	}
+
+	if conn.IsDefault {
+		if err := setDefaultInTx(ctx, tx, id); err != nil {
+			return 0, fmt.Errorf("create jira connection: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("create jira connection: commit: %w", err)
 	}
 	return id, nil
 }
 
 // Update replaces all fields of an existing Jira connection.
+// is_default is always written as 0; if conn.IsDefault is true the SetDefault logic
+// is applied atomically within the same transaction.
+// Returns an error if no row with conn.ID exists.
 func (r *JiraConnectionRepo) Update(ctx context.Context, conn model.JiraConnection) error {
 	encrypted, err := r.encrypt(conn.Token)
 	if err != nil {
 		return err
 	}
 
-	isDefault := 0
-	if conn.IsDefault {
-		isDefault = 1
+	tx, err := r.db.Writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("update jira connection %d: begin tx: %w", conn.ID, err)
 	}
+	defer tx.Rollback() //nolint:errcheck
 
 	const query = `UPDATE jira_connections
-		SET display_name = ?, base_url = ?, email = ?, token = ?, is_default = ?, updated_at = CURRENT_TIMESTAMP
+		SET display_name = ?, base_url = ?, email = ?, token = ?, is_default = 0, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`
-	_, err = r.db.Writer.ExecContext(ctx, query,
-		conn.DisplayName, conn.BaseURL, conn.Email, encrypted, isDefault, conn.ID,
+	result, err := tx.ExecContext(ctx, query,
+		conn.DisplayName, conn.BaseURL, conn.Email, encrypted, conn.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update jira connection %d: %w", conn.ID, err)
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update jira connection %d: rows affected: %w", conn.ID, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("update jira connection %d: not found", conn.ID)
+	}
+
+	if conn.IsDefault {
+		if err := setDefaultInTx(ctx, tx, conn.ID); err != nil {
+			return fmt.Errorf("update jira connection %d: %w", conn.ID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("update jira connection %d: commit: %w", conn.ID, err)
 	}
 	return nil
 }
@@ -256,28 +292,38 @@ func (r *JiraConnectionRepo) SetDefault(ctx context.Context, id int64) error {
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	// Clear all defaults.
-	if _, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 0 WHERE is_default = 1`); err != nil {
-		return fmt.Errorf("clear defaults: %w", err)
-	}
-
-	// Set new default if id > 0.
-	if id > 0 {
-		result, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 1 WHERE id = ?`, id)
-		if err != nil {
-			return fmt.Errorf("set default %d: %w", id, err)
+	if id == 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 0 WHERE is_default = 1`); err != nil {
+			return fmt.Errorf("clear defaults: %w", err)
 		}
-		n, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("set default %d rows affected: %w", id, err)
-		}
-		if n == 0 {
-			return fmt.Errorf("set default %d: no rows affected", id)
+	} else {
+		if err := setDefaultInTx(ctx, tx, id); err != nil {
+			return err
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit set default: %w", err)
+	}
+	return nil
+}
+
+// setDefaultInTx clears is_default on all connections then marks id as default.
+// Must be called within an active transaction. id must be > 0.
+func setDefaultInTx(ctx context.Context, tx *sql.Tx, id int64) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 0 WHERE is_default = 1`); err != nil {
+		return fmt.Errorf("clear defaults: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 1 WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("set default %d: %w", id, err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set default %d: rows affected: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("set default %d: no rows affected", id)
 	}
 	return nil
 }

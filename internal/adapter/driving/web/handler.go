@@ -53,8 +53,10 @@ type Handler struct {
 	// writerFactory creates a fresh GitHubWriter per request using the current token,
 	// allowing credentials updated via the GUI to take effect without restarting.
 	writerFactory func(token string) driven.GitHubWriter
-	// jiraConnStore manages multi-connection Jira credential persistence.
+	// jiraConnStore manages Jira connection lifecycle (create, update, delete, list).
 	jiraConnStore driven.JiraConnectionStore
+	// jiraRepoMappingStore manages per-repo Jira connection assignments.
+	jiraRepoMappingStore driven.JiraRepoMappingStore
 	// jiraClientFactory creates a JiraClient for a given connection, enabling
 	// credential validation (Ping) without coupling to concrete adapter.
 	jiraClientFactory func(conn model.JiraConnection) driven.JiraClient
@@ -74,22 +76,24 @@ func NewHandler(
 	ignoreStore driven.IgnoreStore,
 	writerFactory func(token string) driven.GitHubWriter,
 	jiraConnStore driven.JiraConnectionStore,
+	jiraRepoMappingStore driven.JiraRepoMappingStore,
 	jiraClientFactory func(conn model.JiraConnection) driven.JiraClient,
 ) *Handler {
 	return &Handler{
-		prStore:           prStore,
-		repoStore:         repoStore,
-		reviewSvc:         reviewSvc,
-		healthSvc:         healthSvc,
-		pollSvc:           pollSvc,
-		username:          username,
-		logger:            logger,
-		credStore:         credStore,
-		thresholdStore:    thresholdStore,
-		ignoreStore:       ignoreStore,
-		writerFactory:     writerFactory,
-		jiraConnStore:     jiraConnStore,
-		jiraClientFactory: jiraClientFactory,
+		prStore:              prStore,
+		repoStore:            repoStore,
+		reviewSvc:            reviewSvc,
+		healthSvc:            healthSvc,
+		pollSvc:              pollSvc,
+		username:             username,
+		logger:               logger,
+		credStore:            credStore,
+		thresholdStore:       thresholdStore,
+		ignoreStore:          ignoreStore,
+		writerFactory:        writerFactory,
+		jiraConnStore:        jiraConnStore,
+		jiraRepoMappingStore: jiraRepoMappingStore,
+		jiraClientFactory:    jiraClientFactory,
 	}
 }
 
@@ -238,11 +242,11 @@ func (h *Handler) buildJiraCardVM(ctx context.Context, pr model.PullRequest, own
 		JiraKey: pr.JiraKey,
 	}
 
-	if h.jiraConnStore == nil || h.jiraClientFactory == nil {
+	if h.jiraRepoMappingStore == nil || h.jiraClientFactory == nil {
 		return base // no Jira integration configured
 	}
 
-	conn, err := h.jiraConnStore.GetForRepo(ctx, pr.RepoFullName)
+	conn, err := h.jiraRepoMappingStore.GetForRepo(ctx, pr.RepoFullName)
 	if err != nil {
 		h.logger.Error("jira: getForRepo failed", "repo", pr.RepoFullName, "error", err)
 		return base
@@ -330,7 +334,7 @@ func (h *Handler) CreateJiraComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.jiraConnStore == nil || h.jiraClientFactory == nil {
+	if h.jiraRepoMappingStore == nil || h.jiraClientFactory == nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Jira integration not configured</span>`)
 		return
@@ -352,7 +356,7 @@ func (h *Handler) CreateJiraComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := h.jiraConnStore.GetForRepo(r.Context(), pr.RepoFullName)
+	conn, err := h.jiraRepoMappingStore.GetForRepo(r.Context(), pr.RepoFullName)
 	if err != nil {
 		h.logger.Error("jira: getForRepo failed", "repo", pr.RepoFullName, "error", err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -940,9 +944,9 @@ func (h *Handler) getGlobalSettings(ctx context.Context) model.GlobalSettings {
 // Jira connection IDs are fetched in a single batch query to avoid N+1 database calls.
 func (h *Handler) toRepoViewModels(ctx context.Context, repos []model.Repository) []vm.RepoViewModel {
 	var mappings map[string]int64
-	if h.jiraConnStore != nil && len(repos) > 0 {
+	if h.jiraRepoMappingStore != nil && len(repos) > 0 {
 		var err error
-		mappings, err = h.jiraConnStore.GetRepoMappings(ctx, extractRepoNames(repos))
+		mappings, err = h.jiraRepoMappingStore.GetRepoMappings(ctx, extractRepoNames(repos))
 		if err != nil {
 			h.logger.Warn("failed to get jira mappings for repos", "error", err)
 			mappings = map[string]int64{}
@@ -1151,7 +1155,7 @@ func (h *Handler) jiraConnectionByID(w http.ResponseWriter, r *http.Request, opN
 // SaveJiraRepoMapping handles POST /app/settings/jira/repo-mapping.
 // It assigns a Jira connection to a repo or clears the mapping when connectionID is 0.
 func (h *Handler) SaveJiraRepoMapping(w http.ResponseWriter, r *http.Request) {
-	if h.jiraConnStore == nil {
+	if h.jiraRepoMappingStore == nil {
 		http.Error(w, "Jira integration not configured", http.StatusUnprocessableEntity)
 		return
 	}
@@ -1182,9 +1186,13 @@ func (h *Handler) SaveJiraRepoMapping(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid jira_connection_id", http.StatusBadRequest)
 			return
 		}
+		if connectionID < 0 {
+			http.Error(w, "invalid jira_connection_id", http.StatusBadRequest)
+			return
+		}
 	}
 
-	if err := h.jiraConnStore.SetRepoMapping(r.Context(), repoFullName, connectionID); err != nil {
+	if err := h.jiraRepoMappingStore.SetRepoMapping(r.Context(), repoFullName, connectionID); err != nil {
 		h.logger.Error("failed to set jira repo mapping", "error", err, "repo", repoFullName)
 		http.Error(w, "failed to save mapping", http.StatusInternalServerError)
 		return
