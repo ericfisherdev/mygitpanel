@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
@@ -164,6 +165,65 @@ func (r *JiraConnectionRepo) GetForRepo(ctx context.Context, repoFullName string
 		return model.JiraConnection{}, fmt.Errorf("get jira connection for repo %s: %w", repoFullName, err)
 	}
 	return conn, nil
+}
+
+// GetRepoMappings returns the assigned Jira connection ID for each given repo in a single query.
+// Repos with no explicit mapping fall back to the default connection ID (0 if none exists).
+func (r *JiraConnectionRepo) GetRepoMappings(ctx context.Context, repoFullNames []string) (map[string]int64, error) {
+	if len(repoFullNames) == 0 {
+		return map[string]int64{}, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(repoFullNames))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	args := make([]any, len(repoFullNames))
+	for i, name := range repoFullNames {
+		args[i] = name
+	}
+
+	//nolint:gosec // placeholders contains only comma-separated "?" literals, never user input
+	query := fmt.Sprintf(
+		`SELECT repo_full_name, jira_connection_id FROM repo_jira_mapping WHERE repo_full_name IN (%s)`,
+		placeholders,
+	)
+
+	rows, err := r.db.Reader.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get repo mappings: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]int64, len(repoFullNames))
+	for rows.Next() {
+		var repo string
+		var connID int64
+		if err := rows.Scan(&repo, &connID); err != nil {
+			return nil, fmt.Errorf("scan repo mapping: %w", err)
+		}
+		result[repo] = connID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate repo mappings: %w", err)
+	}
+
+	// Fetch the default connection ID once for repos with no explicit mapping.
+	var defaultID int64
+	for _, name := range repoFullNames {
+		if _, ok := result[name]; !ok {
+			if defaultID == 0 {
+				scanErr := r.db.Reader.QueryRowContext(ctx,
+					`SELECT id FROM jira_connections WHERE is_default = 1 LIMIT 1`,
+				).Scan(&defaultID)
+				if scanErr != nil && !errors.Is(scanErr, sql.ErrNoRows) {
+					return nil, fmt.Errorf("get default jira connection: %w", scanErr)
+				}
+			}
+			result[name] = defaultID
+		}
+	}
+
+	return result, nil
 }
 
 // SetRepoMapping associates a repository with a Jira connection.

@@ -34,6 +34,9 @@ const (
 	errMsgServiceUnavail  = "service unavailable"
 )
 
+// dnsLookupTimeout bounds the DNS resolution performed during Jira URL validation.
+const dnsLookupTimeout = 5 * time.Second
+
 // Handler is the web GUI driving adapter that serves HTML via templ components.
 type Handler struct {
 	prStore        driven.PRStore
@@ -381,7 +384,7 @@ func (h *Handler) CreateJiraComment(w http.ResponseWriter, r *http.Request) {
 
 	// Re-render JiraCard with updated comment list.
 	cardVM := h.buildJiraCardVM(r.Context(), *pr, owner, repo, number)
-	// Force expanded state so the user sees their new comment.
+	cardVM.StartExpanded = true // show newly-posted comment without requiring a click
 	if err := components.JiraCard(cardVM).Render(r.Context(), w); err != nil {
 		h.logger.Error("failed to render jira card after comment", "error", err)
 	}
@@ -647,15 +650,19 @@ func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
 
 	if v := r.FormValue("review_count"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err == nil && n >= 0 {
-			threshold.ReviewCount = &n
+		if err != nil || n < 0 {
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: review_count must be a non-negative integer</span>`)
+			return
 		}
+		threshold.ReviewCount = &n
 	}
 	if v := r.FormValue("age_urgency_days"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err == nil && n >= 0 {
-			threshold.AgeUrgencyDays = &n
+		if err != nil || n < 0 {
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: age_urgency_days must be a non-negative integer</span>`)
+			return
 		}
+		threshold.AgeUrgencyDays = &n
 	}
 	switch r.FormValue("stale_review_enabled") {
 	case "true":
@@ -880,7 +887,9 @@ func validateJiraBaseURL(ctx context.Context, rawURL string) error {
 		return validateIP(ip)
 	}
 	// Resolve hostname and reject any address in a restricted range.
-	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	dnsCtx, cancel := context.WithTimeout(ctx, dnsLookupTimeout)
+	defer cancel()
+	addrs, err := net.DefaultResolver.LookupHost(dnsCtx, host)
 	if err != nil {
 		return fmt.Errorf("cannot resolve base URL hostname %q: %w", host, err)
 	}
@@ -928,24 +937,28 @@ func (h *Handler) getGlobalSettings(ctx context.Context) model.GlobalSettings {
 }
 
 // toRepoViewModels converts domain repos to presentation view models.
+// Jira connection IDs are fetched in a single batch query to avoid N+1 database calls.
 func (h *Handler) toRepoViewModels(ctx context.Context, repos []model.Repository) []vm.RepoViewModel {
+	var mappings map[string]int64
+	if h.jiraConnStore != nil && len(repos) > 0 {
+		var err error
+		mappings, err = h.jiraConnStore.GetRepoMappings(ctx, extractRepoNames(repos))
+		if err != nil {
+			h.logger.Warn("failed to get jira mappings for repos", "error", err)
+			mappings = map[string]int64{}
+		}
+	} else {
+		mappings = map[string]int64{}
+	}
+
 	vms := make([]vm.RepoViewModel, 0, len(repos))
 	for _, r := range repos {
-		var assignedID int64
-		if h.jiraConnStore != nil {
-			conn, err := h.jiraConnStore.GetForRepo(ctx, r.FullName)
-			if err != nil {
-				h.logger.Warn("failed to get jira mapping for repo", "repo", r.FullName, "error", err)
-			} else {
-				assignedID = conn.ID
-			}
-		}
 		vms = append(vms, vm.RepoViewModel{
 			FullName:                 r.FullName,
 			Owner:                    r.Owner,
 			Name:                     r.Name,
 			DeletePath:               fmt.Sprintf("/app/repos/%s/%s", r.Owner, r.Name),
-			AssignedJiraConnectionID: assignedID,
+			AssignedJiraConnectionID: mappings[r.FullName],
 		})
 	}
 	return vms

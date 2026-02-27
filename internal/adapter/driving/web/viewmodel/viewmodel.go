@@ -171,6 +171,7 @@ type JiraCardViewModel struct {
 	JiraKey        string       // "" when no key detected on this PR
 	Issue          *JiraIssueVM // nil on load error or when HasCredentials=false or JiraKey=""
 	LoadError      string       // non-empty when Jira fetch failed
+	StartExpanded  bool         // true when the card should render pre-expanded (e.g. after posting a comment)
 	// PRIdentifiers for HTMX form action construction.
 	Owner  string
 	Repo   string
