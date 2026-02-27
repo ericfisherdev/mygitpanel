@@ -14,6 +14,7 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
+	"github.com/ericfisherdev/mygitpanel/internal/validate"
 )
 
 // Handler is the HTTP driving adapter that serves the REST API.
@@ -239,7 +240,7 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !isValidRepoName(req.FullName) {
+	if !validate.IsValidRepoName(req.FullName) {
 		writeError(w, http.StatusBadRequest, "invalid repository name: expected owner/repo format")
 		return
 	}
@@ -300,34 +301,4 @@ func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
 		Status: "ok",
 		Time:   time.Now().UTC().Format(time.RFC3339),
 	})
-}
-
-// isValidRepoName validates that name is in owner/repo format where each part
-// contains only alphanumeric characters, hyphens, dots, or underscores.
-func isValidRepoName(name string) bool {
-	parts := strings.SplitN(name, "/", 3)
-	if len(parts) != 2 {
-		return false
-	}
-
-	for _, part := range parts {
-		if part == "" {
-			return false
-		}
-		for _, ch := range part {
-			if !isValidRepoChar(ch) {
-				return false
-			}
-		}
-	}
-
-	return true
-}
-
-// isValidRepoChar returns true if the rune is allowed in a repository owner or name.
-func isValidRepoChar(ch rune) bool {
-	return (ch >= 'a' && ch <= 'z') ||
-		(ch >= 'A' && ch <= 'Z') ||
-		(ch >= '0' && ch <= '9') ||
-		ch == '-' || ch == '.' || ch == '_'
 }

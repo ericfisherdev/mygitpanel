@@ -21,6 +21,7 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/application"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
+	"github.com/ericfisherdev/mygitpanel/internal/validate"
 )
 
 // HTTP error message constants shared across all handlers.
@@ -398,7 +399,7 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 
 	fullName := strings.TrimSpace(r.FormValue("full_name"))
 
-	if !isValidRepoName(fullName) {
+	if !validate.IsValidRepoName(fullName) {
 		http.Error(w, "invalid repository name: expected owner/repo format", http.StatusBadRequest)
 		return
 	}
@@ -766,36 +767,6 @@ func matchesPRQuery(pr model.PullRequest, queryLower string) bool {
 		strings.Contains(strings.ToLower(pr.Author), queryLower) ||
 		strings.Contains(strings.ToLower(pr.RepoFullName), queryLower) ||
 		strings.Contains(strings.ToLower(pr.Branch), queryLower)
-}
-
-// isValidRepoName validates that name is in owner/repo format where each part
-// contains only alphanumeric characters, hyphens, dots, or underscores.
-func isValidRepoName(name string) bool {
-	parts := strings.SplitN(name, "/", 3)
-	if len(parts) != 2 {
-		return false
-	}
-
-	for _, part := range parts {
-		if part == "" {
-			return false
-		}
-		for _, ch := range part {
-			if !isValidRepoChar(ch) {
-				return false
-			}
-		}
-	}
-
-	return true
-}
-
-// isValidRepoChar returns true if the rune is allowed in a repository owner or name.
-func isValidRepoChar(ch rune) bool {
-	return (ch >= 'a' && ch <= 'z') ||
-		(ch >= 'A' && ch <= 'Z') ||
-		(ch >= '0' && ch <= '9') ||
-		ch == '-' || ch == '.' || ch == '_'
 }
 
 // buildDashboardViewModel constructs the full view model for the dashboard page.
@@ -1261,27 +1232,39 @@ func (h *Handler) renderThreadAfterReply(w http.ResponseWriter, r *http.Request,
 	h.renderReviewsSection(w, r, detail, owner, repo)
 }
 
-// SubmitReview handles POST /app/prs/{owner}/{repo}/{number}/review.
-// It submits a pull request review and re-renders the full reviews section.
-func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
+// parsePRWriteRequest extracts owner, repo, and PR number from the path, parses the
+// form body, and validates the CSRF token. It writes error responses and returns false
+// if any step fails — callers must return immediately when ok is false.
+func (h *Handler) parsePRWriteRequest(w http.ResponseWriter, r *http.Request) (owner, repo string, number int, ok bool) {
+	owner = r.PathValue("owner")
+	repo = r.PathValue("repo")
 	numberStr := r.PathValue("number")
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
 		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
-		return
+		return "", "", 0, false
 	}
 
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid form data</p>`)
-		return
+		return "", "", 0, false
 	}
 
 	if !validateCSRF(r) {
 		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
+		return "", "", 0, false
+	}
+
+	return owner, repo, number, true
+}
+
+// SubmitReview handles POST /app/prs/{owner}/{repo}/{number}/review.
+// It submits a pull request review and re-renders the full reviews section.
+func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
+	owner, repo, number, ok := h.parsePRWriteRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -1347,24 +1330,8 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 // CreateIssueComment handles POST /app/prs/{owner}/{repo}/{number}/issue-comments.
 // It creates a general PR comment and re-renders the full reviews section.
 func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
-	owner := r.PathValue("owner")
-	repo := r.PathValue("repo")
-	numberStr := r.PathValue("number")
-
-	number, err := strconv.Atoi(numberStr)
-	if err != nil {
-		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Error: invalid form data</p>`)
-		return
-	}
-
-	if !validateCSRF(r) {
-		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
+	owner, repo, number, ok := h.parsePRWriteRequest(w, r)
+	if !ok {
 		return
 	}
 
