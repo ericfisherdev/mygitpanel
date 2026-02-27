@@ -243,17 +243,20 @@ func (r *JiraConnectionRepo) GetRepoMappings(ctx context.Context, repoFullNames 
 		return nil, fmt.Errorf("iterate repo mappings: %w", err)
 	}
 
-	// Fetch the default connection ID once for repos with no explicit mapping.
+	// Fetch the default connection ID at most once for repos with no explicit mapping.
+	// defaultLoaded distinguishes "not yet queried" from "queried and found none" (defaultID==0).
 	var defaultID int64
+	var defaultLoaded bool
 	for _, name := range repoFullNames {
 		if _, ok := result[name]; !ok {
-			if defaultID == 0 {
+			if !defaultLoaded {
 				scanErr := r.db.Reader.QueryRowContext(ctx,
 					`SELECT id FROM jira_connections WHERE is_default = 1 LIMIT 1`,
 				).Scan(&defaultID)
 				if scanErr != nil && !errors.Is(scanErr, sql.ErrNoRows) {
 					return nil, fmt.Errorf("get default jira connection: %w", scanErr)
 				}
+				defaultLoaded = true
 			}
 			result[name] = defaultID
 		}

@@ -857,7 +857,13 @@ func (h *Handler) requireGitHubToken(w http.ResponseWriter, r *http.Request, act
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set.</p>`)
 		return ""
 	}
-	if err != nil || token == "" {
+	if err != nil {
+		h.logger.Error("failed to retrieve github token", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Failed to read credentials.</p>`)
+		return ""
+	}
+	if token == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, `<p class="text-red-600 text-sm">Configure a GitHub token in Settings to %s.</p>`, safeAction)
 		return ""
@@ -1099,6 +1105,11 @@ func (h *Handler) CreateJiraConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.jiraConnStore.Create(r.Context(), conn); err != nil {
+		if errors.Is(err, driven.ErrEncryptionKeyNotSet) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			fmt.Fprintf(w, `<span class="text-red-600 text-sm">Credential storage requires MYGITPANEL_SECRET_KEY to be set.</span>`)
+			return
+		}
 		h.logger.Error("failed to create jira connection", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `<span class="text-red-600 text-sm">Error: failed to save connection</span>`)
