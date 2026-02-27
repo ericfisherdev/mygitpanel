@@ -103,3 +103,9 @@ Phase planning documents live in `.planning/` with per-phase subdirectories. `ST
 ## Stubs for Future Phases
 
 `FetchReviews()` and `FetchReviewComments()` in the GitHub adapter are implemented as part of Phase 4 (Review Intelligence).
+
+## Project Conventions
+
+### Alpine.js Stores
+
+- The `drawer` Alpine store uses `$store.drawer.show(section)` and `$store.drawer.hide()` — there is no `.open()` method
