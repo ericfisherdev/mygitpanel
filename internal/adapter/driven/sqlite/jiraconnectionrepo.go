@@ -203,8 +203,16 @@ func (r *JiraConnectionRepo) SetDefault(ctx context.Context, id int64) error {
 
 	// Set new default if id > 0.
 	if id > 0 {
-		if _, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 1 WHERE id = ?`, id); err != nil {
+		result, err := tx.ExecContext(ctx, `UPDATE jira_connections SET is_default = 1 WHERE id = ?`, id)
+		if err != nil {
 			return fmt.Errorf("set default %d: %w", id, err)
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("set default %d rows affected: %w", id, err)
+		}
+		if n == 0 {
+			return fmt.Errorf("set default %d: no rows affected", id)
 		}
 	}
 
