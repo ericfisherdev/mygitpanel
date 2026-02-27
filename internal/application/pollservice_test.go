@@ -97,6 +97,7 @@ type deleteCall struct {
 }
 
 type mockPRStore struct {
+	noopPRStoreMixin
 	mu      sync.Mutex
 	upserts []upsertCall
 	deletes []deleteCall
@@ -114,10 +115,6 @@ func (m *mockPRStore) GetByRepository(_ context.Context, _ string) ([]model.Pull
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.stored, nil
-}
-
-func (m *mockPRStore) GetByStatus(_ context.Context, _ model.PRStatus) ([]model.PullRequest, error) {
-	return nil, nil
 }
 
 func (m *mockPRStore) GetByNumber(_ context.Context, repoFullName string, number int) (*model.PullRequest, error) {
@@ -138,18 +135,6 @@ func (m *mockPRStore) GetByNumber(_ context.Context, repoFullName string, number
 			return &pr, nil
 		}
 	}
-	return nil, nil
-}
-
-func (m *mockPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) {
-	return nil, nil
-}
-
-func (m *mockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
-	return nil, nil
-}
-
-func (m *mockPRStore) ListIgnoredWithPRData(_ context.Context) ([]model.PullRequest, error) {
 	return nil, nil
 }
 
@@ -185,74 +170,6 @@ func (m *mockRepoStore) GetByFullName(_ context.Context, _ string) (*model.Repos
 
 func (m *mockRepoStore) ListAll(_ context.Context) ([]model.Repository, error) {
 	return m.repos, nil
-}
-
-// mockReviewStore records upsert/update calls for verification.
-type mockReviewStore struct {
-	mu                     sync.Mutex
-	upsertedReviews        []model.Review
-	upsertedReviewComments []model.ReviewComment
-	upsertedIssueComments  []model.IssueComment
-	updatedResolutions     map[int64]bool
-}
-
-func newMockReviewStore() *mockReviewStore {
-	return &mockReviewStore{
-		updatedResolutions: make(map[int64]bool),
-	}
-}
-
-func (m *mockReviewStore) UpsertReview(_ context.Context, review model.Review) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.upsertedReviews = append(m.upsertedReviews, review)
-	return nil
-}
-
-func (m *mockReviewStore) UpsertReviewComment(_ context.Context, comment model.ReviewComment) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.upsertedReviewComments = append(m.upsertedReviewComments, comment)
-	return nil
-}
-
-func (m *mockReviewStore) UpsertIssueComment(_ context.Context, comment model.IssueComment) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.upsertedIssueComments = append(m.upsertedIssueComments, comment)
-	return nil
-}
-
-func (m *mockReviewStore) GetReviewsByPR(_ context.Context, _ int64) ([]model.Review, error) {
-	return nil, nil
-}
-
-func (m *mockReviewStore) GetReviewCommentsByPR(_ context.Context, _ int64) ([]model.ReviewComment, error) {
-	return nil, nil
-}
-
-func (m *mockReviewStore) GetIssueCommentsByPR(_ context.Context, _ int64) ([]model.IssueComment, error) {
-	return nil, nil
-}
-
-func (m *mockReviewStore) UpdateCommentResolution(_ context.Context, commentID int64, isResolved bool) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.updatedResolutions[commentID] = isResolved
-	return nil
-}
-
-func (m *mockReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error {
-	return nil
-}
-
-func (m *mockReviewStore) reset() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.upsertedReviews = nil
-	m.upsertedReviewComments = nil
-	m.upsertedIssueComments = nil
-	m.updatedResolutions = make(map[int64]bool)
 }
 
 // mockCheckStore records replace/get calls for verification.
@@ -832,6 +749,7 @@ func TestAdaptiveScheduling(t *testing.T) {
 
 // adaptiveMockPRStore extends mockPRStore with per-repo PR lookup support.
 type adaptiveMockPRStore struct {
+	noopPRStoreMixin
 	mu        sync.Mutex
 	prsByRepo map[string][]model.PullRequest
 	upserts   []upsertCall
@@ -861,10 +779,6 @@ func (m *adaptiveMockPRStore) GetByRepository(_ context.Context, repoFullName st
 	return m.prsByRepo[repoFullName], nil
 }
 
-func (m *adaptiveMockPRStore) GetByStatus(_ context.Context, _ model.PRStatus) ([]model.PullRequest, error) {
-	return nil, nil
-}
-
 func (m *adaptiveMockPRStore) GetByNumber(_ context.Context, repoFullName string, number int) (*model.PullRequest, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -873,18 +787,6 @@ func (m *adaptiveMockPRStore) GetByNumber(_ context.Context, repoFullName string
 			return &pr, nil
 		}
 	}
-	return nil, nil
-}
-
-func (m *adaptiveMockPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) {
-	return nil, nil
-}
-
-func (m *adaptiveMockPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
-	return nil, nil
-}
-
-func (m *adaptiveMockPRStore) ListIgnoredWithPRData(_ context.Context) ([]model.PullRequest, error) {
 	return nil, nil
 }
 

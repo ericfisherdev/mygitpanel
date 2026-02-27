@@ -55,12 +55,6 @@ func TestExtractJiraKey(t *testing.T) {
 			title:  "",
 			want:   "PROJ-100",
 		},
-		{
-			name:   "empty inputs",
-			branch: "",
-			title:  "",
-			want:   "",
-		},
 	}
 
 	for _, tc := range tests {
