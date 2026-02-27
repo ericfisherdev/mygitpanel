@@ -127,7 +127,7 @@ func run() error {
 
 	// 7.6. Create web handler and register GUI routes.
 	attentionSvc := application.NewAttentionService(thresholdStore, reviewStore, cfg.GitHubUsername)
-	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, writerFactory, jiraConnStore, jiraClientFactory)
+	webHandler := webhandler.NewHandler(prStore, repoStore, reviewSvc, healthSvc, pollSvc, cfg.GitHubUsername, slog.Default(), credStore, thresholdStore, ignoreStore, writerFactory, jiraConnStore, jiraConnStore, jiraClientFactory)
 	webHandler.WithAttentionService(attentionSvc)
 	webhandler.RegisterRoutes(mux, webHandler)
 
