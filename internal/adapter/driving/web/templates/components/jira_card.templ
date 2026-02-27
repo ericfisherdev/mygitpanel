@@ -24,7 +24,7 @@ func jiraStatusColor(status string) string {
 // (1) no credentials, (2) no linked issue key, (3) load error,
 // (4) issue data unavailable (key present but Issue==nil with no error), (5) issue loaded.
 templ JiraCard(jiraVM viewmodel.JiraCardViewModel) {
-	<div id="jira-card" class="mb-6 border-l-4 border-blue-700 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden" x-data="{ expanded: false }">
+	<div id="jira-card" class="mb-6 border-l-4 border-blue-700 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden" x-data={ fmt.Sprintf("{ expanded: %v }", jiraVM.StartExpanded) }>
 		if !jiraVM.HasCredentials {
 			<!-- State 1: No credentials configured -->
 			<div class="flex items-center gap-3 px-4 py-3">
