@@ -11,66 +11,6 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
-// --- Mock implementations for ReviewService tests ---
-
-type mockReviewStoreForService struct {
-	reviews        []model.Review
-	reviewComments []model.ReviewComment
-	issueComments  []model.IssueComment
-}
-
-func (m *mockReviewStoreForService) UpsertReview(_ context.Context, _ model.Review) error {
-	return nil
-}
-
-func (m *mockReviewStoreForService) UpsertReviewComment(_ context.Context, _ model.ReviewComment) error {
-	return nil
-}
-
-func (m *mockReviewStoreForService) UpsertIssueComment(_ context.Context, _ model.IssueComment) error {
-	return nil
-}
-
-func (m *mockReviewStoreForService) GetReviewsByPR(_ context.Context, _ int64) ([]model.Review, error) {
-	return m.reviews, nil
-}
-
-func (m *mockReviewStoreForService) GetReviewCommentsByPR(_ context.Context, _ int64) ([]model.ReviewComment, error) {
-	return m.reviewComments, nil
-}
-
-func (m *mockReviewStoreForService) GetIssueCommentsByPR(_ context.Context, _ int64) ([]model.IssueComment, error) {
-	return m.issueComments, nil
-}
-
-func (m *mockReviewStoreForService) UpdateCommentResolution(_ context.Context, _ int64, _ bool) error {
-	return nil
-}
-
-func (m *mockReviewStoreForService) DeleteReviewsByPR(_ context.Context, _ int64) error {
-	return nil
-}
-
-type mockBotConfigStoreForService struct {
-	usernames []string
-}
-
-func (m *mockBotConfigStoreForService) Add(_ context.Context, config model.BotConfig) (model.BotConfig, error) {
-	return config, nil
-}
-
-func (m *mockBotConfigStoreForService) Remove(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *mockBotConfigStoreForService) ListAll(_ context.Context) ([]model.BotConfig, error) {
-	return nil, nil
-}
-
-func (m *mockBotConfigStoreForService) GetUsernames(_ context.Context) ([]string, error) {
-	return m.usernames, nil
-}
-
 // --- Helper functions ---
 
 func int64Ptr(v int64) *int64 {
@@ -321,7 +261,7 @@ func TestAggregateReviewStatus_NoReviews(t *testing.T) {
 func TestGetPRReviewSummary(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
-	reviewStore := &mockReviewStoreForService{
+	reviewStore := &testReviewStore{
 		reviews: []model.Review{
 			{
 				ID:            1,
@@ -390,7 +330,7 @@ func TestGetPRReviewSummary(t *testing.T) {
 		},
 	}
 
-	botConfigStore := &mockBotConfigStoreForService{
+	botConfigStore := &testBotConfigStore{
 		usernames: []string{"coderabbitai", "github-actions[bot]"},
 	}
 

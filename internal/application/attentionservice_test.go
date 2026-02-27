@@ -13,35 +13,6 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/model"
 )
 
-// attentionReviewStore implements driven.ReviewStore for AttentionService tests.
-// Only GetReviewsByPR is used by AttentionService; remaining methods panic.
-type attentionReviewStore struct {
-	reviews []model.Review
-	err     error
-}
-
-func (m *attentionReviewStore) GetReviewsByPR(_ context.Context, _ int64) ([]model.Review, error) {
-	return m.reviews, m.err
-}
-
-func (m *attentionReviewStore) UpsertReview(_ context.Context, _ model.Review) error { panic("unused") }
-func (m *attentionReviewStore) UpsertReviewComment(_ context.Context, _ model.ReviewComment) error {
-	panic("unused")
-}
-func (m *attentionReviewStore) UpsertIssueComment(_ context.Context, _ model.IssueComment) error {
-	panic("unused")
-}
-func (m *attentionReviewStore) GetReviewCommentsByPR(_ context.Context, _ int64) ([]model.ReviewComment, error) {
-	panic("unused")
-}
-func (m *attentionReviewStore) GetIssueCommentsByPR(_ context.Context, _ int64) ([]model.IssueComment, error) {
-	panic("unused")
-}
-func (m *attentionReviewStore) UpdateCommentResolution(_ context.Context, _ int64, _ bool) error {
-	panic("unused")
-}
-func (m *attentionReviewStore) DeleteReviewsByPR(_ context.Context, _ int64) error { panic("unused") }
-
 // attentionThresholdStore implements driven.ThresholdStore for AttentionService tests.
 // Only GetGlobalSettings and GetRepoThreshold are used by AttentionService.
 type attentionThresholdStore struct {
@@ -266,7 +237,7 @@ func TestSignalsForPR_ReviewerDeduplication(t *testing.T) {
 		}
 		svc := application.NewAttentionService(
 			&attentionThresholdStore{global: model.DefaultGlobalSettings()},
-			&attentionReviewStore{reviews: reviews},
+			&mockReviewStore{stubReviews: reviews},
 			testAuthor,
 		)
 		signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
@@ -281,7 +252,7 @@ func TestSignalsForPR_ReviewerDeduplication(t *testing.T) {
 		}
 		svc := application.NewAttentionService(
 			&attentionThresholdStore{global: model.DefaultGlobalSettings()},
-			&attentionReviewStore{reviews: reviews},
+			&mockReviewStore{stubReviews: reviews},
 			testAuthor,
 		)
 		signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
@@ -295,7 +266,7 @@ func TestSignalsForPR_ReviewerDeduplication(t *testing.T) {
 		}
 		svc := application.NewAttentionService(
 			&attentionThresholdStore{global: model.DefaultGlobalSettings()},
-			&attentionReviewStore{reviews: reviews},
+			&mockReviewStore{stubReviews: reviews},
 			testAuthor,
 		)
 		signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
@@ -311,7 +282,7 @@ func TestSignalsForPR_StoreError(t *testing.T) {
 
 	svc := application.NewAttentionService(
 		&attentionThresholdStore{global: model.DefaultGlobalSettings()},
-		&attentionReviewStore{err: storeErr},
+		&mockReviewStore{stubErr: storeErr},
 		testAuthor,
 	)
 	signals, err := svc.SignalsForPR(context.Background(), pr, thresholds)
@@ -334,7 +305,7 @@ func TestEffectiveThresholdsFor_RepoOverridePrecedence(t *testing.T) {
 			CIFailureEnabled:   &repoCI,
 		},
 	}
-	svc := application.NewAttentionService(ts, &attentionReviewStore{}, testAuthor)
+	svc := application.NewAttentionService(ts, &mockReviewStore{}, testAuthor)
 	effective := svc.EffectiveThresholdsFor(context.Background(), "owner/repo")
 
 	assert.Equal(t, 3, effective.ReviewCountThreshold, "repo override should win over global")
@@ -349,7 +320,7 @@ func TestEffectiveThresholdsFor_GlobalFallbackOnStoreError(t *testing.T) {
 		globalErr: storeErr,
 		repoErr:   storeErr,
 	}
-	svc := application.NewAttentionService(ts, &attentionReviewStore{}, testAuthor)
+	svc := application.NewAttentionService(ts, &mockReviewStore{}, testAuthor)
 	effective := svc.EffectiveThresholdsFor(context.Background(), "owner/repo")
 
 	defaults := model.DefaultGlobalSettings()

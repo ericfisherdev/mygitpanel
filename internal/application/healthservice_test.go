@@ -196,44 +196,6 @@ func TestMarkRequiredChecks(t *testing.T) {
 
 // --- GetPRHealthSummary tests ---
 
-// testCheckStore implements driven.CheckStore for testing.
-type testCheckStore struct {
-	runs []model.CheckRun
-}
-
-func (s *testCheckStore) ReplaceCheckRunsForPR(_ context.Context, _ int64, runs []model.CheckRun) error {
-	s.runs = runs
-	return nil
-}
-
-func (s *testCheckStore) GetCheckRunsByPR(_ context.Context, _ int64) ([]model.CheckRun, error) {
-	return s.runs, nil
-}
-
-// testPRStore returns a PR with a pre-set CIStatus for GetPRHealthSummary tests.
-type testPRStore struct {
-	pr *model.PullRequest
-}
-
-func (s *testPRStore) Upsert(_ context.Context, _ model.PullRequest) error { return nil }
-func (s *testPRStore) GetByRepository(_ context.Context, _ string) ([]model.PullRequest, error) {
-	return nil, nil
-}
-func (s *testPRStore) GetByStatus(_ context.Context, _ model.PRStatus) ([]model.PullRequest, error) {
-	return nil, nil
-}
-func (s *testPRStore) GetByNumber(_ context.Context, _ string, _ int) (*model.PullRequest, error) {
-	return s.pr, nil
-}
-func (s *testPRStore) ListAll(_ context.Context) ([]model.PullRequest, error) { return nil, nil }
-func (s *testPRStore) ListNeedingReview(_ context.Context) ([]model.PullRequest, error) {
-	return nil, nil
-}
-func (s *testPRStore) ListIgnoredWithPRData(_ context.Context) ([]model.PullRequest, error) {
-	return nil, nil
-}
-func (s *testPRStore) Delete(_ context.Context, _ string, _ int) error { return nil }
-
 func TestGetPRHealthSummary(t *testing.T) {
 	t.Run("returns check runs and stored CI status from PR", func(t *testing.T) {
 		checkStore := &testCheckStore{
