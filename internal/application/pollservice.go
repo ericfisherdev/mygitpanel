@@ -24,6 +24,7 @@ type refreshRequest struct {
 type PollService struct {
 	ghClient      driven.GitHubClient
 	startupClient driven.GitHubClient // original client used as fallback when token is unavailable
+	activeToken   string              // last token used to build ghClient; "" means startup client is active
 	prStore       driven.PRStore
 	repoStore     driven.RepoStore
 	reviewStore   driven.ReviewStore
@@ -196,13 +197,19 @@ func (s *PollService) maybeRefreshToken(ctx context.Context) {
 	if err != nil {
 		slog.Debug("token provider error; reverting to startup client", "error", err)
 		s.ghClient = s.startupClient
+		s.activeToken = ""
 		return
 	}
 	if token == "" {
 		s.ghClient = s.startupClient
+		s.activeToken = ""
 		return
 	}
+	if token == s.activeToken {
+		return // client already up to date; skip redundant allocation
+	}
 	s.ghClient = s.clientFactory(token)
+	s.activeToken = token
 	slog.Debug("github client hot-swapped with token from credential store")
 }
 
@@ -564,13 +571,14 @@ func (s *PollService) pollDueRepos(ctx context.Context) {
 // handleRefresh dispatches a manual refresh request. After polling, the repo's
 // adaptive schedule is recalculated based on fresh activity data.
 func (s *PollService) handleRefresh(ctx context.Context, req refreshRequest) error {
-	s.maybeRefreshToken(ctx)
 	if req.repoFullName != "" {
+		s.maybeRefreshToken(ctx)
 		err := s.pollRepo(ctx, req.repoFullName)
 		if err == nil {
 			s.updateSchedule(ctx, req.repoFullName)
 		}
 		return err
 	}
+	// pollAll calls maybeRefreshToken internally; avoid a redundant call.
 	return s.pollAll(ctx)
 }
