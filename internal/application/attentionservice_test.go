@@ -43,6 +43,9 @@ func (m *attentionThresholdStore) DeleteRepoThreshold(_ context.Context, _ strin
 // testAuthor is the GitHub username used as the authenticated user in test cases.
 const testAuthor = "alice"
 
+// msgRepoOverrideWins is the assertion message for repo-level threshold override tests.
+const msgRepoOverrideWins = "repo override should win over global"
+
 // prWithAge returns a PullRequest opened the given number of days ago.
 func prWithAge(days int) model.PullRequest {
 	return model.PullRequest{
@@ -308,10 +311,10 @@ func TestEffectiveThresholdsFor_RepoOverridePrecedence(t *testing.T) {
 	svc := application.NewAttentionService(ts, &mockReviewStore{}, testAuthor)
 	effective := svc.EffectiveThresholdsFor(context.Background(), "owner/repo")
 
-	assert.Equal(t, 3, effective.ReviewCountThreshold, "repo override should win over global")
-	assert.Equal(t, 14, effective.AgeUrgencyDays, "repo override should win over global")
-	assert.False(t, effective.StaleReviewEnabled, "repo override should win over global")
-	assert.False(t, effective.CIFailureEnabled, "repo override should win over global")
+	assert.Equal(t, 3, effective.ReviewCountThreshold, msgRepoOverrideWins)
+	assert.Equal(t, 14, effective.AgeUrgencyDays, msgRepoOverrideWins)
+	assert.False(t, effective.StaleReviewEnabled, msgRepoOverrideWins)
+	assert.False(t, effective.CIFailureEnabled, msgRepoOverrideWins)
 }
 
 func TestEffectiveThresholdsFor_GlobalFallbackOnStoreError(t *testing.T) {

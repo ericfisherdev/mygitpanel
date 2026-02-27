@@ -13,6 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test fixture constants shared across client tests.
+const (
+	testEmail             = "user@example.com"
+	testIssueKey          = "PROJ-123"
+	testBadToken          = "bad-token"
+	testHeaderContentType = "Content-Type"
+)
+
 // minimalIssueResponse returns a valid Jira v3 issue JSON with ADF description.
 func minimalIssueResponse() string {
 	return `{
@@ -63,19 +71,19 @@ func TestGetIssue_Success(t *testing.T) {
 		assert.Equal(t, "/rest/api/3/issue/PROJ-123", r.URL.Path)
 		assert.Contains(t, r.URL.RawQuery, "fields=summary,description,status,priority,assignee,comment")
 		assert.Contains(t, r.Header.Get("Authorization"), "Basic ")
-		assert.Equal(t, "application/json", r.Header.Get("Accept"))
+		assert.Equal(t, contentTypeJSON, r.Header.Get("Accept"))
 
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(testHeaderContentType, contentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(minimalIssueResponse()))
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "api-token")
-	issue, err := client.GetIssue(context.Background(), "PROJ-123")
+	client := NewJiraClient(server.URL, testEmail, "api-token")
+	issue, err := client.GetIssue(context.Background(), testIssueKey)
 
 	require.NoError(t, err)
-	assert.Equal(t, "PROJ-123", issue.Key)
+	assert.Equal(t, testIssueKey, issue.Key)
 	assert.Equal(t, "Fix login bug", issue.Summary)
 	assert.Equal(t, "The login page crashes on submit.", issue.Description)
 	assert.Equal(t, "In Progress", issue.Status)
@@ -101,13 +109,13 @@ func TestGetIssue_NilAssignee(t *testing.T) {
 	}`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(testHeaderContentType, contentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(response))
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
+	client := NewJiraClient(server.URL, testEmail, "token")
 	issue, err := client.GetIssue(context.Background(), "PROJ-456")
 
 	require.NoError(t, err)
@@ -122,8 +130,8 @@ func TestGetIssue_Unauthorized(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "bad-token")
-	_, err := client.GetIssue(context.Background(), "PROJ-123")
+	client := NewJiraClient(server.URL, testEmail, testBadToken)
+	_, err := client.GetIssue(context.Background(), testIssueKey)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, driven.ErrJiraUnauthorized))
@@ -135,7 +143,7 @@ func TestGetIssue_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
+	client := NewJiraClient(server.URL, testEmail, "token")
 	_, err := client.GetIssue(context.Background(), "NOPE-999")
 
 	require.Error(t, err)
@@ -148,8 +156,8 @@ func TestGetIssue_RateLimited(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
-	_, err := client.GetIssue(context.Background(), "PROJ-123")
+	client := NewJiraClient(server.URL, testEmail, "token")
+	_, err := client.GetIssue(context.Background(), testIssueKey)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, driven.ErrJiraUnavailable))
@@ -159,7 +167,7 @@ func TestAddComment_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/rest/api/3/issue/PROJ-123/comment", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, contentTypeJSON, r.Header.Get(testHeaderContentType))
 
 		// Verify the body is valid ADF.
 		var req commentRequest
@@ -174,8 +182,8 @@ func TestAddComment_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
-	err := client.AddComment(context.Background(), "PROJ-123", "This is a test comment")
+	client := NewJiraClient(server.URL, testEmail, "token")
+	err := client.AddComment(context.Background(), testIssueKey, "This is a test comment")
 
 	require.NoError(t, err)
 }
@@ -186,8 +194,8 @@ func TestAddComment_Unauthorized(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "bad-token")
-	err := client.AddComment(context.Background(), "PROJ-123", "comment")
+	client := NewJiraClient(server.URL, testEmail, testBadToken)
+	err := client.AddComment(context.Background(), testIssueKey, "comment")
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, driven.ErrJiraUnauthorized))
@@ -199,7 +207,7 @@ func TestAddComment_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
+	client := NewJiraClient(server.URL, testEmail, "token")
 	err := client.AddComment(context.Background(), "NOPE-999", "comment")
 
 	require.Error(t, err)
@@ -212,8 +220,8 @@ func TestAddComment_BadRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
-	err := client.AddComment(context.Background(), "PROJ-123", "comment")
+	client := NewJiraClient(server.URL, testEmail, "token")
+	err := client.AddComment(context.Background(), testIssueKey, "comment")
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, driven.ErrJiraUnavailable))
@@ -230,7 +238,7 @@ func TestPing_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
+	client := NewJiraClient(server.URL, testEmail, "token")
 	err := client.Ping(context.Background())
 
 	require.NoError(t, err)
@@ -242,7 +250,7 @@ func TestPing_Unauthorized(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "bad-token")
+	client := NewJiraClient(server.URL, testEmail, testBadToken)
 	err := client.Ping(context.Background())
 
 	require.Error(t, err)
@@ -255,7 +263,7 @@ func TestPing_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewJiraClient(server.URL, "user@example.com", "token")
+	client := NewJiraClient(server.URL, testEmail, "token")
 	err := client.Ping(context.Background())
 
 	require.Error(t, err)
@@ -370,6 +378,6 @@ func TestPlainTextToADF(t *testing.T) {
 }
 
 func TestBasicAuthHeader(t *testing.T) {
-	header := basicAuthHeader("user@example.com", "my-token")
+	header := basicAuthHeader(testEmail, "my-token")
 	assert.Equal(t, "Basic dXNlckBleGFtcGxlLmNvbTpteS10b2tlbg==", header)
 }

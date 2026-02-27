@@ -23,6 +23,14 @@ import (
 	"github.com/ericfisherdev/mygitpanel/internal/domain/port/driven"
 )
 
+// HTTP error message constants shared across all handlers.
+const (
+	errMsgInvalidPRNumber = "invalid PR number"
+	errMsgCSRFInvalid     = "invalid CSRF token"
+	errMsgInvalidFormData = "invalid form data"
+	errMsgServiceUnavail  = "service unavailable"
+)
+
 // Handler is the web GUI driving adapter that serves HTML via templ components.
 type Handler struct {
 	prStore        driven.PRStore
@@ -154,7 +162,7 @@ func (h *Handler) GetPRDetail(w http.ResponseWriter, r *http.Request) {
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
 		return
 	}
 
@@ -295,17 +303,17 @@ func (h *Handler) CreateJiraComment(w http.ResponseWriter, r *http.Request) {
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidFormData, http.StatusBadRequest)
 		return
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -379,12 +387,12 @@ func (h *Handler) CreateJiraComment(w http.ResponseWriter, r *http.Request) {
 // AddRepo adds a repo to the watch list via the GUI form and returns updated partials.
 func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidFormData, http.StatusBadRequest)
 		return
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -428,7 +436,7 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 // RemoveRepo removes a repo from the watch list via the GUI and returns updated partials.
 func (h *Handler) RemoveRepo(w http.ResponseWriter, r *http.Request) {
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -532,7 +540,7 @@ func (h *Handler) UnignorePR(w http.ResponseWriter, r *http.Request) {
 // action is called with the parsed PR ID if non-nil; pass nil to skip the store call.
 func (h *Handler) handleIgnoreToggle(w http.ResponseWriter, r *http.Request, action func(context.Context, int64) error, logMsg string) {
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 	idStr := r.PathValue("id")
@@ -543,7 +551,7 @@ func (h *Handler) handleIgnoreToggle(w http.ResponseWriter, r *http.Request, act
 	}
 
 	if action == nil {
-		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, errMsgServiceUnavail, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -565,7 +573,7 @@ func (h *Handler) SaveGlobalThresholds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -596,7 +604,7 @@ func (h *Handler) SaveGlobalThresholds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.thresholdStore == nil {
-		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, errMsgServiceUnavail, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -622,7 +630,7 @@ func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -666,7 +674,7 @@ func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.thresholdStore == nil {
-		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, errMsgServiceUnavail, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -686,7 +694,7 @@ func (h *Handler) SaveRepoThreshold(w http.ResponseWriter, r *http.Request) {
 // It removes the per-repo override and returns a success fragment + OOB PR list swap.
 func (h *Handler) DeleteRepoThreshold(w http.ResponseWriter, r *http.Request) {
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 	owner := r.PathValue("owner")
@@ -694,7 +702,7 @@ func (h *Handler) DeleteRepoThreshold(w http.ResponseWriter, r *http.Request) {
 	repoFullName := owner + "/" + repo
 
 	if h.thresholdStore == nil {
-		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, errMsgServiceUnavail, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -929,7 +937,7 @@ func (h *Handler) SaveGitHubCredentials(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -990,7 +998,7 @@ func (h *Handler) CreateJiraConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -1067,7 +1075,7 @@ func (h *Handler) jiraConnectionByID(w http.ResponseWriter, r *http.Request, opN
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -1089,12 +1097,12 @@ func (h *Handler) SaveJiraRepoMapping(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidFormData, http.StatusBadRequest)
 		return
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -1165,7 +1173,7 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
 		return
 	}
 
@@ -1182,7 +1190,7 @@ func (h *Handler) CreateReplyComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -1262,7 +1270,7 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
 		return
 	}
 
@@ -1273,7 +1281,7 @@ func (h *Handler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -1345,7 +1353,7 @@ func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
 		return
 	}
 
@@ -1356,7 +1364,7 @@ func (h *Handler) CreateIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 
@@ -1395,12 +1403,12 @@ func (h *Handler) ToggleDraftStatus(w http.ResponseWriter, r *http.Request) {
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		http.Error(w, "invalid PR number", http.StatusBadRequest)
+		http.Error(w, errMsgInvalidPRNumber, http.StatusBadRequest)
 		return
 	}
 
 	if !validateCSRF(r) {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, errMsgCSRFInvalid, http.StatusForbidden)
 		return
 	}
 

@@ -24,7 +24,7 @@ func insertPRForIgnoreTest(t *testing.T, db *DB, repoFullName string, number int
 
 func TestIgnoreRepo_IgnoreAndIsIgnored(t *testing.T) {
 	db := setupTestDB(t)
-	prID := addTestPR(t, db, "owner/repo", 1)
+	prID := addTestPR(t, db, testRepoFullName, 1)
 	repo := NewIgnoreRepo(db)
 	ctx := context.Background()
 
@@ -38,7 +38,7 @@ func TestIgnoreRepo_IgnoreAndIsIgnored(t *testing.T) {
 
 func TestIgnoreRepo_UnignoreAndIsIgnored(t *testing.T) {
 	db := setupTestDB(t)
-	prID := addTestPR(t, db, "owner/repo", 1)
+	prID := addTestPR(t, db, testRepoFullName, 1)
 	repo := NewIgnoreRepo(db)
 	ctx := context.Background()
 
@@ -52,7 +52,7 @@ func TestIgnoreRepo_UnignoreAndIsIgnored(t *testing.T) {
 
 func TestIgnoreRepo_DoubleIgnore_Idempotent(t *testing.T) {
 	db := setupTestDB(t)
-	prID := addTestPR(t, db, "owner/repo", 1)
+	prID := addTestPR(t, db, testRepoFullName, 1)
 	repo := NewIgnoreRepo(db)
 	ctx := context.Background()
 
@@ -69,10 +69,10 @@ func TestIgnoreRepo_DoubleIgnore_Idempotent(t *testing.T) {
 func TestIgnoreRepo_ListIgnored_OrderedByDesc(t *testing.T) {
 	db := setupTestDB(t)
 	// Add the repo once, then insert 3 PRs.
-	addTestRepo(t, db, "owner/repo")
-	prID1 := insertPRForIgnoreTest(t, db, "owner/repo", 1)
-	prID2 := insertPRForIgnoreTest(t, db, "owner/repo", 2)
-	prID3 := insertPRForIgnoreTest(t, db, "owner/repo", 3)
+	addTestRepo(t, db, testRepoFullName)
+	prID1 := insertPRForIgnoreTest(t, db, testRepoFullName, 1)
+	prID2 := insertPRForIgnoreTest(t, db, testRepoFullName, 2)
+	prID3 := insertPRForIgnoreTest(t, db, testRepoFullName, 3)
 	repo := NewIgnoreRepo(db)
 	ctx := context.Background()
 
@@ -102,9 +102,9 @@ func TestIgnoreRepo_ListIgnored_OrderedByDesc(t *testing.T) {
 func TestIgnoreRepo_ListIgnoredIDs(t *testing.T) {
 	db := setupTestDB(t)
 	// Add the repo once, then insert 2 PRs.
-	addTestRepo(t, db, "owner/repo")
-	prID1 := insertPRForIgnoreTest(t, db, "owner/repo", 1)
-	prID2 := insertPRForIgnoreTest(t, db, "owner/repo", 2)
+	addTestRepo(t, db, testRepoFullName)
+	prID1 := insertPRForIgnoreTest(t, db, testRepoFullName, 1)
+	prID2 := insertPRForIgnoreTest(t, db, testRepoFullName, 2)
 	repo := NewIgnoreRepo(db)
 	ctx := context.Background()
 

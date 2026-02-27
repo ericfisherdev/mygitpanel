@@ -65,7 +65,7 @@ func TestThresholdRepo_GetRepoThreshold_NotFound(t *testing.T) {
 
 func TestThresholdRepo_SetAndGetRepoThreshold(t *testing.T) {
 	db := setupTestDB(t)
-	addTestRepo(t, db, "owner/repo")
+	addTestRepo(t, db, testRepoFullName)
 	repo := NewThresholdRepo(db)
 	ctx := context.Background()
 
@@ -75,7 +75,7 @@ func TestThresholdRepo_SetAndGetRepoThreshold(t *testing.T) {
 	ciEnabled := true
 
 	want := model.RepoThreshold{
-		RepoFullName:       "owner/repo",
+		RepoFullName:       testRepoFullName,
 		ReviewCount:        &reviewCount,
 		AgeUrgencyDays:     &ageUrgency,
 		StaleReviewEnabled: &staleEnabled,
@@ -85,7 +85,7 @@ func TestThresholdRepo_SetAndGetRepoThreshold(t *testing.T) {
 	err := repo.SetRepoThreshold(ctx, want)
 	require.NoError(t, err)
 
-	got, err := repo.GetRepoThreshold(ctx, "owner/repo")
+	got, err := repo.GetRepoThreshold(ctx, testRepoFullName)
 	require.NoError(t, err)
 	require.NotNil(t, got.ReviewCount)
 	require.NotNil(t, got.AgeUrgencyDays)
@@ -99,14 +99,14 @@ func TestThresholdRepo_SetAndGetRepoThreshold(t *testing.T) {
 
 func TestThresholdRepo_SetRepoThreshold_NilFields(t *testing.T) {
 	db := setupTestDB(t)
-	addTestRepo(t, db, "owner/repo")
+	addTestRepo(t, db, testRepoFullName)
 	repo := NewThresholdRepo(db)
 	ctx := context.Background()
 
 	// Set with only some fields set (nil means use global).
 	reviewCount := 2
 	want := model.RepoThreshold{
-		RepoFullName: "owner/repo",
+		RepoFullName: testRepoFullName,
 		ReviewCount:  &reviewCount,
 		// AgeUrgencyDays, StaleReviewEnabled, CIFailureEnabled remain nil.
 	}
@@ -114,7 +114,7 @@ func TestThresholdRepo_SetRepoThreshold_NilFields(t *testing.T) {
 	err := repo.SetRepoThreshold(ctx, want)
 	require.NoError(t, err)
 
-	got, err := repo.GetRepoThreshold(ctx, "owner/repo")
+	got, err := repo.GetRepoThreshold(ctx, testRepoFullName)
 	require.NoError(t, err)
 	require.NotNil(t, got.ReviewCount)
 	assert.Equal(t, reviewCount, *got.ReviewCount)
@@ -125,20 +125,20 @@ func TestThresholdRepo_SetRepoThreshold_NilFields(t *testing.T) {
 
 func TestThresholdRepo_DeleteRepoThreshold(t *testing.T) {
 	db := setupTestDB(t)
-	addTestRepo(t, db, "owner/repo")
+	addTestRepo(t, db, testRepoFullName)
 	repo := NewThresholdRepo(db)
 	ctx := context.Background()
 
 	reviewCount := 5
 	require.NoError(t, repo.SetRepoThreshold(ctx, model.RepoThreshold{
-		RepoFullName: "owner/repo",
+		RepoFullName: testRepoFullName,
 		ReviewCount:  &reviewCount,
 	}))
 
-	err := repo.DeleteRepoThreshold(ctx, "owner/repo")
+	err := repo.DeleteRepoThreshold(ctx, testRepoFullName)
 	require.NoError(t, err)
 
-	got, err := repo.GetRepoThreshold(ctx, "owner/repo")
+	got, err := repo.GetRepoThreshold(ctx, testRepoFullName)
 	require.NoError(t, err)
 	assert.Nil(t, got.ReviewCount)
 }

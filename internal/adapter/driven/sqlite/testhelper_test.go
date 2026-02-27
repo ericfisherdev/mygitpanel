@@ -8,6 +8,9 @@ import (
 	"testing"
 )
 
+// testRepoFullName is the standard repo identifier used across sqlite package tests.
+const testRepoFullName = "owner/repo"
+
 // setupTestDB creates a named shared in-memory SQLite database for testing.
 // Writer and reader connections share the same in-memory database via cache=shared.
 // A unique name derived from t.Name() ensures isolation between parallel tests.
