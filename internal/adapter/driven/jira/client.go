@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -197,9 +198,9 @@ type commentRequest struct {
 // ErrJiraUnauthorized if credentials are invalid,
 // ErrJiraUnavailable if the Jira instance is unreachable or returns an unexpected status.
 func (c *JiraHTTPClient) GetIssue(ctx context.Context, key string) (model.JiraIssue, error) {
-	url := c.baseURL + "/rest/api/3/issue/" + key + "?fields=summary,description,status,priority,assignee,comment"
+	endpoint := c.baseURL + "/rest/api/3/issue/" + url.PathEscape(key) + "?fields=summary,description,status,priority,assignee,comment"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return model.JiraIssue{}, fmt.Errorf("jira: building request: %w", err)
 	}
@@ -288,14 +289,14 @@ func (c *JiraHTTPClient) GetIssue(ctx context.Context, key string) (model.JiraIs
 // ErrJiraNotFound if the issue does not exist,
 // ErrJiraUnavailable on invalid body or other errors.
 func (c *JiraHTTPClient) AddComment(ctx context.Context, key, body string) error {
-	url := c.baseURL + "/rest/api/3/issue/" + key + "/comment"
+	endpoint := c.baseURL + "/rest/api/3/issue/" + url.PathEscape(key) + "/comment"
 
 	payload, err := json.Marshal(commentRequest{Body: plainTextToADF(body)})
 	if err != nil {
 		return fmt.Errorf("jira: marshaling comment: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("jira: building request: %w", err)
 	}
@@ -332,9 +333,9 @@ func (c *JiraHTTPClient) AddComment(ctx context.Context, key, body string) error
 // Returns nil on success, ErrJiraUnauthorized on 401,
 // ErrJiraUnavailable on any other error.
 func (c *JiraHTTPClient) Ping(ctx context.Context) error {
-	url := c.baseURL + "/rest/api/3/myself"
+	endpoint := c.baseURL + "/rest/api/3/myself"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("jira: building request: %w", err)
 	}

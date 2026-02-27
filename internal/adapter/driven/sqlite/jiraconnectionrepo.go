@@ -302,10 +302,10 @@ func (r *JiraConnectionRepo) decrypt(encoded string) (string, error) {
 	}
 
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-	plainplaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return "", fmt.Errorf("gcm.Open: %w", err)
 	}
 
-	return string(plainplaintext), nil
+	return string(plaintext), nil
 }
